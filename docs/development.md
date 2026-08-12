@@ -471,6 +471,36 @@ Closes #123
 
 ---
 
+## 更新日志
+
+### 2025-08-10
+
+**EmbeddingConfig 新增 base_url 字段**
+
+支持自定义 Embedding API 地址，与 LLM 的 base_url 逻辑一致：
+- 有 base_url → 用自定义地址
+- 无 base_url → 走 provider 默认地址
+
+```protobuf
+message EmbeddingConfig {
+  string source = 1;
+  string local_model = 2;
+  string api_provider = 3;
+  string api_key = 4;
+  string api_model = 5;
+  string base_url = 6;  // 新增
+}
+```
+
+**EmbeddingService 接入真实实现**
+
+`services/embedding_service.py` 已从硬编码改为调用 `embedding` 模块：
+- `Embed` — 单条文本转向量
+- `EmbedBatch` — 批量转向量
+- 支持 local / api 两种模式
+
+---
+
 ## 联系方式
 
 如有问题，请提交 Issue 或联系项目维护者。

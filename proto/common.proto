@@ -57,4 +57,5 @@ message EmbeddingConfig {
   string api_provider = 3;
   string api_key = 4;
   string api_model = 5;
+  string base_url = 6;
 }

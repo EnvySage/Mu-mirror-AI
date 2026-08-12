@@ -11,6 +11,7 @@ def create_embedder(
     api_provider: str = "",
     api_key: str = "",
     api_model: str = "",
+    base_url: str = "",
 ) -> BaseEmbedder:
     """
     根据配置创建对应的 Embedding 实例
@@ -21,9 +22,7 @@ def create_embedder(
         api_provider: API 厂商 (openai / zhipu / qwen)
         api_key: API 密钥
         api_model: API 模型名称
-
-    Returns:
-        BaseEmbedder 实例
+        base_url: 自定义 API 地址（可选）
     """
     if source == "local":
         return LocalEmbedder(model_name=local_model)
@@ -34,6 +33,7 @@ def create_embedder(
             provider=api_provider,
             api_key=api_key,
             model=api_model,
+            base_url=base_url,
         )
     else:
         raise ValueError(f"未知的 Embedding 来源: {source}")
