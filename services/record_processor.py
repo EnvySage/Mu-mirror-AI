@@ -58,7 +58,7 @@ class RecordProcessorServicer(pb2_grpc.RecordProcessorServicer):
         print(f"[Classify] 内容: {content}")
         print(f"[Classify] LLM: provider={llm_config.provider}, model={llm_config.model}, "
               f"api_key={'***' + llm_config.api_key[-4:] if llm_config.api_key else 'EMPTY'}, "
-              f"base_url={llm_config.base_url}, ai_protocol={llm_config.ai_protocol}")
+              f"base_url={llm_config.base_url}, protocol={llm_config.protocol}")
 
         try:
             # 创建 LLM 实例
@@ -67,7 +67,7 @@ class RecordProcessorServicer(pb2_grpc.RecordProcessorServicer):
                 api_key=llm_config.api_key,
                 base_url=llm_config.base_url,
                 model=llm_config.model,
-                ai_protocol=llm_config.ai_protocol,
+                protocol=llm_config.protocol,
             )
 
             # 构建 prompt

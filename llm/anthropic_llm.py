@@ -1,4 +1,4 @@
-"""Anthropic Claude 实现"""
+"""Anthropic 协议实现（支持第三方代理）"""
 
 from typing import Generator
 import anthropic
@@ -7,10 +7,13 @@ from llm.base import BaseLlm
 
 
 class AnthropicLlm(BaseLlm):
-    """Anthropic Claude"""
+    """Anthropic 协议 LLM（支持非 Claude 模型）"""
 
-    def __init__(self, api_key: str, model: str = "claude-sonnet-4-20250514"):
-        self.client = anthropic.Anthropic(api_key=api_key)
+    def __init__(self, api_key: str, base_url: str = "", model: str = "claude-sonnet-4-20250514"):
+        self.client = anthropic.Anthropic(
+            api_key=api_key,
+            base_url=base_url if base_url else None,
+        )
         self.model = model
 
     def chat(self, messages: list[dict], temperature: float = 0.7) -> str:

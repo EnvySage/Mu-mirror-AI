@@ -37,12 +37,18 @@ enum TaskStatus {
   COMPLETED = 3;
 }
 
+enum AiProtocol {
+  AI_PROTOCOL_UNKNOWN = 0;
+  OPENAI = 1;
+  ANTHROPIC = 2;
+}
+
 message LlmConfig {
   string provider = 1;
-  string api_key = 2;
-  string base_url = 3;
-  string model = 4;
-  string ai_protocol = 5;  // openai / anthropic
+  AiProtocol protocol = 2;
+  string api_key = 3;
+  string base_url = 4;
+  string model = 5;
 }
 
 message EmbeddingConfig {

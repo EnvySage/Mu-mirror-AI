@@ -5,7 +5,7 @@ import warnings
 
 from generated import embedding_pb2 as embedding__pb2
 
-GRPC_GENERATED_VERSION = '1.78.0'
+GRPC_GENERATED_VERSION = '1.83.0'
 GRPC_VERSION = grpc.__version__
 _version_not_supported = False
 
@@ -25,7 +25,7 @@ if _version_not_supported:
     )
 
 
-class EmbeddingServiceStub(object):
+class EmbeddingServiceStub:
     """Missing associated documentation comment in .proto file."""
 
     def __init__(self, channel):
@@ -51,7 +51,7 @@ class EmbeddingServiceStub(object):
                 _registered_method=True)
 
 
-class EmbeddingServiceServicer(object):
+class EmbeddingServiceServicer:
     """Missing associated documentation comment in .proto file."""
 
     def Embed(self, request, context):
@@ -98,7 +98,7 @@ def add_EmbeddingServiceServicer_to_server(servicer, server):
 
 
  # This class is part of an EXPERIMENTAL API.
-class EmbeddingService(object):
+class EmbeddingService:
     """Missing associated documentation comment in .proto file."""
 
     @staticmethod
