@@ -1,0 +1,19 @@
+# Mirror AI 服务配置
+# 仅服务级配置，不涉及用户数据（用户配置由 Java 端管理）
+
+server:
+  port: 50051              # gRPC 端口
+  workers: 4               # 线程池大小
+
+# Prompt 模板路径
+prompts:
+  classify: "prompts/classify.txt"
+  chat: "prompts/chat.txt"
+  intent: "prompts/intent.txt"
+  profile: "prompts/profile.txt"
+
+# 本地开发默认值（生产环境以 Java 数据库为准）
+defaults:
+  embedding_source: local  # local 或 api
+  llm_provider: openai     # openai / qwen / zhipu
+  llm_model: gpt-4o-mini

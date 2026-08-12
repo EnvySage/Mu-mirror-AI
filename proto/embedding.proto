@@ -1,0 +1,39 @@
+syntax = "proto3";
+package mirror;
+
+import "common.proto";
+
+service EmbeddingService {
+  rpc Embed(EmbedRequest) returns (EmbedResponse);
+  rpc EmbedBatch(EmbedBatchRequest) returns (EmbedBatchResponse);
+  rpc GetModelInfo(ModelInfoRequest) returns (ModelInfoResponse);
+}
+
+message EmbedRequest {
+  string text = 1;
+  EmbeddingConfig embedding_config = 2;
+}
+
+message EmbedResponse {
+  repeated float vector = 1;
+  int32 dimension = 2;
+  string model_name = 3;
+}
+
+message EmbedBatchRequest {
+  repeated string texts = 1;
+  EmbeddingConfig embedding_config = 2;
+}
+
+message EmbedBatchResponse {
+  repeated EmbedResponse results = 1;
+}
+
+message ModelInfoRequest {}
+
+message ModelInfoResponse {
+  string model_name = 1;
+  string source = 2;
+  int32 dimension = 3;
+  bool available = 4;
+}

@@ -1,0 +1,61 @@
+syntax = "proto3";
+package mirror;
+
+import "common.proto";
+
+service MirrorProfile {
+  rpc GenerateProfile(GenerateProfileRequest) returns (GenerateProfileResponse);
+}
+
+message GenerateProfileRequest {
+  repeated TodoItem todos = 1;
+  repeated LearningItem learnings = 2;
+  repeated MoodStat mood_stats = 3;
+  repeated KeywordStat keywords = 4;
+  ActiveTimeStats active_time = 5;
+  int32 total_records = 6;
+  string time_range = 7;
+  LlmConfig llm_config = 8;
+}
+
+message TodoItem {
+  int64 record_id = 1;
+  string title = 2;
+  string summary = 3;
+  string created_at = 4;
+}
+
+message LearningItem {
+  int64 record_id = 1;
+  string title = 2;
+  string summary = 3;
+  repeated string keywords = 4;
+  string created_at = 5;
+}
+
+message MoodStat {
+  string mood = 1;
+  int32 count = 2;
+  float percentage = 3;
+}
+
+message KeywordStat {
+  string keyword = 1;
+  int32 count = 2;
+}
+
+message ActiveTimeStats {
+  map<string, int32> hour_distribution = 1;
+  map<string, int32> weekday_distribution = 2;
+  int32 records_last_7_days = 3;
+  string peak_hour = 4;
+}
+
+message GenerateProfileResponse {
+  string todo_analysis = 1;
+  string learning_analysis = 2;
+  string mood_analysis = 3;
+  repeated string user_tags = 4;
+  string rhythm_analysis = 5;
+  string overall_summary = 6;
+}

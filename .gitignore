@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Generated
+generated/__pycache__/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+.codemoss/
+=0.40.0

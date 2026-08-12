@@ -1,0 +1,55 @@
+syntax = "proto3";
+package mirror;
+
+import "common.proto";
+
+service MirrorChat {
+  rpc ExtractIntent(ExtractIntentRequest) returns (ExtractIntentResponse);
+  rpc Chat(ChatRequest) returns (stream ChatChunk);
+}
+
+message ExtractIntentRequest {
+  string query = 1;
+  LlmConfig llm_config = 2;
+}
+
+message ExtractIntentResponse {
+  optional string content_type = 2;
+  repeated string moods = 3;
+  string time_range = 4;
+  string rewritten_query = 5;
+}
+
+message ChatRequest {
+  string question = 1;
+  repeated ChatMessage history = 2;
+  repeated RetrievedChunk chunks = 3;
+  LlmConfig llm_config = 4;
+}
+
+message ChatMessage {
+  string role = 1;
+  string content = 2;
+}
+
+message RetrievedChunk {
+  int64 record_id = 1;
+  string content = 2;
+  string title = 3;
+  string created_at = 4;
+  string content_type = 5;
+  repeated string moods = 6;
+  float score = 7;
+}
+
+message ChatChunk {
+  string content = 1;
+  bool done = 2;
+  repeated Source sources = 3;
+}
+
+message Source {
+  int64 record_id = 1;
+  string quote = 2;
+  string date = 3;
+}

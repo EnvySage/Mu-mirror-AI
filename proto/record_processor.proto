@@ -1,0 +1,40 @@
+syntax = "proto3";
+package mirror;
+
+import "common.proto";
+
+service RecordProcessor {
+  rpc Classify(ClassifyRequest) returns (ClassifyResponse);
+  rpc Split(SplitRequest) returns (SplitResponse);
+}
+
+message ClassifyRequest {
+  string content = 1;
+  LlmConfig llm_config = 2;
+}
+
+message ClassifyResponse {
+  bool skip = 1;
+  string skip_reason = 2;
+  string title = 3;
+  string summary = 4;
+  ContentType content_type = 5;
+  repeated MoodType moods = 6;
+  TaskStatus status = 7;
+  repeated string keywords = 8;
+}
+
+message SplitRequest {
+  string content = 1;
+  LlmConfig llm_config = 2;
+}
+
+message SplitResponse {
+  bool need_split = 1;
+  repeated SplitSegment segments = 2;
+}
+
+message SplitSegment {
+  string content = 1;
+  int32 order = 2;
+}

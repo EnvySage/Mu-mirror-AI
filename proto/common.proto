@@ -1,0 +1,54 @@
+syntax = "proto3";
+package mirror;
+
+enum MoodType {
+  MOOD_UNKNOWN = 0;
+  HAPPY = 1;
+  EXCITED = 2;
+  SATISFIED = 3;
+  GRATEFUL = 4;
+  EXPECTING = 5;
+  CALM = 6;
+  BORED = 7;
+  CONFUSED = 8;
+  ANXIOUS = 9;
+  SAD = 10;
+  ANGRY = 11;
+  EXHAUSTED = 12;
+  STRESSED = 13;
+}
+
+enum ContentType {
+  CONTENT_UNKNOWN = 0;
+  TODO = 1;
+  THOUGHT = 2;
+  LEARNING = 3;
+  PLAN = 4;
+  NOTE = 5;
+  WORK = 6;
+  SOCIAL = 7;
+  HEALTH = 8;
+}
+
+enum TaskStatus {
+  STATUS_UNKNOWN = 0;
+  NOT_STARTED = 1;
+  IN_PROGRESS = 2;
+  COMPLETED = 3;
+}
+
+message LlmConfig {
+  string provider = 1;
+  string api_key = 2;
+  string base_url = 3;
+  string model = 4;
+  string ai_protocol = 5;  // openai / anthropic
+}
+
+message EmbeddingConfig {
+  string source = 1;
+  string local_model = 2;
+  string api_provider = 3;
+  string api_key = 4;
+  string api_model = 5;
+}
