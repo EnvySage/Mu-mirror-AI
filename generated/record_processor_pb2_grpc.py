@@ -5,7 +5,7 @@ import warnings
 
 from generated import record_processor_pb2 as record__processor__pb2
 
-GRPC_GENERATED_VERSION = '1.78.0'
+GRPC_GENERATED_VERSION = '1.83.0'
 GRPC_VERSION = grpc.__version__
 _version_not_supported = False
 
@@ -25,7 +25,7 @@ if _version_not_supported:
     )
 
 
-class RecordProcessorStub(object):
+class RecordProcessorStub:
     """Missing associated documentation comment in .proto file."""
 
     def __init__(self, channel):
@@ -39,23 +39,12 @@ class RecordProcessorStub(object):
                 request_serializer=record__processor__pb2.ClassifyRequest.SerializeToString,
                 response_deserializer=record__processor__pb2.ClassifyResponse.FromString,
                 _registered_method=True)
-        self.Split = channel.unary_unary(
-                '/mirror.RecordProcessor/Split',
-                request_serializer=record__processor__pb2.SplitRequest.SerializeToString,
-                response_deserializer=record__processor__pb2.SplitResponse.FromString,
-                _registered_method=True)
 
 
-class RecordProcessorServicer(object):
+class RecordProcessorServicer:
     """Missing associated documentation comment in .proto file."""
 
     def Classify(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def Split(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -69,11 +58,6 @@ def add_RecordProcessorServicer_to_server(servicer, server):
                     request_deserializer=record__processor__pb2.ClassifyRequest.FromString,
                     response_serializer=record__processor__pb2.ClassifyResponse.SerializeToString,
             ),
-            'Split': grpc.unary_unary_rpc_method_handler(
-                    servicer.Split,
-                    request_deserializer=record__processor__pb2.SplitRequest.FromString,
-                    response_serializer=record__processor__pb2.SplitResponse.SerializeToString,
-            ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
             'mirror.RecordProcessor', rpc_method_handlers)
@@ -82,7 +66,7 @@ def add_RecordProcessorServicer_to_server(servicer, server):
 
 
  # This class is part of an EXPERIMENTAL API.
-class RecordProcessor(object):
+class RecordProcessor:
     """Missing associated documentation comment in .proto file."""
 
     @staticmethod
@@ -102,33 +86,6 @@ class RecordProcessor(object):
             '/mirror.RecordProcessor/Classify',
             record__processor__pb2.ClassifyRequest.SerializeToString,
             record__processor__pb2.ClassifyResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def Split(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/mirror.RecordProcessor/Split',
-            record__processor__pb2.SplitRequest.SerializeToString,
-            record__processor__pb2.SplitResponse.FromString,
             options,
             channel_credentials,
             insecure,

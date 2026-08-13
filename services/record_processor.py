@@ -60,6 +60,15 @@ class RecordProcessorServicer(pb2_grpc.RecordProcessorServicer):
               f"api_key={'***' + llm_config.api_key[-4:] if llm_config.api_key else 'EMPTY'}, "
               f"base_url={llm_config.base_url}, protocol={llm_config.protocol}")
 
+        # 内容太短，直接跳过
+        if len(content.strip()) < 3:
+            print(f"[Classify] 内容太短，跳过")
+            return pb2.ClassifyResponse(
+                skip=True,
+                skip_reason="内容太短或无意义",
+                items=[]
+            )
+
         try:
             # 创建 LLM 实例
             llm = create_llm(
@@ -81,33 +90,58 @@ class RecordProcessorServicer(pb2_grpc.RecordProcessorServicer):
             # 解析 JSON
             result = _parse_json(response_text)
 
-            # 映射到 proto
+            # 处理跳过
+            if result.get("skip", False):
+                print(f"[Classify] 跳过: {result.get('skip_reason', '')}")
+                return pb2.ClassifyResponse(
+                    skip=True,
+                    skip_reason=result.get("skip_reason", ""),
+                    items=[]
+                )
+
+            # 处理分类结果
+            items_data = result.get("items", [])
+
+            # 兜底：如果没有 items，返回空
+            if not items_data:
+                print(f"[Classify] LLM 返回空 items，跳过")
+                return pb2.ClassifyResponse(
+                    skip=True,
+                    skip_reason="无法解析内容",
+                    items=[]
+                )
+
+            # 构建 ClassifyItem 列表
+            items = []
+            for item in items_data:
+                classify_item = pb2.ClassifyItem(
+                    title=item.get("title", "")[:10],  # 限制10字
+                    summary=item.get("summary", "")[:30],  # 限制30字
+                    content_type=CONTENT_TYPE_MAP.get(
+                        item.get("content_type", ""), common.ContentType.CONTENT_UNKNOWN
+                    ),
+                    moods=[MOOD_MAP[m] for m in item.get("moods", []) if m in MOOD_MAP],
+                    status=STATUS_MAP.get(item.get("status", ""), common.TaskStatus.STATUS_UNKNOWN),
+                    keywords=item.get("keywords", []),
+                )
+                items.append(classify_item)
+
+            print(f"[Classify] 返回 {len(items)} 条记录")
             return pb2.ClassifyResponse(
-                skip=result.get("skip", False),
-                skip_reason=result.get("skip_reason", ""),
-                title=result.get("title", ""),
-                summary=result.get("summary", ""),
-                content_type=CONTENT_TYPE_MAP.get(result.get("content_type", ""), common.ContentType.CONTENT_UNKNOWN),
-                moods=[MOOD_MAP[m] for m in result.get("moods", []) if m in MOOD_MAP],
-                status=STATUS_MAP.get(result.get("status", ""), common.TaskStatus.STATUS_UNKNOWN),
-                keywords=result.get("keywords", []),
+                skip=False,
+                skip_reason="",
+                items=items
             )
 
         except Exception as e:
             print(f"[Classify] 错误: {e}")
-            context.abort(grpc.StatusCode.INTERNAL, f"分类失败: {str(e)}")
-
-    def Split(self, request, context):
-        content = request.content
-        llm_config = request.llm_config
-
-        print(f"[Split] 内容: {content}")
-
-        # 暂不实现拆分逻辑，直接返回不需要拆分
-        return pb2.SplitResponse(
-            need_split=False,
-            segments=[]
-        )
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"分类失败: {str(e)}")
+            return pb2.ClassifyResponse(
+                skip=True,
+                skip_reason=str(e),
+                items=[]
+            )
 
 
 def _parse_json(text: str) -> dict:

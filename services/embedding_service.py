@@ -29,6 +29,9 @@ class EmbeddingServiceServicer(pb2_grpc.EmbeddingServiceServicer):
             vector = embedder.embed(text)
             info = embedder.get_model_info()
 
+            print(f"[Embed] 成功! dimension={info['dimension']}, model={info['model_name']}")
+            print(f"[Embed] 向量前5维: {vector[:5]}")
+
             return pb2.EmbedResponse(
                 vector=vector,
                 dimension=info["dimension"],
