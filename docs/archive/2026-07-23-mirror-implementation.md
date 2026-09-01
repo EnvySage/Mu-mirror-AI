@@ -1,7 +1,7 @@
 # AI 日记"镜子"系统 — 落地与实现文档
 
-> 版本：v0.4
-> 日期：2026-07-23（初版） / 2026-08-04（更新） / 2026-08-07（用户隔离更新）
+> 版本：v0.5
+> 日期：2026-07-23（初版） / 2026-08-04（更新） / 2026-08-07（用户隔离更新） / 2026-08-12（文档与代码对齐）
 > 状态：讨论中
 
 **关联文档：**
@@ -16,8 +16,8 @@
 
 | 技术 | 选择 | 说明 |
 |------|------|------|
-| 框架 | Spring Boot | 已学过，熟悉 |
-| 语言 | Java 17+ | Spring Boot 推荐版本 |
+| 框架 | Spring Boot 3.5 | 已学过，熟悉 |
+| 语言 | Java 21 | Spring Boot 推荐版本 |
 | 构建工具 | Maven | 统一依赖管理 |
 
 ### 1.2 AI 服务
@@ -86,58 +86,55 @@
 ### 3.1 整体结构
 
 ```
-mirror/
-├── mirror-backend/              # Java 后端
-├── mirror-ai/                   # Python AI 服务
-├── mirror-frontend/             # Vue 3 前端
-├── proto/                       # gProto 定义（共享）
-│   ├── common.proto
-│   ├── record_processor.proto
-│   ├── embedding.proto
-│   ├── mirror_chat.proto
-│   └── mirror_profile.proto
-├── sql/                         # 数据库初始化脚本
-├── docker-compose.yml
-└── .env.example
+Mu-mirror-B/                     # Java 后端
+Mu-mirror-AI/                    # Python AI 服务
+proto/                           # Proto 定义（在 Java 项目 src/main/proto/ 下）
 ```
 
-### 3.2 后端结构（mirror-backend）
+### 3.2 后端结构（Mu-mirror-B）
 
 ```
-mirror-backend/
-├── src/main/java/com/mirror/
+Mu-mirror-B/
+├── src/main/java/org/xianshen/mumirrorb/
+│   ├── MuMirrorBApplication.java
+│   ├── common/                  # 通用组件
+│   │   ├── enums/               # 枚举（ResultCode, ContentType, MoodType, RecordStatus）
+│   │   ├── exception/           # 异常处理
+│   │   ├── handler/             # TypeHandler（Jsonb, Uuid）
+│   │   ├── security/            # JWT 认证
+│   │   └── utils/               # 工具类（JwtUtils, CryptoUtils）
 │   ├── config/                  # 配置类
 │   ├── controller/              # API 控制器
+│   ├── mapper/                  # MyBatis-Plus Mapper
+│   ├── pojo/                    # DO/DTO/VO
 │   ├── service/                 # 业务逻辑
 │   ├── grpc/                    # gRPC 客户端
-│   │   ├── GrpcClientConfig.java
-│   │   └── AiGrpcClient.java
-│   ├── mapper/                  # 数据库操作
-│   ├── model/                   # 实体类
-│   ├── dto/                     # 数据传输对象
-│   └── utils/                   # 工具类
+│   └── pipeline/                # 数据管道（事件驱动）
+├── src/main/proto/              # Proto 定义
 ├── src/main/resources/
-│   └── application.yml          # 主配置
+│   └── application.yml
 └── pom.xml
 ```
 
-### 3.3 AI 服务结构（mirror-ai）
+### 3.3 AI 服务结构（Mu-mirror-AI）
 
 ```
-mirror-ai/
+Mu-mirror-AI/
 ├── server.py                    # gRPC 服务入口
-├── config.py                    # 配置管理
 ├── services/                    # gRPC 服务实现
 │   ├── record_processor.py
 │   ├── embedding_service.py
 │   ├── chat_service.py
 │   └── profile_service.py
-├── llm/                         # LLM 多厂商适配
+├── llm/                         # LLM 多协议适配
+│   ├── base.py
+│   ├── openai_llm.py
+│   ├── anthropic_llm.py
+│   └── factory.py
 ├── embedding/                   # Embedding 本地/API 切换
+├── generated/                   # protobuf 生成的代码
 ├── prompts/                     # Prompt 模板
-├── config.example.yml
-├── requirements.txt
-└── Dockerfile
+└── requirements.txt
 ```
 
 ### 3.4 前端结构（mirror-frontend）
@@ -191,77 +188,74 @@ mirror-frontend/
 ```java
 /**
  * 统一的 AI 调用封装，内部通过 gRPC 调用 Python AI 服务。
- * Java 端只调这个类，不直接碰 gRPC 细节。
+ * 每次调用从 user_settings 读取用户的模型配置，放入请求中传给 Python。
  */
-@Service
+@Slf4j
+@Component
+@RequiredArgsConstructor
 public class AiGrpcClient {
 
-    // gRPC stub（由 GrpcClientConfig 注入）
-    private final RecordProcessorGrpc.RecordProcessorBlockingStub recordStub;
-    private final EmbeddingServiceGrpc.EmbeddingServiceBlockingStub embedStub;
-    private final MirrorChatGrpc.MirrorChatBlockingStub chatStub;
-    private final MirrorProfileGrpc.MirrorProfileBlockingStub profileStub;
+    private final ManagedChannel channel;
+    private final SettingsMapper settingsMapper;
 
-    @Autowired
-    private UserSettingsMapper userSettingsMapper;
+    private RecordProcessorGrpc.RecordProcessorBlockingStub recordStub;
+    private EmbeddingServiceGrpc.EmbeddingServiceBlockingStub embedStub;
 
-    // 获取用户的 LLM 配置
-    private LlmConfig getLlmConfig(String userId) {
-        UserSettings settings = userSettingsMapper.selectByUserId(userId);
-        return LlmConfig.newBuilder()
-            .setProvider(settings.getAiProvider())
-            .setApiKey(settings.getAiApiKey())
-            .setBaseUrl(settings.getAiBaseUrl() != null ? settings.getAiBaseUrl() : "")
-            .setModel(settings.getAiModel())
-            .build();
+    @PostConstruct
+    public void init() {
+        recordStub = RecordProcessorGrpc.newBlockingStub(channel);
+        embedStub = EmbeddingServiceGrpc.newBlockingStub(channel);
     }
 
-    // 获取用户的 Embedding 配置
-    private EmbeddingConfig getEmbeddingConfig(String userId) {
-        UserSettings settings = userSettingsMapper.selectByUserId(userId);
-        return EmbeddingConfig.newBuilder()
-            .setSource(settings.getEmbeddingSource())
-            .setLocalModel(settings.getEmbeddingModel())
-            .setApiProvider(settings.getAiProvider())
-            .setApiKey(settings.getEmbeddingApiKey() != null ? settings.getEmbeddingApiKey() : "")
-            .setApiModel(settings.getEmbeddingModel())
-            .build();
+    /**
+     * 从 user_settings 构建 LlmConfig
+     * - API Key 从数据库读取后需 CryptoUtils.decrypt() 解密
+     * - protocol 字段根据 aiProtocol 值映射为 AiProtocol 枚举
+     */
+    private CommonProto.LlmConfig buildLlmConfig(UUID userId) {
+        UserSettings settings = settingsMapper.selectOne(
+                new LambdaQueryWrapper<UserSettings>()
+                        .eq(UserSettings::getUserId, userId));
+
+        CommonProto.LlmConfig.Builder builder = CommonProto.LlmConfig.newBuilder();
+        if (settings != null) {
+            if (settings.getAiProvider() != null)
+                builder.setProvider(settings.getAiProvider());
+            if (settings.getAiProtocol() != null)
+                builder.setProtocol(settings.getAiProtocol().equals("anthropic")
+                        ? CommonProto.AiProtocol.ANTHROPIC
+                        : CommonProto.AiProtocol.OPENAI);
+            if (settings.getAiApiKey() != null)
+                builder.setApiKey(CryptoUtils.decrypt(settings.getAiApiKey()));
+            if (settings.getAiBaseUrl() != null)
+                builder.setBaseUrl(settings.getAiBaseUrl());
+            if (settings.getAiModel() != null)
+                builder.setModel(settings.getAiModel());
+        }
+        return builder.build();
     }
 
     // 记录分类（携带用户 LLM 配置）
-    public ClassifyResponse classify(String userId, String content) {
+    public RecordProcessorProto.ClassifyResponse classify(UUID userId, String content) {
+        CommonProto.LlmConfig llmConfig = buildLlmConfig(userId);
         return recordStub
             .withDeadlineAfter(30, TimeUnit.SECONDS)
-            .classify(ClassifyRequest.newBuilder()
+            .classify(RecordProcessorProto.ClassifyRequest.newBuilder()
                 .setContent(content)
-                .setLlmConfig(getLlmConfig(userId))
+                .setLlmConfig(llmConfig)
                 .build());
     }
 
-    // 文本转向量（携带用户 Embedding 配置）
-    public EmbedResponse embed(String userId, String text) {
+    // 生成向量（携带用户 Embedding 配置）
+    public EmbeddingProto.EmbedResponse embed(UUID userId, String text) {
+        CommonProto.EmbeddingConfig embedConfig = buildEmbeddingConfig(userId);
         return embedStub
             .withDeadlineAfter(10, TimeUnit.SECONDS)
-            .embed(EmbedRequest.newBuilder()
+            .embed(EmbeddingProto.EmbedRequest.newBuilder()
                 .setText(text)
-                .setEmbeddingConfig(getEmbeddingConfig(userId))
+                .setEmbeddingConfig(embedConfig)
                 .build());
     }
-
-    // 批量转向量
-    public EmbedBatchResponse embedBatch(String userId, List<String> texts) { ... }
-
-    // 提取对话意图（携带用户 LLM 配置）
-    public ExtractIntentResponse extractIntent(String userId, String query) { ... }
-
-    // 对话（流式返回，携带用户 LLM 配置）
-    public Iterator<ChatChunk> chat(String userId, String question,
-                                     List<ChatMessage> history,
-                                     List<RetrievedChunk> chunks) { ... }
-
-    // 生成画像（携带用户 LLM 配置）
-    public GenerateProfileResponse generateProfile(String userId,
-                                                    GenerateProfileRequest request) { ... }
 }
 ```
 
@@ -281,7 +275,7 @@ public class RagService {
     @Autowired
     private ChunkMapper chunkMapper;
 
-    public List<Chunk> search(String userId, String query, Map<String, Object> filters) {
+    public List<Chunk> search(UUID userId, String query, Map<String, Object> filters) {
         // 1. gRPC → Python：将 query 转为向量
         EmbedResponse embedResult = aiGrpcClient.embed(query);
         List<Float> queryVector = embedResult.getVectorList();
@@ -309,7 +303,7 @@ public class RecordService {
     @Autowired
     private AiGrpcClient aiGrpcClient;
 
-    public ProcessResult process(String userId, String content) {
+    public ProcessResult process(UUID userId, String content) {
         // 1. 长度检测（Java 端）
         if (content.length() > 500) {
             return ProcessResult.tooLong();
@@ -329,7 +323,7 @@ public class RecordService {
     }
 
     // 审核通过后调用
-    public ProcessResult approve(String userId, Long recordId, ClassifyResponse userModifications) {
+    public ProcessResult approve(UUID userId, Long recordId, ClassifyResponse userModifications) {
         Record record = recordMapper.selectById(recordId);
         // 校验记录归属
         if (!record.getUserId().equals(userId)) {
@@ -371,7 +365,7 @@ public class ChatService {
     @Autowired
     private RagService ragService;
 
-    public void chat(String userId, String sessionId, String question, StreamObserver<ChatChunk> responseObserver) {
+    public void chat(UUID userId, String sessionId, String question, StreamObserver<ChatChunk> responseObserver) {
         // 1. gRPC → Python：提取意图
         ExtractIntentResponse intent = aiGrpcClient.extractIntent(question);
 
@@ -416,3 +410,4 @@ public class ChatService {
 | 2026-08-04 | v0.2 | 架构调整：AI 推理拆分为 Python gRPC 服务，更新技术栈、项目结构、核心代码实现思路 |
 | 2026-08-04 | v0.3 | 文档审查修正：统一开发计划、明确 grpcio-aio、补充配置管理说明 |
 | 2026-08-07 | v0.4 | 用户隔离：所有 gRPC 调用携带 userId 和用户配置（LlmConfig/EmbeddingConfig），RAG 检索、对话服务、记录处理服务新增 userId 参数；记录处理流程改为审核后才 Embedding；AiGrpcClient 从 user_settings 动态构建配置；三文档对齐修正 |
+| 2026-08-12 | v0.5 | 文档与代码对齐：包名 com/mirror → org/xianshen/mumirrorb；项目结构更新（common/pojo/pipeline 等）；AiGrpcClient 更新（UUID userId, SettingsMapper, CryptoUtils, buildLlmConfig 含 AiProtocol）；技术栈版本更新（Spring Boot 3.5, Java 21）；userId 类型 String → UUID |

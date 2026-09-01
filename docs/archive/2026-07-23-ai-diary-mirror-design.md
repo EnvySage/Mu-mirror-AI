@@ -1,7 +1,7 @@
 # AI 日记"镜子"系统 — 设计文档
 
-> 版本：v1.2（审核机制重构）
-> 日期：2026-07-23（初版） / 2026-08-04（架构更新） / 2026-08-07（审核机制重构）
+> 版本：v1.3（文档与代码对齐）
+> 日期：2026-07-23（初版） / 2026-08-04（架构更新） / 2026-08-07（审核机制重构） / 2026-08-12（文档与代码对齐）
 > 状态：设计中，持续完善
 
 **关联文档：**
@@ -54,6 +54,7 @@
 | 🏷️ 标签审核 | P0 | AI 处理后用户可审核/修改标签 |
 | 📋 每日总结 | P1 | 凌晨1点自动生成昨日总结 |
 | 💡 写作灵感 | P1 | 用户卡住时，从 RAG 检索相关上下文给提示 |
+| 📅 日历导航 | P1 | 按日期查看记录，快速定位历史内容 |
 | 📊 活动统计 | P2 | 记录频率、时间分布等数据可视化 |
 
 ### 2.2 核心功能详细设计
@@ -65,7 +66,7 @@
 2. 点击提交
 3. Java 后台异步处理：
    - **gRPC → Python AI 服务**：提取标题、生成摘要、打标签（类型/情绪/状态/关键词）
-   - **Java**：保存 records 表（status = pending_review）
+   - **Java**：保存 records 表（status = reviewing）
 4. 前端展示审核界面，等待用户操作
 5. 用户审核通过后：
    - **gRPC → Python AI 服务**：文本转向量（Embedding）
@@ -293,7 +294,7 @@ public ResponseEntity<Void> deleteSession(@PathVariable UUID sessionId);
 
 #### 2.2.6 审核机制
 
-**核心原则：** 审核通过后才执行 Embedding 并写入 RAG，确保向量数据库中的数据始终是用户确认的最终版本。
+**核心原则：** AI 处理完成后进入审核状态，用户确认后记录锁定。
 
 **审核界面：**
 ```
@@ -312,7 +313,7 @@ public ResponseEntity<Void> deleteSession(@PathVariable UUID sessionId);
 │ 状态：[in_progress ▼]               │
 │ 关键词：[安全, 认证]         ✏️     │
 │                                     │
-│ [✅ 通过]              [❌ 拒绝]     │
+│ [✅ 确认]              [🗑️ 删除]     │
 └─────────────────────────────────────┘
 ```
 
@@ -320,13 +321,13 @@ public ResponseEntity<Void> deleteSession(@PathVariable UUID sessionId);
 
 | 操作 | 行为 |
 |------|------|
-| **通过** | 确认数据（可先修改）→ Embedding → 存 chunks → status=done |
-| **拒绝** | 软删除记录 → 不 Embedding、不入 chunks、不进画像统计 |
+| **确认** | 确认数据（可先修改标签）→ status=done，记录锁定 |
+| **删除** | 软删除记录（仅 REVIEWING 状态可删除） |
 
 **审核阶段也是修改阶段：**
-- 用户在点"通过"之前，可以修改标题、摘要、标签类型、情绪、状态、关键词
-- 修改后再点"通过"，存入的是用户确认后的最终版本
-- 一旦确认通过（status=done），记录锁定，不可再修改
+- 用户在点"确认"之前，可以修改标题、摘要、标签类型、情绪、状态、关键词
+- 修改后再点"确认"，存入的是用户确认后的最终版本
+- 一旦确认（status=done），记录锁定，不可再修改
 
 **状态流转：**
 ```
@@ -334,30 +335,80 @@ public ResponseEntity<Void> deleteSession(@PathVariable UUID sessionId);
     ↓
 status = processing（AI 处理中）
     ↓
-status = pending_review（等待审核）
+status = reviewing（等待审核）
     ↓
 ┌──────────────┬──────────────┐
-│   点"通过"    │   点"拒绝"    │
+│   点"确认"    │   点"删除"    │
 │              │              │
-│ Embedding    │ 软删除       │
-│ 存 chunks    │ 不存 chunks  │
-│ status=done  │ 不进任何下游  │
+│ status=done  │ 软删除       │
+│ 记录锁定     │ 不进任何下游  │
 └──────────────┴──────────────┘
 ```
 
-**全局开关（设置页面）：**
-```
-⚙️ AI 处理设置
+**设计要点：**
+- 审核阶段是唯一的修改窗口
+- 删除 = 软删除，不污染任何下游数据（画像、总结）
+- 确认后锁定，避免改来改去导致的级联同步问题
 
-☑ 自动审核（跳过人工确认）
-  开启后 AI 处理完成后直接通过，无需手动确认
+#### 2.2.7 日历导航
+
+**定位：** 日历是导航工具，不是分析工具。用最简单的方式帮用户找到某天的记录。
+
+**数据策略：按月加载**
+```
+用户打开日历 / 切换月份
+    ↓
+GET /records?start=2026-08-01&end=2026-08-31
+    ↓
+前端按 created_at 分组到日期
+    ↓
+日历上标记有记录的日期
+```
+
+> 不一次性加载全部记录，按需加载当月数据。
+
+**视觉标记：只区分有/无**
+```
+     8月 2026
+一 二 三 四 五 六 日
+          1  2  3  4
+ 5  6  7  8  9 10 11
+12 13 14 15 16 17 18
+19 20 21 22 23 24 25
+26 27 28 29 30 31
+
+有记录的日期：下方一个小圆点
+当天：数字高亮
+选中：背景色
+```
+
+> 不区分状态颜色——日历只告诉你"这天有没有写"，不告诉你"写的是什么状态"。状态信息在记录列表里看。
+
+**交互逻辑：**
+
+桌面端（侧边栏迷你日历）：
+```
+点击日期
+    ↓
+右侧记录列表筛选为该日记录
+    ↓
+再点同一日期 / 点"全部"→ 取消筛选
+```
+
+移动端（CalendarView 页面）：
+```
+点击日期
+    ↓
+日历下方展开该日记录列表
+    ↓
+再点同一日期 → 收起
 ```
 
 **设计要点：**
-- 审核、修改、入 RAG 三件事合为一步，逻辑干净
-- 拒绝 = 软删除，不污染任何下游数据（RAG、画像、总结）
-- 确认后锁定，避免改来改去导致的级联同步问题
-- chunks 里存储的一定是用户认可的数据，RAG 检索质量有保障
+- 日历只负责导航，不承载分析功能
+- 视觉标记保持简洁，只区分"有/无记录"
+- 复用现有记录列表，不引入新的展示模式
+- 按月加载数据，性能优先
 
 ---
 
@@ -420,10 +471,9 @@ Java：长度检测
     ↓
 Java：gRPC 调用 Python AI 服务
     ├── Classify：生成标题/摘要/标签（一次调用完成）
-    ├── Split（如需要）：判断是否拆分 + 返回拆分结果
     └── 返回处理结果
     ↓
-Java：保存 records 表（status = pending_review）
+Java：保存 records 表（status = reviewing）
     ↓
 前端展示审核界面，等待用户操作
     ├── 通过（可先修改标签）→ 继续
@@ -527,7 +577,7 @@ AI 处理结果：
 │ 特殊处理：                               │
 │ - 纯情绪/无意义内容 → 跳过分类            │
 │ - 多事件内容 → 拆分后每条单独分类          │
-│ 保存 records 表，status=pending_review    │
+│ 保存 records 表，status=reviewing         │
 └─────────────────┬───────────────────────┘
                   ↓
 ┌─────────────────────────────────────────┐
@@ -727,60 +777,71 @@ AI 处理结果：
 
 ### 4.2 模块划分
 
-**Java 端（mirror-backend）：**
+**Java 端（Mu-mirror-B）：**
 ```
-src/main/java/com/mirror/
+src/main/java/org/xianshen/mumirrorb/
+├── MuMirrorBApplication.java
+├── common/
+│   ├── enums/                     # 枚举（ResultCode, ContentType, MoodType, RecordStatus）
+│   ├── exception/                 # 异常处理（BusinessException, AuthenticationException, GlobalExceptionHandler）
+│   ├── handler/                   # TypeHandler（JsonbTypeHandler, UuidTypeHandler）
+│   ├── security/                  # JWT 认证（JwtAuthenticationFilter, UserDetailsServiceImpl）
+│   └── utils/                     # 工具类（JwtUtils, CryptoUtils）
 ├── config/                        # 配置类
-│   ├── AiModelConfig.java         # AI 模型配置（gRPC 地址等）
-│   └── DataSourceConfig.java      # 数据库配置
+│   ├── SecurityConfig.java        # 路由权限配置
+│   ├── Knife4jConfig.java         # API 文档
+│   ├── WebMvcConfig.java          # CORS
+│   └── GrpcClientConfig.java      # gRPC channel 管理
 ├── controller/                    # API 控制器
-│   ├── RecordController.java
-│   ├── MirrorController.java
-│   ├── ChatController.java
-│   └── SettingsController.java
+│   ├── AuthController.java        # 认证端点（4个）
+│   ├── RecordController.java      # 记录端点（6个）
+│   └── SettingsController.java    # 配置端点（4个）
+├── mapper/                        # MyBatis-Plus Mapper
+│   ├── UserMapper.java
+│   ├── RecordMapper.java
+│   ├── TagMapper.java
+│   └── SettingsMapper.java
+├── pojo/
+│   ├── R.java                     # 统一响应 {code, message, data, timestamp}
+│   ├── DO/                        # 实体类（User, Record, Tag, UserSettings）
+│   ├── DTO/                       # 数据传输对象
+│   └── VO/                        # 视图对象
 ├── service/                       # 业务逻辑
-│   ├── RecordService.java         # 记录处理（编排 gRPC 调用 + 数据库写入）
-│   ├── RagService.java            # RAG 检索（pgvector SQL 查询）
-│   ├── MirrorService.java         # 画像生成（查数据 → gRPC → 保存）
-│   ├── ChatService.java           # 对话服务（意图提取 → 检索 → 生成）
-│   └── SchedulerService.java      # 定时任务
-├── grpc/                          # gRPC 客户端
-│   ├── GrpcClientConfig.java      # 连接配置
-│   └── AiGrpcClient.java          # 统一封装（classify/embed/chat/profile）
-├── pipeline/                      # 数据管道（Java 编排，AI 调用走 gRPC）
-│   ├── CleanLayer.java            # 纯代码清洗，不调 AI
-│   └── ProcessPipeline.java       # 管道编排
-├── model/                         # 数据模型
-│   ├── Record.java
-│   ├── Tag.java
-│   ├── Chunk.java
-│   └── Mirror.java
-└── repository/                    # 数据访问（含 pgvector 向量查询）
-    ├── RecordRepository.java
-    └── ChunkRepository.java
+│   ├── AuthService.java
+│   ├── RecordService.java
+│   ├── SettingsService.java
+│   └── impl/
+├── grpc/
+│   └── AiGrpcClient.java          # AI gRPC 客户端封装
+└── pipeline/                      # 数据管道（事件驱动）
+    ├── RecordProcessor.java
+    ├── RecordPipeline.java
+    └── event/
+        ├── RecordCreatedEvent.java
+        └── RecordEventListener.java
 ```
 
-**Python 端（mirror-ai）：**
+**Python 端（Mu-mirror-AI）：**
 ```
-mirror-ai/
+Mu-mirror-AI/
 ├── server.py                      # gRPC 服务启动入口
-├── config.py                      # 配置管理
 ├── services/                      # gRPC 服务实现
 │   ├── record_processor.py        # 记录分类
 │   ├── embedding_service.py       # Embedding（本地/API 切换）
 │   ├── chat_service.py            # 对话生成
 │   └── profile_service.py         # 画像生成
-├── llm/                           # LLM 统一接口 + 多厂商实现
-│   ├── base.py
-│   ├── openai_llm.py
-│   ├── qwen_llm.py
-│   └── zhipu_llm.py
+├── llm/                           # LLM 统一接口 + 多协议实现
+│   ├── base.py                    # BaseLlm 抽象类
+│   ├── openai_llm.py              # OpenAI 兼容实现（支持 qwen/zhipu 等）
+│   ├── anthropic_llm.py           # Anthropic Claude 实现
+│   └── factory.py                 # create_llm() 工厂函数
 ├── embedding/                     # Embedding 统一接口 + 本地/API 实现
 │   ├── base.py
 │   ├── local_embedder.py
-│   └── api_embedder.py
+│   ├── api_embedder.py
+│   └── factory.py
+├── generated/                     # protobuf 生成的代码
 ├── prompts/                       # Prompt 模板
-├── config.example.yml
 ├── requirements.txt
 └── Dockerfile
 ```
@@ -797,10 +858,11 @@ mirror-ai/
 -- 用户表
 CREATE TABLE users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    username VARCHAR(50) DEFAULT 'user',
-    password_hash VARCHAR(255),      -- 加密存储，可为空
+    username VARCHAR(50) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,  -- BCrypt 哈希存储
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
+CREATE INDEX idx_users_username ON users(username);
 
 -- 记录表
 CREATE TABLE records (
@@ -808,26 +870,25 @@ CREATE TABLE records (
     user_id UUID NOT NULL REFERENCES users(id), -- 所属用户
     content TEXT NOT NULL,           -- 原始内容
     title VARCHAR(200),             -- AI 生成的标题
-    summary TEXT,                    -- AI 生成的摘要
+    summary VARCHAR(500),            -- AI 生成的摘要
     content_type VARCHAR(20),        -- 类型：todo/thought/learning/plan/note/work/social/health
-    mood JSONB,                      -- 情绪：支持多选 ["happy", "exhausted"]
-    task_status VARCHAR(20),         -- 任务状态：not_started/in_progress/completed（仅待办/计划类）
-                                     -- 注意：Proto 中对应字段名为 "status"（TaskStatus 枚举）
-    record_status VARCHAR(20) DEFAULT 'processing', -- 记录状态：processing/pending_review/done/failed/rejected
-    deleted_at TIMESTAMP,            -- 软删除时间，NULL 表示未删除
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW()
+    mood JSONB DEFAULT '[]',         -- 情绪：支持多选 ["happy", "exhausted"]
+    status VARCHAR(20) DEFAULT 'processing', -- 记录状态：processing/reviewing/done/failed
+    user_reviewed BOOLEAN DEFAULT FALSE, -- 是否已人工审核
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    deleted_at TIMESTAMPTZ           -- 软删除时间，NULL 表示未删除
 );
 CREATE INDEX idx_records_user_id ON records(user_id);
-CREATE INDEX idx_records_status ON records(user_id, record_status, deleted_at);
+CREATE INDEX idx_records_created_at ON records(created_at);
+CREATE INDEX idx_records_deleted_at ON records(deleted_at);
 
 -- 标签表
 CREATE TABLE tags (
     id BIGSERIAL PRIMARY KEY,
-    user_id UUID NOT NULL REFERENCES users(id), -- 所属用户
     record_id BIGINT NOT NULL REFERENCES records(id),
-    keyword VARCHAR(50),             -- 关键词标签
-    created_at TIMESTAMP DEFAULT NOW()
+    keyword VARCHAR(50) NOT NULL,    -- 关键词标签
+    created_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX idx_tags_record_id ON tags(record_id);
 
@@ -843,7 +904,7 @@ CREATE TABLE chunks (
     content TEXT NOT NULL,           -- 切片内容
     metadata JSONB,                 -- 元数据（类型、情绪、时间等）
     embedding vector(1024),         -- BGE-m3 默认 1024 维，按实际模型调整
-    created_at TIMESTAMP DEFAULT NOW()
+    created_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX idx_chunks_user_id ON chunks(user_id);
 CREATE INDEX idx_chunks_record_id ON chunks(record_id);
@@ -895,7 +956,8 @@ CREATE TABLE user_settings (
     user_id UUID UNIQUE NOT NULL REFERENCES users(id), -- 每个用户一条配置
     -- LLM 配置
     ai_provider VARCHAR(50),         -- AI 提供商：openai/zhipu/qwen
-    ai_api_key TEXT,                 -- API Key（加密存储）
+    ai_protocol VARCHAR(20) DEFAULT 'anthropic', -- AI 协议：openai / anthropic
+    ai_api_key TEXT,                 -- API Key（加密存储，AES-256-GCM）
     ai_base_url TEXT,                -- API 地址
     ai_model VARCHAR(100),           -- 模型名称
     -- Embedding 配置
@@ -911,7 +973,7 @@ CREATE TABLE user_settings (
 
 > **设计说明：**
 > - 所有核心表均通过 `user_id` 关联 `users` 表，确保数据按用户隔离
-> - 数据库设计已支持多用户，当前版本通过简单密码保护实现单用户访问
+> - 认证系统使用 JWT（注册/登录），密码 BCrypt 哈希存储
 > - 所有业务查询必须带 `WHERE user_id = ?` 过滤条件
 > - `daily_summaries` 使用 `UNIQUE(user_id, summary_date)` 确保每个用户每天只有一条总结
 > - `user_settings` 使用 `UNIQUE(user_id)` 确保每个用户只有一条配置
@@ -938,20 +1000,30 @@ CREATE TABLE user_settings (
 
 ### 6.1 记录相关
 
-```
-POST   /api/records                  # 创建记录（AI 处理后进入 pending_review）
-GET    /api/records                  # 获取当前用户的记录列表（默认不含已删除和待审核）
-GET    /api/records/{id}             # 获取单条记录（校验归属）
-DELETE /api/records/{id}             # 删除记录（软删除，仅 done 状态可删，校验归属）
-POST   /api/records/{id}/approve     # 审核通过（可附带修改后的标签，触发 Embedding + 存 chunks）
-POST   /api/records/{id}/reject      # 审核拒绝（软删除，不入 RAG）
-```
+| 方法 | 路径 | 认证 | 说明 |
+|------|------|------|------|
+| POST | `/api/records` | JWT | 创建记录（提交内容，触发 AI 处理） |
+| GET | `/api/records` | JWT | 查询记录列表（支持分页和筛选） |
+| GET | `/api/records/{id}` | JWT | 获取单条记录详情 |
+| PUT | `/api/records/{id}` | JWT | 更新记录（仅 REVIEWING 状态允许） |
+| PUT | `/api/records/{id}/confirm` | JWT | 确认审查完成（REVIEWING → DONE） |
+| DELETE | `/api/records/{id}` | JWT | 软删除记录（仅 REVIEWING 状态允许） |
+
+**GET /api/records 查询参数：**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `start` | string | 否 | 开始日期（格式：`2026-08-01`），用于日历按月加载 |
+| `end` | string | 否 | 结束日期（格式：`2026-08-31`），配合 start 使用 |
+| `page` | int | 否 | 页码，默认 1 |
+| `size` | int | 否 | 每页数量，默认 20 |
+
+> 日历功能使用 `start` + `end` 参数按月加载记录，前端按 `created_at` 分组到日期。
 
 > **设计说明：**
-> - 取消了通用的 `PUT /api/records/{id}` 更新接口。记录一旦审核通过（status=done）即锁定，不可修改。
-> - 审核阶段是唯一的修改窗口，通过 `/approve` 接口提交修改后的标签。
-> - `/reject` 等同于软删除，该记录不进入 RAG、画像、总结等任何下游流程。
-> - 所有操作校验记录归属，用户只能操作自己的记录。
+> - 只有 REVIEWING 状态才能修改和删除记录
+> - 确认审查后状态变为 DONE，记录锁定
+> - 创建记录后异步触发 AI 分类管道，处理完成后状态变为 REVIEWING
 
 ### 6.2 画像相关
 
@@ -1134,9 +1206,9 @@ POST   /api/inspiration              # 获取写作灵感（基于当前用户�
 status = processing（AI 处理中）
     ↓
 ┌─────────────────────────────────────┐
-│ AI 分类处理                          │
-│    ├─ 失败 → status=failed，结束     │
-│    └─ 成功 → status=pending_review   │
+│ AI 分类处理（管道异步执行）           │
+│    ├─ 失败 → status=failed           │
+│    └─ 成功 → status=reviewing        │
 └─────────────────────────────────────┘
     ↓
 前端展示审核界面，等待用户操作
@@ -1144,17 +1216,11 @@ status = processing（AI 处理中）
 ┌─────────────────────────────────────┐
 │ 用户操作                             │
 │                                     │
-│ 1. 通过（可先修改标签）               │
-│    ├─ Embedding 处理                 │
-│    │   ├─ 失败 → status=failed       │
-│    │   └─ 成功 → 存 chunks           │
+│ 1. 确认通过（可先修改标签）           │
 │    └─ status=done，记录锁定          │
 │                                     │
-│ 2. 拒绝                              │
-│    └─ 软删除，不入 RAG               │
-│                                     │
-│ 3. 自动审核模式                      │
-│    └─ AI 处理完自动走"通过"流程      │
+│ 2. 删除                              │
+│    └─ 软删除（仅 REVIEWING 可删除）  │
 └─────────────────────────────────────┘
 ```
 
@@ -1162,11 +1228,10 @@ status = processing（AI 处理中）
 
 | 状态 | 含义 | 前端展示 | 可执行操作 |
 |------|------|----------|------------|
-| processing | AI正在处理 | 转圈动画 + "AI整理中" | 无 |
-| pending_review | 等待用户审核 | 显示审核界面 | 通过 / 拒绝 / 修改标签 |
-| done | 审核通过，全部完成 | 正常显示标签 | 仅查看，不可修改 |
-| failed | 处理失败 | 显示错误 + "重新尝试"按钮 | 重新尝试 / 删除 |
-| rejected | 审核拒绝 | 不在列表中显示（已软删除） | 无 |
+| processing | AI 正在处理 | 转圈动画 + "AI整理中" | 无 |
+| reviewing | 等待用户审核 | 显示审核界面 | 修改标签 / 确认 / 删除 |
+| done | 审核通过，已完成 | 正常显示标签 | 仅查看，不可修改 |
+| failed | 处理失败 | 显示错误 | 重新尝试 |
 
 ### 8.3 失败处理流程
 
@@ -1188,7 +1253,7 @@ status = failed
 用户点击"重新尝试"
     ↓
 重新执行 AI 分类流程
-    ├─ 成功 → status=pending_review，等待用户审核
+    ├─ 成功 → status=reviewing，等待用户审核
     └─ 失败 → status=failed，提示"仍然失败"
 ```
 
@@ -1261,7 +1326,7 @@ public class RecordService {
         if (!record.getUserId().equals(userId)) {
             throw new AccessDeniedException("无权操作此记录");
         }
-        if (!record.getRecordStatus().equals("failed")) {
+        if (!record.getStatus().equals("failed")) {
             return false; // 只有 failed 状态才能重试
         }
 
@@ -1270,7 +1335,7 @@ public class RecordService {
             ClassifyResponse classifyResult = aiGrpcClient.classify(userId, record.getContent());
 
             // 2. 分类成功，保存标签，进入待审核
-            record.setRecordStatus("pending_review");
+            record.setStatus("reviewing");
             record.setContentType(classifyResult.getContentType());
             record.setMood(classifyResult.getMoodsList());
             record.setTitle(classifyResult.getTitle());
@@ -1296,7 +1361,7 @@ public class RecordService {
         if (!record.getUserId().equals(userId)) {
             throw new AccessDeniedException("无权操作此记录");
         }
-        if (!record.getRecordStatus().equals("pending_review")) {
+        if (!record.getStatus().equals("reviewing")) {
             return false;
         }
 
@@ -1322,7 +1387,7 @@ public class RecordService {
             chunkMapper.insert(chunk);
 
             // 4. 更新状态为 done，记录锁定
-            record.setRecordStatus("done");
+            record.setStatus("done");
             recordMapper.updateById(record);
 
             return true;
@@ -1333,19 +1398,18 @@ public class RecordService {
         }
     }
 
-    // 审核拒绝（软删除）
-    public boolean rejectRecord(String userId, Long recordId) {
+    // 删除记录（软删除，仅 REVIEWING 状态允许）
+    public boolean deleteRecord(UUID userId, Long recordId) {
         Record record = recordMapper.selectById(recordId);
         // 校验记录归属
         if (!record.getUserId().equals(userId)) {
-            throw new AccessDeniedException("无权操作此记录");
+            throw new BusinessException(ResultCode.FORBIDDEN, "无权操作此记录");
         }
-        if (!record.getRecordStatus().equals("pending_review")) {
-            return false;
+        if (!record.getStatus().equals("reviewing")) {
+            throw new BusinessException(ResultCode.PARAM_ERROR, "只有审核中的记录才能删除");
         }
 
-        record.setRecordStatus("rejected");
-        record.setDeletedAt(LocalDateTime.now());
+        record.setDeletedAt(OffsetDateTime.now());
         recordMapper.updateById(record);
         return true;
     }
@@ -1407,43 +1471,45 @@ public class RecordService {
 
 ### 10.1 设计原则
 
-- **简单优先**：第一版只做简单密码保护，不设计复杂登录
-- **可选密码**：密码保护可选，不设置也能使用
+- **注册/登录**：用户通过用户名 + 密码注册和登录
+- **JWT 认证**：登录成功返回 JWT Token（24 小时过期），前端存 localStorage
+- **密码安全**：密码使用 BCrypt 哈希存储，不存明文
 - **多用户就绪**：所有核心表已通过 user_id 关联 users 表，数据按用户隔离
-- **隐私优先**：密码本地存储，不上传任何服务
+- **隐私优先**：用户自行配置 AI 模型和数据库，数据不出自己的服务器
 
-### 10.2 访问密码保护
+### 10.2 认证流程
 
-**使用流程：**
-
+**注册流程：**
 ```
-首次使用：
-┌─────────────────────────────┐
-│ 欢迎使用 Mirror             │
-│                             │
-│ 设置访问密码（可选）：       │
-│ [________________]          │
-│                             │
-│ 确认密码：                  │
-│ [________________]          │
-│                             │
-│ [跳过]  [开始使用]          │
-└─────────────────────────────┘
+用户输入用户名 + 密码
+    ↓
+后端校验（用户名唯一性、密码长度等）
+    ↓
+密码 BCrypt 哈希 → 存 users 表
+    ↓
+自动创建空 user_settings 记录
+    ↓
+返回 JWT Token
+```
 
-后续访问（设置了密码）：
-┌─────────────────────────────┐
-│ 🔒 Mirror                   │
-│                             │
-│ 请输入密码：                │
-│ [________________]          │
-│                             │
-│ ☑ 记住密码（7天）           │
-│                             │
-│ [解锁]                      │
-└─────────────────────────────┘
+**登录流程：**
+```
+用户输入用户名 + 密码
+    ↓
+后端查询 users 表，BCrypt 校验密码
+    ↓
+校验通过 → 返回 JWT Token（24 小时过期）
+```
 
-后续访问（未设置密码）：
-└─ 直接进入主页
+**请求认证：**
+```
+前端请求（Header: Authorization: Bearer <JWT>）
+    ↓
+JwtAuthenticationFilter 拦截，解析 Token
+    ↓
+SecurityContext 设置用户信息
+    ↓
+Controller/Service 通过 userId 操作数据
 ```
 
 ### 10.3 数据库设计
@@ -1453,34 +1519,31 @@ public class RecordService {
 
 ### 10.4 API 设计
 
-```
-GET    /api/auth/status    # 检查是否需要密码
-POST   /api/auth/verify    # 验证密码
-POST   /api/auth/setup     # 设置密码（首次）
-POST   /api/auth/change    # 修改密码
-POST   /api/auth/clear     # 清除密码
-```
+| 方法 | 路径 | 认证 | 说明 |
+|------|------|------|------|
+| GET | `/api/auth/status` | 公开 | 健康检查 |
+| POST | `/api/auth/register` | 公开 | 用户注册 |
+| POST | `/api/auth/login` | 公开 | 用户登录，返回 JWT |
+| GET | `/api/auth/me` | JWT | 获取当前用户信息 |
 
 **请求/响应示例：**
 
 ```json
-// GET /api/auth/status
-{
-  "needPassword": true,
-  "hasUser": true
-}
-
-// POST /api/auth/verify
+// POST /api/auth/register
 // 请求
-{ "password": "123456" }
-// 响应
-{ "success": true, "token": "xxx", "expiresIn": 604800 }
+{ "username": "testuser", "password": "123456" }
+// 响应（R<LoginVO>）
+{ "code": 200, "message": "success", "data": { "token": "xxx", "userId": "uuid" } }
 
-// POST /api/auth/setup
+// POST /api/auth/login
 // 请求
-{ "password": "123456" }
-// 响应
-{ "success": true }
+{ "username": "testuser", "password": "123456" }
+// 响应（R<LoginVO>）
+{ "code": 200, "message": "success", "data": { "token": "xxx", "userId": "uuid" } }
+
+// GET /api/auth/me（需要 JWT）
+// 响应（R<UserVO>）
+{ "code": 200, "message": "success", "data": { "id": "uuid", "username": "testuser" } }
 ```
 
 ### 10.5 实现逻辑
@@ -1489,28 +1552,31 @@ POST   /api/auth/clear     # 清除密码
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
-    
+
     @GetMapping("/status")
-    public ResponseEntity<AuthStatus> status() {
-        boolean hasUser = userService.hasUser();
-        boolean needPassword = hasUser && userService.needPassword();
-        return ResponseEntity.ok(new AuthStatus(needPassword, hasUser));
+    public R<String> status() {
+        return R.ok("服务运行中");
     }
-    
-    @PostMapping("/verify")
-    public ResponseEntity<AuthResult> verify(@RequestBody AuthRequest request) {
-        boolean valid = authService.verifyPassword(request.getPassword());
-        if (valid) {
-            String token = authService.generateToken();
-            return ResponseEntity.ok(new AuthResult(true, token, 604800));
-        }
-        return ResponseEntity.ok(new AuthResult(false, null, 0));
+
+    @PostMapping("/register")
+    public R<LoginVO> register(@RequestBody UserRegisterDTO dto) {
+        // 校验用户名唯一性，BCrypt 哈希密码，创建用户
+        // 自动创建空 user_settings 记录
+        // 返回 JWT Token
+        return R.ok(authService.register(dto));
     }
-    
-    @PostMapping("/setup")
-    public ResponseEntity<Void> setup(@RequestBody AuthRequest request) {
-        authService.setupPassword(request.getPassword());
-        return ResponseEntity.ok().build();
+
+    @PostMapping("/login")
+    public R<LoginVO> login(@RequestBody UserLoginDTO dto) {
+        // BCrypt 校验密码
+        // 生成 JWT Token（24 小时过期）
+        return R.ok(authService.login(dto));
+    }
+
+    @GetMapping("/me")
+    public R<UserVO> me() {
+        // 从 SecurityContext 获取当前用户
+        return R.ok(authService.getCurrentUser());
     }
 }
 ```
@@ -1520,25 +1586,27 @@ public class AuthController {
 ```javascript
 // App 启动
 async function init() {
-  const status = await api.get('/api/auth/status');
-  
-  if (!status.hasUser) {
-    // 首次使用，显示欢迎页
-    showWelcomePage();
-  } else if (status.needPassword) {
-    // 需要密码，显示解锁页
-    showUnlockPage();
+  const token = localStorage.getItem('mirror_token');
+
+  if (!token) {
+    // 未登录，显示登录/注册页
+    showLoginPage();
   } else {
-    // 直接进入主页
-    showMainPage();
+    // 有 Token，验证是否有效
+    try {
+      await api.get('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } });
+      showMainPage();
+    } catch (e) {
+      // Token 过期，清除并跳转登录
+      localStorage.removeItem('mirror_token');
+      showLoginPage();
+    }
   }
 }
 
 // 登录成功后
-function onLoginSuccess(token, expiresIn) {
-  // 存储 token
+function onLoginSuccess(token) {
   localStorage.setItem('mirror_token', token);
-  localStorage.setItem('mirror_token_expires', Date.now() + expiresIn * 1000);
   showMainPage();
 }
 ```
@@ -1546,20 +1614,26 @@ function onLoginSuccess(token, expiresIn) {
 ### 10.7 Token 管理
 
 ```javascript
-// 检查 token 是否有效
-function isTokenValid() {
+// Axios 拦截器：自动附加 Token
+axios.interceptors.request.use(config => {
   const token = localStorage.getItem('mirror_token');
-  const expires = localStorage.getItem('mirror_token_expires');
-  
-  if (!token || !expires) return false;
-  return Date.now() < parseInt(expires);
-}
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
 
-// 清除 token
-function clearToken() {
-  localStorage.removeItem('mirror_token');
-  localStorage.removeItem('mirror_token_expires');
-}
+// 响应拦截器：401 自动跳转登录
+axios.interceptors.response.use(
+  response => response,
+  error => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem('mirror_token');
+      window.location.href = '/login';
+    }
+    return Promise.reject(error);
+  }
+);
 ```
 
 ### 10.8 设计总结
@@ -1567,10 +1641,9 @@ function clearToken() {
 | 功能 | 当前设计 | 说明 |
 |------|----------|------|
 | 多用户 | ✅ 数据库已支持 | 所有核心表通过 user_id 关联 users 表 |
-| 注册 | ❌ 第一版不实现 | 数据库已预留，未来可加 |
-| 登录 | 简单密码保护 | Token 有效期 7 天 |
-| 密码保护 | 可选 | 不设置密码也能使用 |
-| 记住密码 | 7天免密 | Token 自动过期 |
+| 注册 | ✅ 已实现 | 用户名 + 密码，注册时自动创建空配置 |
+| 登录 | JWT 认证 | Token 有效期 24 小时 |
+| 密码安全 | BCrypt 哈希 | 不存明文密码 |
 | 数据隔离 | ✅ 已实现 | 所有查询自动带 user_id 过滤 |
 
 ---
@@ -1604,3 +1677,4 @@ function clearToken() {
 | 2026-08-04 | v1.1 | 文档审查修正：标签统一英文存储、合并 user_settings 表、画像改用 SQL 统计、每日/写作灵感复用 Chat 服务、配置以 Java 数据库为准、Embedding 切换需重建向量、明确异步处理方式 |
 | 2026-08-07 | v1.2 | 审核机制重构：审核通过后才执行 Embedding 入 RAG；审核分通过/拒绝两种操作；审核阶段是唯一修改窗口；确认后记录锁定不可修改；拒绝等同于软删除；取消通用 PUT 更新接口；数据库新增 deleted_at、record_status 字段；更新数据管道、状态流转、API 设计、异常机制。数据库补全：所有核心表新增 user_id 字段关联 users 表，确保数据按用户隔离；user_settings 移除 access_password 字段（认证统一由 users 表管理）；新增索引优化查询性能。配置机制重构：删除 ConfigService，每次 gRPC 请求携带 LLM/Embedding 配置，Python 完全无状态，天然支持多用户不同模型 |
 | 2026-08-07 | v1.2.1 | 三份文档对齐修正：record_status 新增 rejected 状态定义；删除重复的情绪标签规则（保留英文版本）；情绪数量从 12 修正为 13；8.8 节代码示例新增 userId 参数和归属校验；task_status 字段添加 Proto 映射说明 |
+| 2026-08-12 | v1.3 | 日历导航功能设计：按月加载记录、视觉标记有/无记录、点击日期筛选列表；API 新增 start/end 查询参数 |

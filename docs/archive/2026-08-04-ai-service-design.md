@@ -1,7 +1,7 @@
 # AI 服务层设计文档 — Python gRPC 服务
 
-> 版本：v0.3
-> 日期：2026-08-04（初版） / 2026-08-07（配置机制重构）
+> 版本：v0.4
+> 日期：2026-08-04（初版） / 2026-08-07（配置机制重构） / 2026-08-12（文档与代码对齐）
 > 状态：设计中
 
 **关联文档：**
@@ -47,7 +47,7 @@ Python AI 服务（gRPC Server）
 ```
 用户输入 → Java 接收
   → gRPC: Classify（携带用户 LLM 配置，Python 返回标题/摘要/标签）
-  → Java 保存 records 表（status=pending_review）
+  → Java 保存 records 表（status=reviewing）
   → 前端展示审核界面，等待用户操作
   → 用户审核通过（可先修改标签）
   → gRPC: Embed（携带用户 Embedding 配置，Python 返回向量）
@@ -139,12 +139,20 @@ enum TaskStatus {
   COMPLETED = 3;
 }
 
+// 模型协议
+enum AiProtocol {
+  PROTOCOL_UNKNOWN = 0;
+  OPENAI = 1;       // OpenAI 兼容协议（OpenAI、通义千问、智谱等）
+  ANTHROPIC = 2;    // Anthropic 协议（Claude 系列）
+}
+
 // LLM 配置（每次请求携带）
 message LlmConfig {
-  string provider = 1;    // openai / zhipu / qwen
-  string api_key = 2;
-  string base_url = 3;    // 可选，留空用默认
-  string model = 4;       // 模型名称
+  string provider = 1;      // openai / zhipu / qwen
+  AiProtocol protocol = 2;  // 模型协议：openai / anthropic
+  string api_key = 3;
+  string base_url = 4;      // 可选，留空用默认
+  string model = 5;         // 模型名称
 }
 
 // Embedding 配置（每次请求携带）
@@ -173,9 +181,6 @@ import "common.proto";
 service RecordProcessor {
   // 分类：输入文本，返回标题/摘要/标签
   rpc Classify(ClassifyRequest) returns (ClassifyResponse);
-
-  // 多事件拆分：判断是否需要拆分，返回拆分结果
-  rpc Split(SplitRequest) returns (SplitResponse);
 }
 
 // --- 分类 ---
@@ -195,23 +200,6 @@ message ClassifyResponse {
   TaskStatus status = 7;        // 状态（仅待办/计划类）
   repeated string keywords = 8; // 关键词 3-5 个
 }
-
-// --- 拆分 ---
-
-message SplitRequest {
-  string content = 1;
-  LlmConfig llm_config = 2; // LLM 配置（每次请求携带）
-}
-
-message SplitResponse {
-  bool need_split = 1;              // 是否需要拆分
-  repeated SplitSegment segments = 2; // 拆分后的段落
-}
-
-message SplitSegment {
-  string content = 1;  // 段落内容
-  int32 order = 2;     // 顺序
-}
 ```
 
 ### 2.4 embedding.proto — Embedding 服务
@@ -223,9 +211,6 @@ package mirror;
 service EmbeddingService {
   // 文本转向量
   rpc Embed(EmbedRequest) returns (EmbedResponse);
-
-  // 批量转向量
-  rpc EmbedBatch(EmbedBatchRequest) returns (EmbedBatchResponse);
 
   // 查询当前使用的 embedding 模型信息
   rpc GetModelInfo(ModelInfoRequest) returns (ModelInfoResponse);
@@ -240,15 +225,6 @@ message EmbedResponse {
   repeated float vector = 1;    // 向量
   int32 dimension = 2;          // 维度
   string model_name = 3;        // 使用的模型名
-}
-
-message EmbedBatchRequest {
-  repeated string texts = 1;
-  EmbeddingConfig embedding_config = 2; // Embedding 配置（每次请求携带）
-}
-
-message EmbedBatchResponse {
-  repeated EmbedResponse results = 1;
 }
 
 message ModelInfoRequest {}
@@ -405,7 +381,7 @@ message GenerateProfileResponse {
 ### 3.1 模块结构
 
 ```
-mirror-ai/
+Mu-mirror-AI/
 ├── server.py                # gRPC 服务启动入口
 ├── services/
 │   ├── record_processor.py  # 记录分类服务
@@ -413,22 +389,20 @@ mirror-ai/
 │   ├── chat_service.py      # 对话服务
 │   └── profile_service.py   # 画像服务
 ├── llm/
-│   ├── base.py              # LLM 统一接口
-│   ├── openai_llm.py        # OpenAI 实现
-│   ├── qwen_llm.py          # 通义千问实现
-│   └── zhipu_llm.py         # 智谱实现
+│   ├── base.py              # LLM 统一接口（BaseLlm 抽象类）
+│   ├── openai_llm.py        # OpenAI 兼容实现（支持 qwen/zhipu 等所有兼容 API）
+│   ├── anthropic_llm.py     # Anthropic Claude 实现
+│   └── factory.py           # create_llm() 工厂函数
 ├── embedding/
 │   ├── base.py              # Embedding 统一接口
 │   ├── local_embedder.py    # 本地 BGE-m3
-│   └── api_embedder.py      # API Embedding
+│   ├── api_embedder.py      # API Embedding
+│   └── factory.py           # create_embedder() 工厂函数
+├── generated/               # protobuf 生成的代码（pb2.py / pb2_grpc.py）
 ├── prompts/
-│   ├── classify.txt         # 分类 prompt 模板
-│   ├── chat.txt             # 对话 prompt 模板
-│   ├── intent.txt           # 意图提取 prompt 模板
-│   └── profile.txt          # 画像生成 prompt 模板
-├── requirements.txt
-├── Dockerfile
-└── config.example.yml       # 配置示例
+│   └── classify.txt         # 分类 prompt 模板
+├── generate_proto.py        # proto 编译脚本
+└── requirements.txt
 ```
 
 ### 3.2 Embedding 可切换设计
@@ -510,18 +484,34 @@ class BaseLlm(ABC):
     def chat_stream(self, messages: list[dict], temperature: float = 0.7) -> Generator[str]: ...
 ```
 
-**工厂函数（根据请求中的配置动态创建）：**
+**两种实现：**
+
+| 实现 | 文件 | 说明 |
+|------|------|------|
+| `OpenAiLlm` | `llm/openai_llm.py` | OpenAI 兼容协议，支持所有兼容 API（qwen/zhipu/mimo 等） |
+| `AnthropicLlm` | `llm/anthropic_llm.py` | Anthropic Claude 协议 |
+
+**OpenAiLlm 内置厂商默认配置：**
 ```python
-def create_llm(llm_config) -> BaseLlm:
-    provider = llm_config.provider
-    if provider == "openai":
-        return OpenAiLlm(api_key=llm_config.api_key, base_url=llm_config.base_url, model=llm_config.model)
-    elif provider == "qwen":
-        return QwenLlm(api_key=llm_config.api_key, model=llm_config.model)
-    elif provider == "zhipu":
-        return ZhipuLlm(api_key=llm_config.api_key, model=llm_config.model)
-    else:
-        raise ValueError(f"Unknown LLM provider: {provider}")
+PROVIDER_DEFAULTS = {
+    "openai": {"base_url": "", "model": "gpt-4o-mini"},
+    "qwen":   {"base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1", "model": "qwen-plus"},
+    "zhipu":  {"base_url": "https://open.bigmodel.cn/api/paas/v4", "model": "glm-4-flash"},
+}
+```
+
+**工厂函数（根据 protocol 字段选择实现）：**
+```python
+# llm/factory.py
+def create_llm(provider: str, api_key: str, base_url: str = "",
+               model: str = "", ai_protocol: str = "") -> BaseLlm:
+    protocol = ai_protocol or "openai"
+
+    if protocol == "anthropic":
+        return AnthropicLlm(api_key=api_key, model=model or "claude-sonnet-4-20250514")
+
+    # 默认 OpenAI 兼容
+    return OpenAiLlm(api_key=api_key, base_url=base_url, model=model, provider=provider)
 ```
 
 ### 3.4 配置管理
@@ -562,86 +552,80 @@ prompts:
 ### 4.1 模块结构（新增部分）
 
 ```
-src/main/java/com/mirror/
+src/main/java/org/xianshen/mumirrorb/
 ├── grpc/
 │   ├── GrpcClientConfig.java      # gRPC 连接配置
-│   ├── AiGrpcClient.java          # 统一的 AI 调用封装
-│   └── interceptors/
-│       └── LoggingInterceptor.java # 日志拦截器
+│   └── AiGrpcClient.java          # 统一的 AI 调用封装
 ```
 
 ### 4.2 调用封装
 
 ```java
-@Service
+@Slf4j
+@Component
+@RequiredArgsConstructor
 public class AiGrpcClient {
 
-    @Autowired
-    private UserSettingsMapper userSettingsMapper;
+    private final ManagedChannel channel;
+    private final SettingsMapper settingsMapper;
 
-    // 获取用户的 LLM 配置
-    private LlmConfig getLlmConfig(String userId) {
-        UserSettings settings = userSettingsMapper.selectByUserId(userId);
-        return LlmConfig.newBuilder()
-            .setProvider(settings.getAiProvider())
-            .setApiKey(settings.getAiApiKey())
-            .setBaseUrl(settings.getAiBaseUrl() != null ? settings.getAiBaseUrl() : "")
-            .setModel(settings.getAiModel())
-            .build();
+    private RecordProcessorGrpc.RecordProcessorBlockingStub recordStub;
+    private EmbeddingServiceGrpc.EmbeddingServiceBlockingStub embedStub;
+
+    @PostConstruct
+    public void init() {
+        recordStub = RecordProcessorGrpc.newBlockingStub(channel);
+        embedStub = EmbeddingServiceGrpc.newBlockingStub(channel);
     }
 
-    // 获取用户的 Embedding 配置
-    private EmbeddingConfig getEmbeddingConfig(String userId) {
-        UserSettings settings = userSettingsMapper.selectByUserId(userId);
-        return EmbeddingConfig.newBuilder()
-            .setSource(settings.getEmbeddingSource())
-            .setLocalModel(settings.getEmbeddingModel())
-            .setApiProvider(settings.getAiProvider())
-            .setApiKey(settings.getEmbeddingApiKey() != null ? settings.getEmbeddingApiKey() : "")
-            .setApiModel(settings.getEmbeddingModel())
-            .build();
+    /**
+     * 从 user_settings 构建 LlmConfig
+     * 注意：API Key 从数据库读取后需要 CryptoUtils.decrypt() 解密
+     *      protocol 字段根据 aiProtocol 值映射为 AiProtocol 枚举
+     */
+    private CommonProto.LlmConfig buildLlmConfig(UUID userId) {
+        UserSettings settings = settingsMapper.selectOne(
+                new LambdaQueryWrapper<UserSettings>()
+                        .eq(UserSettings::getUserId, userId));
+
+        CommonProto.LlmConfig.Builder builder = CommonProto.LlmConfig.newBuilder();
+        if (settings != null) {
+            if (settings.getAiProvider() != null)
+                builder.setProvider(settings.getAiProvider());
+            if (settings.getAiProtocol() != null)
+                builder.setProtocol(settings.getAiProtocol().equals("anthropic")
+                        ? CommonProto.AiProtocol.ANTHROPIC
+                        : CommonProto.AiProtocol.OPENAI);
+            if (settings.getAiApiKey() != null)
+                builder.setApiKey(CryptoUtils.decrypt(settings.getAiApiKey()));
+            if (settings.getAiBaseUrl() != null)
+                builder.setBaseUrl(settings.getAiBaseUrl());
+            if (settings.getAiModel() != null)
+                builder.setModel(settings.getAiModel());
+        }
+        return builder.build();
     }
 
     // 记录分类（携带用户 LLM 配置）
-    public ClassifyResponse classify(String userId, String content) {
-        return recordStub.classify(ClassifyRequest.newBuilder()
-            .setContent(content)
-            .setLlmConfig(getLlmConfig(userId))
-            .build());
+    public RecordProcessorProto.ClassifyResponse classify(UUID userId, String content) {
+        CommonProto.LlmConfig llmConfig = buildLlmConfig(userId);
+        return recordStub
+            .withDeadlineAfter(30, TimeUnit.SECONDS)
+            .classify(RecordProcessorProto.ClassifyRequest.newBuilder()
+                .setContent(content)
+                .setLlmConfig(llmConfig)
+                .build());
     }
 
     // 生成向量（携带用户 Embedding 配置）
-    public EmbedResponse embed(String userId, String text) {
-        return embedStub.embed(EmbedRequest.newBuilder()
-            .setText(text)
-            .setEmbeddingConfig(getEmbeddingConfig(userId))
-            .build());
-    }
-
-    // 提取意图（携带用户 LLM 配置）
-    public ExtractIntentResponse extractIntent(String userId, String query) {
-        return chatStub.extractIntent(ExtractIntentRequest.newBuilder()
-            .setQuery(query)
-            .setLlmConfig(getLlmConfig(userId))
-            .build());
-    }
-
-    // 对话（流式，携带用户 LLM 配置）
-    public Iterator<ChatChunk> chat(String userId, String question,
-                                     List<ChatMessage> history, List<RetrievedChunk> chunks) {
-        return chatStub.chat(ChatRequest.newBuilder()
-            .setQuestion(question)
-            .addAllHistory(history)
-            .addAllChunks(chunks)
-            .setLlmConfig(getLlmConfig(userId))
-            .build());
-    }
-
-    // 生成画像（携带用户 LLM 配置）
-    public GenerateProfileResponse generateProfile(String userId, GenerateProfileRequest request) {
-        return profileStub.generateProfile(request.toBuilder()
-            .setLlmConfig(getLlmConfig(userId))
-            .build());
+    public EmbeddingProto.EmbedResponse embed(UUID userId, String text) {
+        CommonProto.EmbeddingConfig embedConfig = buildEmbeddingConfig(userId);
+        return embedStub
+            .withDeadlineAfter(10, TimeUnit.SECONDS)
+            .embed(EmbeddingProto.EmbedRequest.newBuilder()
+                .setText(text)
+                .setEmbeddingConfig(embedConfig)
+                .build());
     }
 }
 ```
@@ -821,3 +805,4 @@ async def Classify(self, request, context):
 | 2026-08-04 | v0.2 | 文档审查修正：新增 ConfigService Proto、明确 grpcio-aio、配置以 Java 数据库为准 |
 | 2026-08-07 | v0.3 | 配置机制重构：删除 ConfigService，改为每次请求携带 LlmConfig/EmbeddingConfig；Python 完全无状态，天然支持多用户不同模型；common.proto 新增配置消息定义；所有请求消息新增配置字段；更新工厂函数和懒加载设计；Java 客户端根据 userId 从数据库读取配置放入请求 |
 | 2026-08-07 | v0.3.1 | 文档对齐修正：数据流图补充审核步骤；SplitRequest 新增 LlmConfig；EmbeddingConfig.api_provider 添加映射说明；Docker 环境变量标注为本地开发默认值 |
+| 2026-08-12 | v0.4 | 文档与代码对齐：common.proto 新增 AiProtocol 枚举 + LlmConfig 新增 protocol 字段；record_processor.proto 移除 Split RPC；embedding.proto 移除 EmbedBatch RPC；LLM 工厂函数改为按 protocol 路由（openai/anthropic），新增 anthropic_llm.py；Python 模块结构更新（llm/factory.py, embedding/factory.py）；Java 端 AiGrpcClient 更新（UUID userId, SettingsMapper, CryptoUtils 解密, buildLlmConfig 含 protocol 映射）；状态值 pending_review → reviewing |
