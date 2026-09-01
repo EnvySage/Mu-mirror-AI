@@ -25,7 +25,7 @@ _sym_db = _symbol_database.Default()
 from generated import common_pb2 as common__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x16record_processor.proto\x12\x06mirror\x1a\x0c\x63ommon.proto\"I\n\x0f\x43lassifyRequest\x12\x0f\n\x07\x63ontent\x18\x01 \x01(\t\x12%\n\nllm_config\x18\x02 \x01(\x0b\x32\x11.mirror.LlmConfig\"Z\n\x10\x43lassifyResponse\x12\x0c\n\x04skip\x18\x01 \x01(\x08\x12\x13\n\x0bskip_reason\x18\x02 \x01(\t\x12#\n\x05items\x18\x03 \x03(\x0b\x32\x14.mirror.ClassifyItem\"\xb0\x01\n\x0c\x43lassifyItem\x12\r\n\x05title\x18\x01 \x01(\t\x12\x0f\n\x07summary\x18\x02 \x01(\t\x12)\n\x0c\x63ontent_type\x18\x03 \x01(\x0e\x32\x13.mirror.ContentType\x12\x1f\n\x05moods\x18\x04 \x03(\x0e\x32\x10.mirror.MoodType\x12\"\n\x06status\x18\x05 \x01(\x0e\x32\x12.mirror.TaskStatus\x12\x10\n\x08keywords\x18\x06 \x03(\t2P\n\x0fRecordProcessor\x12=\n\x08\x43lassify\x12\x17.mirror.ClassifyRequest\x1a\x18.mirror.ClassifyResponseb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x16record_processor.proto\x12\x06mirror\x1a\x0c\x63ommon.proto\"I\n\x0f\x43lassifyRequest\x12\x0f\n\x07\x63ontent\x18\x01 \x01(\t\x12%\n\nllm_config\x18\x02 \x01(\x0b\x32\x11.mirror.LlmConfig\"Z\n\x10\x43lassifyResponse\x12\x0c\n\x04skip\x18\x01 \x01(\x08\x12\x13\n\x0bskip_reason\x18\x02 \x01(\t\x12#\n\x05items\x18\x03 \x03(\x0b\x32\x14.mirror.ClassifyItem\"\xc1\x01\n\x0c\x43lassifyItem\x12\r\n\x05title\x18\x01 \x01(\t\x12\x0f\n\x07summary\x18\x02 \x01(\t\x12\x0f\n\x07\x63ontent\x18\x03 \x01(\t\x12)\n\x0c\x63ontent_type\x18\x04 \x01(\x0e\x32\x13.mirror.ContentType\x12\x1f\n\x05moods\x18\x05 \x03(\x0e\x32\x10.mirror.MoodType\x12\"\n\x06status\x18\x06 \x01(\x0e\x32\x12.mirror.TaskStatus\x12\x10\n\x08keywords\x18\x07 \x03(\t2P\n\x0fRecordProcessor\x12=\n\x08\x43lassify\x12\x17.mirror.ClassifyRequest\x1a\x18.mirror.ClassifyResponseb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -37,7 +37,7 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_CLASSIFYRESPONSE']._serialized_start=123
   _globals['_CLASSIFYRESPONSE']._serialized_end=213
   _globals['_CLASSIFYITEM']._serialized_start=216
-  _globals['_CLASSIFYITEM']._serialized_end=392
-  _globals['_RECORDPROCESSOR']._serialized_start=394
-  _globals['_RECORDPROCESSOR']._serialized_end=474
+  _globals['_CLASSIFYITEM']._serialized_end=409
+  _globals['_RECORDPROCESSOR']._serialized_start=411
+  _globals['_RECORDPROCESSOR']._serialized_end=491
 # @@protoc_insertion_point(module_scope)

@@ -101,6 +101,7 @@ class RecordProcessorServicer(pb2_grpc.RecordProcessorServicer):
 
             # 处理分类结果
             items_data = result.get("items", [])
+            split_content = result.get("split_content", "")
 
             # 兜底：如果没有 items，返回空
             if not items_data:
@@ -111,17 +112,28 @@ class RecordProcessorServicer(pb2_grpc.RecordProcessorServicer):
                     items=[]
                 )
 
+            # 用 ||| 分割原文，对应到每条 item
+            content_parts = [p.strip() for p in split_content.split("|||") if p.strip()]
+            print(f"[Classify] split_content: {repr(split_content)}")
+            print(f"[Classify] content_parts: {content_parts}")
+
             # 构建 ClassifyItem 列表
             items = []
-            for item in items_data:
+            for i, item in enumerate(items_data):
+                # 取对应的原文片段，取不到则兜底用 summary
+                original_content = content_parts[i] if i < len(content_parts) else item.get("summary", "")
+
                 classify_item = pb2.ClassifyItem(
-                    title=item.get("title", "")[:10],  # 限制10字
-                    summary=item.get("summary", "")[:30],  # 限制30字
+                    title=item.get("title", ""),
+                    summary=item.get("summary", ""),
+                    content=original_content,
                     content_type=CONTENT_TYPE_MAP.get(
-                        item.get("content_type", ""), common.ContentType.CONTENT_UNKNOWN
+                        item.get("content_type", "").upper(), common.ContentType.CONTENT_UNKNOWN
                     ),
-                    moods=[MOOD_MAP[m] for m in item.get("moods", []) if m in MOOD_MAP],
-                    status=STATUS_MAP.get(item.get("status", ""), common.TaskStatus.STATUS_UNKNOWN),
+                    moods=[MOOD_MAP[m.upper()] for m in item.get("moods", []) if m.upper() in MOOD_MAP],
+                    status=STATUS_MAP.get(
+                        item.get("status", "").upper(), common.TaskStatus.STATUS_UNKNOWN
+                    ),
                     keywords=item.get("keywords", []),
                 )
                 items.append(classify_item)

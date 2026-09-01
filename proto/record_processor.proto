@@ -21,8 +21,9 @@ message ClassifyResponse {
 message ClassifyItem {
   string title = 1;
   string summary = 2;
-  ContentType content_type = 3;
-  repeated MoodType moods = 4;
-  TaskStatus status = 5;
-  repeated string keywords = 6;
+  string content = 3;               // 拆分后的原文
+  ContentType content_type = 4;
+  repeated MoodType moods = 5;
+  TaskStatus status = 6;
+  repeated string keywords = 7;
 }
