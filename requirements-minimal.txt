@@ -1,0 +1,18 @@
+# 最小依赖 - 仅包含运行 gRPC 服务和 API 调用所需的依赖
+# 不包含本地模型相关的依赖 (PyTorch, sentence-transformers)
+
+# gRPC 相关
+grpcio>=1.60.0
+grpcio-tools>=1.60.0
+
+# AI API 客户端
+openai>=1.0.0
+anthropic>=0.40.0
+
+# 配置和日志
+pyyaml>=6.0
+loguru>=0.7.0
+
+# 基础依赖 (会自动安装，但明确列出)
+numpy>=1.20.0
+requests>=2.28.0

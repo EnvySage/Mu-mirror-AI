@@ -24,3 +24,4 @@ Thumbs.db
 # Project specific
 .codemoss/
 =0.40.0
+lib/
