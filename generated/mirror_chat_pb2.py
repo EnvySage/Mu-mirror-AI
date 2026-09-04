@@ -25,7 +25,7 @@ _sym_db = _symbol_database.Default()
 from generated import common_pb2 as common__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x11mirror_chat.proto\x12\x06mirror\x1a\x0c\x63ommon.proto\"L\n\x14\x45xtractIntentRequest\x12\r\n\x05query\x18\x01 \x01(\t\x12%\n\nllm_config\x18\x02 \x01(\x0b\x32\x11.mirror.LlmConfig\"\x7f\n\x15\x45xtractIntentResponse\x12\x19\n\x0c\x63ontent_type\x18\x02 \x01(\tH\x00\x88\x01\x01\x12\r\n\x05moods\x18\x03 \x03(\t\x12\x12\n\ntime_range\x18\x04 \x01(\t\x12\x17\n\x0frewritten_query\x18\x05 \x01(\tB\x0f\n\r_content_type\"\x94\x01\n\x0b\x43hatRequest\x12\x10\n\x08question\x18\x01 \x01(\t\x12$\n\x07history\x18\x02 \x03(\x0b\x32\x13.mirror.ChatMessage\x12&\n\x06\x63hunks\x18\x03 \x03(\x0b\x32\x16.mirror.RetrievedChunk\x12%\n\nllm_config\x18\x04 \x01(\x0b\x32\x11.mirror.LlmConfig\",\n\x0b\x43hatMessage\x12\x0c\n\x04role\x18\x01 \x01(\t\x12\x0f\n\x07\x63ontent\x18\x02 \x01(\t\"\x8b\x01\n\x0eRetrievedChunk\x12\x11\n\trecord_id\x18\x01 \x01(\x03\x12\x0f\n\x07\x63ontent\x18\x02 \x01(\t\x12\r\n\x05title\x18\x03 \x01(\t\x12\x12\n\ncreated_at\x18\x04 \x01(\t\x12\x14\n\x0c\x63ontent_type\x18\x05 \x01(\t\x12\r\n\x05moods\x18\x06 \x03(\t\x12\r\n\x05score\x18\x07 \x01(\x02\"K\n\tChatChunk\x12\x0f\n\x07\x63ontent\x18\x01 \x01(\t\x12\x0c\n\x04\x64one\x18\x02 \x01(\x08\x12\x1f\n\x07sources\x18\x03 \x03(\x0b\x32\x0e.mirror.Source\"8\n\x06Source\x12\x11\n\trecord_id\x18\x01 \x01(\x03\x12\r\n\x05quote\x18\x02 \x01(\t\x12\x0c\n\x04\x64\x61te\x18\x03 \x01(\t2\x8c\x01\n\nMirrorChat\x12L\n\rExtractIntent\x12\x1c.mirror.ExtractIntentRequest\x1a\x1d.mirror.ExtractIntentResponse\x12\x30\n\x04\x43hat\x12\x13.mirror.ChatRequest\x1a\x11.mirror.ChatChunk0\x01\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x11mirror_chat.proto\x12\x06mirror\x1a\x0c\x63ommon.proto\"L\n\x14\x45xtractIntentRequest\x12\r\n\x05query\x18\x01 \x01(\t\x12%\n\nllm_config\x18\x02 \x01(\x0b\x32\x11.mirror.LlmConfig\"\x93\x01\n\x15\x45xtractIntentResponse\x12\x12\n\nquery_type\x18\x01 \x01(\t\x12\x19\n\x0c\x63ontent_type\x18\x02 \x01(\tH\x00\x88\x01\x01\x12\r\n\x05moods\x18\x03 \x03(\t\x12\x12\n\ntime_range\x18\x04 \x01(\t\x12\x17\n\x0frewritten_query\x18\x05 \x01(\tB\x0f\n\r_content_type\"\x94\x01\n\x0b\x43hatRequest\x12\x10\n\x08question\x18\x01 \x01(\t\x12$\n\x07history\x18\x02 \x03(\x0b\x32\x13.mirror.ChatMessage\x12&\n\x06\x63hunks\x18\x03 \x03(\x0b\x32\x16.mirror.RetrievedChunk\x12%\n\nllm_config\x18\x04 \x01(\x0b\x32\x11.mirror.LlmConfig\",\n\x0b\x43hatMessage\x12\x0c\n\x04role\x18\x01 \x01(\t\x12\x0f\n\x07\x63ontent\x18\x02 \x01(\t\"\x8b\x01\n\x0eRetrievedChunk\x12\x11\n\trecord_id\x18\x01 \x01(\x03\x12\x0f\n\x07\x63ontent\x18\x02 \x01(\t\x12\r\n\x05title\x18\x03 \x01(\t\x12\x12\n\ncreated_at\x18\x04 \x01(\t\x12\x14\n\x0c\x63ontent_type\x18\x05 \x01(\t\x12\r\n\x05moods\x18\x06 \x03(\t\x12\r\n\x05score\x18\x07 \x01(\x02\"K\n\tChatChunk\x12\x0f\n\x07\x63ontent\x18\x01 \x01(\t\x12\x0c\n\x04\x64one\x18\x02 \x01(\x08\x12\x1f\n\x07sources\x18\x03 \x03(\x0b\x32\x0e.mirror.Source\"8\n\x06Source\x12\x11\n\trecord_id\x18\x01 \x01(\x03\x12\r\n\x05quote\x18\x02 \x01(\t\x12\x0c\n\x04\x64\x61te\x18\x03 \x01(\t2\x8c\x01\n\nMirrorChat\x12L\n\rExtractIntent\x12\x1c.mirror.ExtractIntentRequest\x1a\x1d.mirror.ExtractIntentResponse\x12\x30\n\x04\x43hat\x12\x13.mirror.ChatRequest\x1a\x11.mirror.ChatChunk0\x01\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -34,18 +34,18 @@ if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
   _globals['_EXTRACTINTENTREQUEST']._serialized_start=43
   _globals['_EXTRACTINTENTREQUEST']._serialized_end=119
-  _globals['_EXTRACTINTENTRESPONSE']._serialized_start=121
-  _globals['_EXTRACTINTENTRESPONSE']._serialized_end=248
-  _globals['_CHATREQUEST']._serialized_start=251
-  _globals['_CHATREQUEST']._serialized_end=399
-  _globals['_CHATMESSAGE']._serialized_start=401
-  _globals['_CHATMESSAGE']._serialized_end=445
-  _globals['_RETRIEVEDCHUNK']._serialized_start=448
-  _globals['_RETRIEVEDCHUNK']._serialized_end=587
-  _globals['_CHATCHUNK']._serialized_start=589
-  _globals['_CHATCHUNK']._serialized_end=664
-  _globals['_SOURCE']._serialized_start=666
-  _globals['_SOURCE']._serialized_end=722
-  _globals['_MIRRORCHAT']._serialized_start=725
-  _globals['_MIRRORCHAT']._serialized_end=865
+  _globals['_EXTRACTINTENTRESPONSE']._serialized_start=122
+  _globals['_EXTRACTINTENTRESPONSE']._serialized_end=269
+  _globals['_CHATREQUEST']._serialized_start=272
+  _globals['_CHATREQUEST']._serialized_end=420
+  _globals['_CHATMESSAGE']._serialized_start=422
+  _globals['_CHATMESSAGE']._serialized_end=466
+  _globals['_RETRIEVEDCHUNK']._serialized_start=469
+  _globals['_RETRIEVEDCHUNK']._serialized_end=608
+  _globals['_CHATCHUNK']._serialized_start=610
+  _globals['_CHATCHUNK']._serialized_end=685
+  _globals['_SOURCE']._serialized_start=687
+  _globals['_SOURCE']._serialized_end=743
+  _globals['_MIRRORCHAT']._serialized_start=746
+  _globals['_MIRRORCHAT']._serialized_end=886
 # @@protoc_insertion_point(module_scope)

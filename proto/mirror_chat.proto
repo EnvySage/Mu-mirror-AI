@@ -14,10 +14,13 @@ message ExtractIntentRequest {
 }
 
 message ExtractIntentResponse {
-  optional string content_type = 2;
-  repeated string moods = 3;
-  string time_range = 4;
-  string rewritten_query = 5;
+  // query_type 四选一（英文小写）：profile / structured / semantic / hybrid
+  // PROFILE→查画像快照；STRUCTURED→元数据过滤；SEMANTIC→纯向量；HYBRID→过滤+向量+时间衰减
+  string query_type = 1;
+  optional string content_type = 2;  // 8 类英文小写（todo/thought/learning/plan/note/work/social/health），无法确定则不填
+  repeated string moods = 3;         // 13 情绪英文小写
+  string time_range = 4;             // 如 "最近7天"，空表示未提及
+  string rewritten_query = 5;        // 改写后的检索 query
 }
 
 message ChatRequest {

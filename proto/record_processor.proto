@@ -10,6 +10,7 @@ service RecordProcessor {
 message ClassifyRequest {
   string content = 1;
   LlmConfig llm_config = 2;
+  bool single = 3;  // true：单段模式，禁止拆分，恰好返回 1 条 ClassifyItem
 }
 
 message ClassifyResponse {
