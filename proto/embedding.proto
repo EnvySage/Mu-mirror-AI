@@ -29,7 +29,11 @@ message EmbedBatchResponse {
   repeated EmbedResponse results = 1;
 }
 
-message ModelInfoRequest {}
+message ModelInfoRequest {
+  // 用户 Embedding 配置（api 模式维度校验需要；field 1，wire 向后兼容，与 Java 侧一致）
+  // 缺省（未携带）时退化为健康检查语义
+  EmbeddingConfig embedding_config = 1;
+}
 
 message ModelInfoResponse {
   string model_name = 1;

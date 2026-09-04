@@ -1,6 +1,7 @@
 """测试客户端 — 验证 gRPC 链路（T-AI-6 冒烟测试）
 
-覆盖：Classify（拆分 + single 两模式）、Embed、ExtractIntent、Chat 流式、GenerateProfile、GetModelInfo。
+覆盖：Classify（拆分 + single 两模式）、Embed、ExtractIntent、Chat 流式、GenerateProfile、
+GetModelInfo（健康检查 + 携带 EmbeddingConfig 的维度校验，api/local 两路）。
 无真实 LLM Key 时用 --stub 模式：本地起一个假 LLM HTTP 服务，验证 gRPC 全链路。
 
 用法:
@@ -46,6 +47,16 @@ class StubHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         length = int(self.headers.get("Content-Length", 0))
         body = json.loads(self.rfile.read(length))
+
+        # /v1/embeddings：返回 1024 维向量（供 Embed / GetModelInfo 维度探测）
+        if self.path.endswith("/embeddings"):
+            payload = {"data": [{"embedding": [0.01] * 1024, "index": 0}]}
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps(payload).encode("utf-8"))
+            return
+
         prompt = " ".join(m.get("content", "") for m in body.get("messages", []))
         stream = body.get("stream", False)
 
@@ -145,13 +156,30 @@ def test_embed(stub):
         print(f"  [SKIP] Embed（桩模式无 embedding 端点或未装模型）: {e.code()}")
 
 
+def embedding_config() -> common.EmbeddingConfig:
+    return common.EmbeddingConfig(
+        source="api", api_provider="stub", api_key="stub-key",
+        api_model="stub-embed", base_url=f"http://127.0.0.1:{STUB_PORT}/v1")
+
+
 def test_get_model_info(stub):
     print("\n[GetModelInfo]")
+    # 1) 无配置：健康检查语义（Docker healthcheck 用，不加载模型不调 API）
     try:
         resp = stub.GetModelInfo(emb_pb2.ModelInfoRequest())
-        check("health available", resp.available, f"{resp.model_name}/{resp.source}")
+        check("health available（无配置）", resp.available, f"{resp.model_name}/{resp.source}")
     except grpc.RpcError as e:
-        check("GetModelInfo", False, f"{e.code()}: {e.details()}")
+        check("GetModelInfo 健康检查", False, f"{e.code()}: {e.details()}")
+
+    # 2) 携带 embedding_config（api 模式）：走维度校验路径（裁决 #18）。
+    #    桩 LLM 的 chat/completions 兼做 embeddings 端点（返回 1024 维），
+    #    期望按用户配置的模型名返回 dimension=1024。
+    try:
+        resp = stub.GetModelInfo(emb_pb2.ModelInfoRequest(embedding_config=embedding_config()))
+        check("config 模式返回维度", resp.model_name == "stub-embed" and resp.dimension == 1024,
+              f"{resp.model_name}/{resp.source}/{resp.dimension}")
+    except grpc.RpcError as e:
+        check("config 模式错误映射", False, f"{e.code()}: {e.details()}")
 
 
 def test_extract_intent(stub):

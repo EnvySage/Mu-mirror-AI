@@ -25,7 +25,7 @@ _sym_db = _symbol_database.Default()
 from generated import common_pb2 as common__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0f\x65mbedding.proto\x12\x06mirror\x1a\x0c\x63ommon.proto\"O\n\x0c\x45mbedRequest\x12\x0c\n\x04text\x18\x01 \x01(\t\x12\x31\n\x10\x65mbedding_config\x18\x02 \x01(\x0b\x32\x17.mirror.EmbeddingConfig\"F\n\rEmbedResponse\x12\x0e\n\x06vector\x18\x01 \x03(\x02\x12\x11\n\tdimension\x18\x02 \x01(\x05\x12\x12\n\nmodel_name\x18\x03 \x01(\t\"U\n\x11\x45mbedBatchRequest\x12\r\n\x05texts\x18\x01 \x03(\t\x12\x31\n\x10\x65mbedding_config\x18\x02 \x01(\x0b\x32\x17.mirror.EmbeddingConfig\"<\n\x12\x45mbedBatchResponse\x12&\n\x07results\x18\x01 \x03(\x0b\x32\x15.mirror.EmbedResponse\"\x12\n\x10ModelInfoRequest\"]\n\x11ModelInfoResponse\x12\x12\n\nmodel_name\x18\x01 \x01(\t\x12\x0e\n\x06source\x18\x02 \x01(\t\x12\x11\n\tdimension\x18\x03 \x01(\x05\x12\x11\n\tavailable\x18\x04 \x01(\x08\x32\xd2\x01\n\x10\x45mbeddingService\x12\x34\n\x05\x45mbed\x12\x14.mirror.EmbedRequest\x1a\x15.mirror.EmbedResponse\x12\x43\n\nEmbedBatch\x12\x19.mirror.EmbedBatchRequest\x1a\x1a.mirror.EmbedBatchResponse\x12\x43\n\x0cGetModelInfo\x12\x18.mirror.ModelInfoRequest\x1a\x19.mirror.ModelInfoResponseb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0f\x65mbedding.proto\x12\x06mirror\x1a\x0c\x63ommon.proto\"O\n\x0c\x45mbedRequest\x12\x0c\n\x04text\x18\x01 \x01(\t\x12\x31\n\x10\x65mbedding_config\x18\x02 \x01(\x0b\x32\x17.mirror.EmbeddingConfig\"F\n\rEmbedResponse\x12\x0e\n\x06vector\x18\x01 \x03(\x02\x12\x11\n\tdimension\x18\x02 \x01(\x05\x12\x12\n\nmodel_name\x18\x03 \x01(\t\"U\n\x11\x45mbedBatchRequest\x12\r\n\x05texts\x18\x01 \x03(\t\x12\x31\n\x10\x65mbedding_config\x18\x02 \x01(\x0b\x32\x17.mirror.EmbeddingConfig\"<\n\x12\x45mbedBatchResponse\x12&\n\x07results\x18\x01 \x03(\x0b\x32\x15.mirror.EmbedResponse\"E\n\x10ModelInfoRequest\x12\x31\n\x10\x65mbedding_config\x18\x01 \x01(\x0b\x32\x17.mirror.EmbeddingConfig\"]\n\x11ModelInfoResponse\x12\x12\n\nmodel_name\x18\x01 \x01(\t\x12\x0e\n\x06source\x18\x02 \x01(\t\x12\x11\n\tdimension\x18\x03 \x01(\x05\x12\x11\n\tavailable\x18\x04 \x01(\x08\x32\xd2\x01\n\x10\x45mbeddingService\x12\x34\n\x05\x45mbed\x12\x14.mirror.EmbedRequest\x1a\x15.mirror.EmbedResponse\x12\x43\n\nEmbedBatch\x12\x19.mirror.EmbedBatchRequest\x1a\x1a.mirror.EmbedBatchResponse\x12\x43\n\x0cGetModelInfo\x12\x18.mirror.ModelInfoRequest\x1a\x19.mirror.ModelInfoResponseb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -41,9 +41,9 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_EMBEDBATCHRESPONSE']._serialized_start=281
   _globals['_EMBEDBATCHRESPONSE']._serialized_end=341
   _globals['_MODELINFOREQUEST']._serialized_start=343
-  _globals['_MODELINFOREQUEST']._serialized_end=361
-  _globals['_MODELINFORESPONSE']._serialized_start=363
-  _globals['_MODELINFORESPONSE']._serialized_end=456
-  _globals['_EMBEDDINGSERVICE']._serialized_start=459
-  _globals['_EMBEDDINGSERVICE']._serialized_end=669
+  _globals['_MODELINFOREQUEST']._serialized_end=412
+  _globals['_MODELINFORESPONSE']._serialized_start=414
+  _globals['_MODELINFORESPONSE']._serialized_end=507
+  _globals['_EMBEDDINGSERVICE']._serialized_start=510
+  _globals['_EMBEDDINGSERVICE']._serialized_end=720
 # @@protoc_insertion_point(module_scope)
