@@ -1,20 +1,21 @@
-"""RecordProcessor 服务实现"""
+"""RecordProcessor 服务实现
+
+Classify：拆分+分类一次调用；single=true 时进入单段模式（禁止拆分，恰好 1 条）。
+"""
 
 import json
+
 import grpc
-from pathlib import Path
 
 from generated import common_pb2 as common
 from generated import record_processor_pb2 as pb2
 from generated import record_processor_pb2_grpc as pb2_grpc
 
+from errors import abort_with_mapped
 from llm.factory import create_llm
+from prompts_loader import loader
 
-# Prompt 模板
-PROMPT_DIR = Path(__file__).parent.parent / "prompts"
-CLASSIFY_PROMPT = (PROMPT_DIR / "classify.txt").read_text(encoding="utf-8")
-
-# 枚举映射表
+# 枚举映射表（proto 枚举名大写）
 CONTENT_TYPE_MAP = {
     "TODO": common.ContentType.TODO,
     "THOUGHT": common.ContentType.THOUGHT,
@@ -48,29 +49,28 @@ STATUS_MAP = {
     "COMPLETED": common.TaskStatus.COMPLETED,
 }
 
+# taskStatus 必填：todo/plan 类必须落在三个真实状态里（协作清单 #3）
+VALID_STATUS = {common.TaskStatus.NOT_STARTED, common.TaskStatus.IN_PROGRESS, common.TaskStatus.COMPLETED}
+
 
 class RecordProcessorServicer(pb2_grpc.RecordProcessorServicer):
 
     def Classify(self, request, context):
         content = request.content
         llm_config = request.llm_config
+        single = request.single
 
-        print(f"[Classify] 内容: {content}")
+        print(f"[Classify] single={single} 内容: {content[:60]}")
         print(f"[Classify] LLM: provider={llm_config.provider}, model={llm_config.model}, "
               f"api_key={'***' + llm_config.api_key[-4:] if llm_config.api_key else 'EMPTY'}, "
               f"base_url={llm_config.base_url}, protocol={llm_config.protocol}")
 
-        # 内容太短，直接跳过
+        # 内容太短，直接跳过（单段模式同样适用——空片段没有分类价值）
         if len(content.strip()) < 3:
-            print(f"[Classify] 内容太短，跳过")
-            return pb2.ClassifyResponse(
-                skip=True,
-                skip_reason="内容太短或无意义",
-                items=[]
-            )
+            print("[Classify] 内容太短，跳过")
+            return pb2.ClassifyResponse(skip=True, skip_reason="内容太短或无意义", items=[])
 
         try:
-            # 创建 LLM 实例
             llm = create_llm(
                 provider=llm_config.provider,
                 api_key=llm_config.api_key,
@@ -79,101 +79,120 @@ class RecordProcessorServicer(pb2_grpc.RecordProcessorServicer):
                 protocol=llm_config.protocol,
             )
 
-            # 构建 prompt
-            prompt = CLASSIFY_PROMPT.replace("{content}", content)
-            messages = [{"role": "user", "content": prompt}]
-
-            # 调用 LLM
-            response_text = llm.chat(messages)
-            print(f"[Classify] LLM 响应: {response_text}")
-
-            # 解析 JSON
-            result = _parse_json(response_text)
-
-            # 处理跳过
-            if result.get("skip", False):
-                print(f"[Classify] 跳过: {result.get('skip_reason', '')}")
-                return pb2.ClassifyResponse(
-                    skip=True,
-                    skip_reason=result.get("skip_reason", ""),
-                    items=[]
-                )
-
-            # 处理分类结果
-            items_data = result.get("items", [])
-            split_content = result.get("split_content", "")
-
-            # 兜底：如果没有 items，返回空
-            if not items_data:
-                print(f"[Classify] LLM 返回空 items，跳过")
-                return pb2.ClassifyResponse(
-                    skip=True,
-                    skip_reason="无法解析内容",
-                    items=[]
-                )
-
-            # 用 ||| 分割原文，对应到每条 item
-            content_parts = [p.strip() for p in split_content.split("|||") if p.strip()]
-            print(f"[Classify] split_content: {repr(split_content)}")
-            print(f"[Classify] content_parts: {content_parts}")
-
-            # 构建 ClassifyItem 列表
-            items = []
-            for i, item in enumerate(items_data):
-                # 取对应的原文片段，取不到则兜底用 summary
-                original_content = content_parts[i] if i < len(content_parts) else item.get("summary", "")
-
-                classify_item = pb2.ClassifyItem(
-                    title=item.get("title", ""),
-                    summary=item.get("summary", ""),
-                    content=original_content,
-                    content_type=CONTENT_TYPE_MAP.get(
-                        item.get("content_type", "").upper(), common.ContentType.CONTENT_UNKNOWN
-                    ),
-                    moods=[MOOD_MAP[m.upper()] for m in item.get("moods", []) if m.upper() in MOOD_MAP],
-                    status=STATUS_MAP.get(
-                        item.get("status", "").upper(), common.TaskStatus.STATUS_UNKNOWN
-                    ),
-                    keywords=item.get("keywords", []),
-                )
-                items.append(classify_item)
-
-            print(f"[Classify] 返回 {len(items)} 条记录")
-            return pb2.ClassifyResponse(
-                skip=False,
-                skip_reason="",
-                items=items
-            )
+            if single:
+                return self._classify_single(llm, content)
+            return self._classify_split(llm, content)
 
         except Exception as e:
             print(f"[Classify] 错误: {e}")
-            context.set_code(grpc.StatusCode.INTERNAL)
-            context.set_details(f"分类失败: {str(e)}")
+            abort_with_mapped(context, e)
+
+    # ------------------------------------------------------------------
+    # 单段模式：用户确认过边界的完整片段，禁止拆分，恰好 1 条 ClassifyItem
+    # ------------------------------------------------------------------
+    def _classify_single(self, llm, content: str):
+        prompt = loader.render("classify_single", content=content)
+        response_text = llm.chat([{"role": "user", "content": prompt}])
+        print(f"[Classify/single] LLM 响应: {response_text[:200]}")
+
+        result = _parse_json(response_text)
+
+        if result.get("skip", False):
             return pb2.ClassifyResponse(
                 skip=True,
-                skip_reason=str(e),
-                items=[]
+                skip_reason=result.get("skip_reason", ""),
+                items=[],
             )
+
+        item_data = result.get("items", [result]) if isinstance(result.get("items", None), list) else [result]
+        if not item_data:
+            item_data = [result]
+
+        # 恰好 1 条：取第一条，原文就是请求的完整片段
+        item = self._build_item(item_data[0], fallback_content=content)
+        print(f"[Classify/single] 返回 1 条: {item.title}")
+        return pb2.ClassifyResponse(skip=False, skip_reason="", items=[item])
+
+    # ------------------------------------------------------------------
+    # 拆分模式：一次 LLM 调用完成拆分+分类
+    # ------------------------------------------------------------------
+    def _classify_split(self, llm, content: str):
+        prompt = loader.render("classify", content=content)
+        response_text = llm.chat([{"role": "user", "content": prompt}])
+        print(f"[Classify] LLM 响应: {response_text[:200]}")
+
+        result = _parse_json(response_text)
+
+        if result.get("skip", False):
+            print(f"[Classify] 跳过: {result.get('skip_reason', '')}")
+            return pb2.ClassifyResponse(
+                skip=True,
+                skip_reason=result.get("skip_reason", ""),
+                items=[],
+            )
+
+        items_data = result.get("items", [])
+        split_content = result.get("split_content", "")
+
+        # 兜底：没有 items 视为无法解析
+        if not items_data:
+            print("[Classify] LLM 返回空 items，跳过")
+            return pb2.ClassifyResponse(skip=True, skip_reason="无法解析内容", items=[])
+
+        # 用 ||| 分割原文，对应到每条 item
+        content_parts = [p.strip() for p in split_content.split("|||") if p.strip()]
+        print(f"[Classify] split_content: {repr(split_content)}")
+        print(f"[Classify] content_parts: {content_parts}")
+
+        items = []
+        for i, item in enumerate(items_data):
+            original_content = content_parts[i] if i < len(content_parts) else item.get("summary", "")
+            items.append(self._build_item(item, fallback_content=original_content))
+
+        print(f"[Classify] 返回 {len(items)} 条记录")
+        return pb2.ClassifyResponse(skip=False, skip_reason="", items=items)
+
+    # ------------------------------------------------------------------
+    def _build_item(self, item: dict, fallback_content: str) -> pb2.ClassifyItem:
+        """dict → ClassifyItem，含枚举兜底 + taskStatus 必填保证"""
+        content_type = CONTENT_TYPE_MAP.get(
+            str(item.get("content_type", "")).upper(), common.ContentType.CONTENT_UNKNOWN
+        )
+        moods = [MOOD_MAP[m.upper()] for m in item.get("moods", []) if str(m).upper() in MOOD_MAP]
+        status = STATUS_MAP.get(str(item.get("status", "")).upper(), common.TaskStatus.STATUS_UNKNOWN)
+
+        # taskStatus 必填保证：TODO/PLAN 必须是三个真实状态之一；
+        # LLM 漏填/乱填时兜底为 NOT_STARTED，绝不让 Java 端拿到 UNKNOWN 的待办
+        if content_type in (common.ContentType.TODO, common.ContentType.PLAN) and status not in VALID_STATUS:
+            print(f"[Classify] taskStatus 兜底: {item.get('status')!r} -> NOT_STARTED")
+            status = common.TaskStatus.NOT_STARTED
+
+        return pb2.ClassifyItem(
+            title=item.get("title", ""),
+            summary=item.get("summary", ""),
+            content=item.get("content") or fallback_content,
+            content_type=content_type,
+            moods=moods,
+            status=status,
+            keywords=item.get("keywords", []),
+        )
 
 
 def _parse_json(text: str) -> dict:
     """从 LLM 响应中提取 JSON"""
-    # 尝试直接解析
     try:
         return json.loads(text)
     except json.JSONDecodeError:
         pass
 
-    # 尝试提取 ```json ... ``` 块
     if "```json" in text:
         start = text.index("```json") + 7
         end = text.index("```", start)
         return json.loads(text[start:end].strip())
 
-    # 尝试提取 { ... } 块
     start = text.find("{")
     end = text.rfind("}") + 1
     if start != -1 and end > start:
         return json.loads(text[start:end])
 
-    raise ValueError(f"无法解析 JSON: {text}")
+    raise ValueError(f"无法解析 JSON: {text[:200]}")

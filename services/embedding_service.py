@@ -73,12 +73,15 @@ class EmbeddingServiceServicer(pb2_grpc.EmbeddingServiceServicer):
             context.abort(grpc.StatusCode.INTERNAL, f"Embedding 失败: {str(e)}")
 
     def GetModelInfo(self, request, context):
-        print("[GetModelInfo] 收到请求")
+        """健康检查端点（协作清单 #9，Docker healthcheck 用）
 
-        # 返回默认信息，实际应该根据配置查询
+        无状态服务：不加载任何模型，只确认 gRPC 通路 + 进程存活。
+        可用性 always=True —— 到达此方法即说明服务正常。
+        """
+        print("[GetModelInfo] health check")
         return pb2.ModelInfoResponse(
-            model_name="unknown",
-            source="unknown",
-            dimension=-1,
+            model_name="mirror-ai",
+            source="service",
+            dimension=-1,  # 维度取决于请求时的 EmbeddingConfig，此处无上下文
             available=True,
         )

@@ -1,9 +1,11 @@
 """Mirror AI gRPC 服务入口"""
 
-import grpc
-from concurrent import futures
 import time
+from concurrent import futures
 
+import grpc
+
+from config import CONFIG
 from generated import record_processor_pb2_grpc as rp_grpc
 from generated import embedding_pb2_grpc as emb_grpc
 from generated import mirror_chat_pb2_grpc as chat_grpc
@@ -16,7 +18,10 @@ from services.profile_service import MirrorProfileServicer
 
 
 def serve():
-    server = grpc.server(futures.ThreadPoolExecutor(max_workers=4))
+    port = CONFIG["server"]["port"]
+    workers = CONFIG["server"]["workers"]
+
+    server = grpc.server(futures.ThreadPoolExecutor(max_workers=workers))
 
     # 注册所有服务
     rp_grpc.add_RecordProcessorServicer_to_server(RecordProcessorServicer(), server)
@@ -24,17 +29,16 @@ def serve():
     chat_grpc.add_MirrorChatServicer_to_server(MirrorChatServicer(), server)
     profile_grpc.add_MirrorProfileServicer_to_server(MirrorProfileServicer(), server)
 
-    port = 50051
     server.add_insecure_port(f'[::]:{port}')
     server.start()
 
     print("=" * 50)
-    print(f"Mirror AI 服务启动 | 端口: {port}")
+    print(f"Mirror AI 服务启动 | 端口: {port} | workers: {workers}")
     print("=" * 50)
     print("服务列表:")
-    print("  - RecordProcessor  (Classify, Split)")
-    print("  - EmbeddingService (Embed, EmbedBatch, GetModelInfo)")
-    print("  - MirrorChat       (ExtractIntent, Chat)")
+    print("  - RecordProcessor  (Classify, 含 single 单段模式)")
+    print("  - EmbeddingService (Embed, EmbedBatch, GetModelInfo[健康检查])")
+    print("  - MirrorChat       (ExtractIntent, Chat 流式)")
     print("  - MirrorProfile    (GenerateProfile)")
     print("=" * 50)
 
