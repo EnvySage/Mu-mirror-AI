@@ -1,0 +1,15 @@
+# Mirror AI 服务配置
+# 仅服务级配置，不涉及用户数据（用户配置由 Java 端管理，随每次 gRPC 请求携带）
+
+server:
+  port: 50051              # gRPC 端口
+  workers: 4               # 线程池大小
+
+# Prompt 模板路径
+prompts:
+  classify: "prompts/classify.txt"
+  classify_single: "prompts/classify-single.txt"
+  intent: "prompts/intent.txt"
+  chat: "prompts/chat.txt"
+  profile: "prompts/profile.txt"
+  inspiration: "prompts/inspiration.txt"
