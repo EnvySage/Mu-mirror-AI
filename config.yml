@@ -5,6 +5,11 @@ server:
   port: 50051              # gRPC 端口
   workers: 4               # 线程池大小
 
+# LLM 调用参数（用户模型配置仍随每次 gRPC 请求到达，这里只定服务端兜底行为）
+llm:
+  timeout_seconds: 20      # 单次 LLM 调用超时；Java 客户端 15s 就放弃，本端不应白跑
+  max_retries: 1           # SDK 内部重试次数（429/5xx），0 禁用
+
 # Prompt 模板路径
 prompts:
   classify: "prompts/classify.txt"

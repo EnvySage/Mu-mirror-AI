@@ -3,8 +3,6 @@
 Classify：拆分+分类一次调用；single=true 时进入单段模式（禁止拆分，恰好 1 条）。
 """
 
-import json
-
 import grpc
 
 from generated import common_pb2 as common
@@ -13,6 +11,7 @@ from generated import record_processor_pb2_grpc as pb2_grpc
 
 from errors import abort_with_mapped
 from llm.factory import create_llm
+from llm_json import parse_json
 from prompts_loader import loader
 
 # 枚举映射表（proto 枚举名大写）
@@ -95,7 +94,7 @@ class RecordProcessorServicer(pb2_grpc.RecordProcessorServicer):
         response_text = llm.chat([{"role": "user", "content": prompt}])
         print(f"[Classify/single] LLM 响应: {response_text[:200]}")
 
-        result = _parse_json(response_text)
+        result = parse_json(response_text, ctx="分类")
 
         if result.get("skip", False):
             return pb2.ClassifyResponse(
@@ -121,7 +120,7 @@ class RecordProcessorServicer(pb2_grpc.RecordProcessorServicer):
         response_text = llm.chat([{"role": "user", "content": prompt}])
         print(f"[Classify] LLM 响应: {response_text[:200]}")
 
-        result = _parse_json(response_text)
+        result = parse_json(response_text, ctx="分类")
 
         if result.get("skip", False):
             print(f"[Classify] 跳过: {result.get('skip_reason', '')}")
@@ -176,23 +175,3 @@ class RecordProcessorServicer(pb2_grpc.RecordProcessorServicer):
             status=status,
             keywords=item.get("keywords", []),
         )
-
-
-def _parse_json(text: str) -> dict:
-    """从 LLM 响应中提取 JSON"""
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        pass
-
-    if "```json" in text:
-        start = text.index("```json") + 7
-        end = text.index("```", start)
-        return json.loads(text[start:end].strip())
-
-    start = text.find("{")
-    end = text.rfind("}") + 1
-    if start != -1 and end > start:
-        return json.loads(text[start:end])
-
-    raise ValueError(f"无法解析 JSON: {text[:200]}")

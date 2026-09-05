@@ -11,6 +11,10 @@ import yaml
 _CONFIG_PATH = Path(__file__).parent / "config.yml"
 _defaults = {
     "server": {"port": 50051, "workers": 4},
+    "llm": {
+        "timeout_seconds": 20,  # 单次 LLM 调用超时（Java 客户端 15s 就放弃，本端不应白跑）
+        "max_retries": 1,       # SDK 内部重试次数（429/5xx 时），0 禁用
+    },
     "prompts": {
         "classify": "prompts/classify.txt",
         "classify_single": "prompts/classify-single.txt",

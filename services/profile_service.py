@@ -5,13 +5,14 @@
 无状态：配置随请求携带，用完即弃。
 """
 
-import json
+import json  # noqa: F401  _fmt_* 扩展时常用；parse_json 已收编至 llm_json
 
 from generated import mirror_profile_pb2 as pb2
 from generated import mirror_profile_pb2_grpc as pb2_grpc
 
-from errors import ContentInvalidError, abort_with_mapped
+from errors import abort_with_mapped
 from llm.factory import create_llm
+from llm_json import parse_json
 from prompts_loader import loader
 
 VALID_TAGS_MIN = 1
@@ -106,7 +107,7 @@ class MirrorProfileServicer(pb2_grpc.MirrorProfileServicer):
             response_text = llm.chat([{"role": "user", "content": prompt}])
             print(f"[GenerateProfile] LLM 响应: {response_text[:200]}")
 
-            result = _parse_json(response_text)
+            result = parse_json(response_text, ctx="画像")
             return pb2.GenerateProfileResponse(
                 todo_analysis=result.get("todo_analysis", ""),
                 learning_analysis=result.get("learning_analysis", ""),
@@ -130,23 +131,3 @@ def _sanitize_tags(tags) -> list[str]:
             if t and t not in out:
                 out.append(t)
     return out[:5]
-
-
-def _parse_json(text: str) -> dict:
-    """从 LLM 响应中提取 JSON"""
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        pass
-
-    if "```json" in text:
-        start = text.index("```json") + 7
-        end = text.index("```", start)
-        return json.loads(text[start:end].strip())
-
-    start = text.find("{")
-    end = text.rfind("}") + 1
-    if start != -1 and end > start:
-        return json.loads(text[start:end])
-
-    raise ContentInvalidError(f"LLM 响应无法解析为画像 JSON: {text[:200]}")

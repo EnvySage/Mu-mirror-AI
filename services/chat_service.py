@@ -5,13 +5,12 @@ Chat：服务端流式 stream ChatChunk{content, done, sources}
 无状态：配置随请求携带，用完即弃。
 """
 
-import json
-
 from generated import mirror_chat_pb2 as pb2
 from generated import mirror_chat_pb2_grpc as pb2_grpc
 
-from errors import ContentInvalidError, abort_with_mapped
+from errors import abort_with_mapped
 from llm.factory import create_llm
+from llm_json import parse_json
 from prompts_loader import loader
 
 # query_type 四选一（英文小写），非法值兜底 hybrid
@@ -65,10 +64,11 @@ class MirrorChatServicer(pb2_grpc.MirrorChatServicer):
             response_text = llm.chat([{"role": "user", "content": prompt}])
             print(f"[ExtractIntent] LLM 响应: {response_text[:200]}")
 
-            result = _parse_json(response_text)
+            result = parse_json(response_text, ctx="意图")
+            ct = result.get("content_type")
             return pb2.ExtractIntentResponse(
                 query_type=result.get("query_type") if result.get("query_type") in QUERY_TYPES else DEFAULT_QUERY_TYPE,
-                content_type=result.get("content_type") or None,
+                content_type=ct if ct in CONTENT_TYPES else None,  # 白名单校验：脏值透传会让 Java SQL 等值过滤静默空结果
                 moods=[m for m in result.get("moods", []) if m in MOODS],
                 time_range=result.get("time_range", ""),
                 rewritten_query=result.get("rewritten_query") or query,  # 兜底：改写失败用原 query
@@ -133,36 +133,28 @@ def _extract_sources(answer: str, chunks) -> list[pb2.Source]:
             c = chunks[idx]
             sources[idx] = pb2.Source(
                 record_id=c.record_id,
-                quote=c.content[:100],
+                quote=c.title or c.content[:100],  # 对齐 Java 兜底路径：title 优先（ChatServiceImpl.deriveSources）
                 date=c.created_at,
             )
     return list(sources.values())
 
 
 def _find_markers(answer: str) -> list[int]:
+    """提取独立方括号引用标记 [n]。
+
+    排除两类非引用形态（第九轮修复）：
+    - markdown 链接：[1](http://...) / [text](url) —— 方括号后紧跟圆括号
+    - 列表编号："1. xxx" / "1、xxx" 不匹配；但 "\\[3\\] 学习了..."（转义方括号
+      后跟编号，部分模型输出）同样不是引用
+    只保留 [数字] 且后面不是 "(" 的独立标记。
+    """
     out = []
     for part in answer.split("[")[1:]:
-        head = part.split("]")[0].strip()
-        if head.isdigit():
-            out.append(int(head))
+        head = part.split("]", 1)[0].strip()
+        if not head.isdigit():
+            continue
+        rest = part.split("]", 1)[1] if "]" in part else ""
+        if rest.startswith("("):  # markdown 链接 [n](url)
+            continue
+        out.append(int(head))
     return out
-
-
-def _parse_json(text: str) -> dict:
-    """从 LLM 响应中提取 JSON"""
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        pass
-
-    if "```json" in text:
-        start = text.index("```json") + 7
-        end = text.index("```", start)
-        return json.loads(text[start:end].strip())
-
-    start = text.find("{")
-    end = text.rfind("}") + 1
-    if start != -1 and end > start:
-        return json.loads(text[start:end])
-
-    raise ContentInvalidError(f"LLM 响应无法解析为意图 JSON: {text[:200]}")

@@ -1,6 +1,5 @@
 """EmbeddingService 服务实现"""
 
-import grpc
 from generated import embedding_pb2 as pb2
 from generated import embedding_pb2_grpc as pb2_grpc
 
@@ -30,17 +29,20 @@ class EmbeddingServiceServicer(pb2_grpc.EmbeddingServiceServicer):
             vector = embedder.embed(text)
             info = embedder.get_model_info()
 
-            print(f"[Embed] 成功! dimension={info['dimension']}, model={info['model_name']}")
+            # api 模式 get_model_info 静态返回 -1（不调 API 无法得知）；
+            # Embed 真实调用了 API，向量长度即真实维度，如实上报（第九轮附带修正）
+            dimension = len(vector) if info.get("dimension", -1) <= 0 else info["dimension"]
+            print(f"[Embed] 成功! dimension={dimension}, model={info['model_name']}")
             print(f"[Embed] 向量前5维: {vector[:5]}")
 
             return pb2.EmbedResponse(
                 vector=vector,
-                dimension=info["dimension"],
+                dimension=dimension,
                 model_name=info["model_name"],
             )
         except Exception as e:
             print(f"[Embed] 错误: {e}")
-            context.abort(grpc.StatusCode.INTERNAL, f"Embedding 失败: {str(e)}")
+            abort_with_mapped(context, e)  # 统一映射：超时→DEADLINE_EXCEEDED，不可用→UNAVAILABLE（第九轮 #5）
 
     def EmbedBatch(self, request, context):
         texts = request.texts
@@ -63,7 +65,7 @@ class EmbeddingServiceServicer(pb2_grpc.EmbeddingServiceServicer):
             results = [
                 pb2.EmbedResponse(
                     vector=v,
-                    dimension=info["dimension"],
+                    dimension=len(v) if info.get("dimension", -1) <= 0 else info["dimension"],
                     model_name=info["model_name"],
                 )
                 for v in vectors
@@ -71,7 +73,7 @@ class EmbeddingServiceServicer(pb2_grpc.EmbeddingServiceServicer):
             return pb2.EmbedBatchResponse(results=results)
         except Exception as e:
             print(f"[EmbedBatch] 错误: {e}")
-            context.abort(grpc.StatusCode.INTERNAL, f"Embedding 失败: {str(e)}")
+            abort_with_mapped(context, e)  # 统一映射（第九轮 #5）
 
     # 维度探测用文本（api 模式需真实调用一次才能确定维度）
     _DIMENSION_PROBE_TEXT = "dimension probe"
