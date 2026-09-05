@@ -24,6 +24,10 @@
 
 {context}
 
+## 用户个人词汇表（软约束）
+
+{glossary}
+
 ## 用户问题
 
 {question}

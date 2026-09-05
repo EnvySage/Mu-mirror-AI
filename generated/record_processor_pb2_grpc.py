@@ -39,6 +39,11 @@ class RecordProcessorStub:
                 request_serializer=record__processor__pb2.ClassifyRequest.SerializeToString,
                 response_deserializer=record__processor__pb2.ClassifyResponse.FromString,
                 _registered_method=True)
+        self.ExtractTerms = channel.unary_unary(
+                '/mirror.RecordProcessor/ExtractTerms',
+                request_serializer=record__processor__pb2.ExtractTermsRequest.SerializeToString,
+                response_deserializer=record__processor__pb2.ExtractTermsReply.FromString,
+                _registered_method=True)
 
 
 class RecordProcessorServicer:
@@ -50,6 +55,13 @@ class RecordProcessorServicer:
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def ExtractTerms(self, request, context):
+        """个人词典候选抽取（lexicon-design.md 第 3 节）：语料 → 候选词条（new/evidence/update）
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_RecordProcessorServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -57,6 +69,11 @@ def add_RecordProcessorServicer_to_server(servicer, server):
                     servicer.Classify,
                     request_deserializer=record__processor__pb2.ClassifyRequest.FromString,
                     response_serializer=record__processor__pb2.ClassifyResponse.SerializeToString,
+            ),
+            'ExtractTerms': grpc.unary_unary_rpc_method_handler(
+                    servicer.ExtractTerms,
+                    request_deserializer=record__processor__pb2.ExtractTermsRequest.FromString,
+                    response_serializer=record__processor__pb2.ExtractTermsReply.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -86,6 +103,33 @@ class RecordProcessor:
             '/mirror.RecordProcessor/Classify',
             record__processor__pb2.ClassifyRequest.SerializeToString,
             record__processor__pb2.ClassifyResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ExtractTerms(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/mirror.RecordProcessor/ExtractTerms',
+            record__processor__pb2.ExtractTermsRequest.SerializeToString,
+            record__processor__pb2.ExtractTermsReply.FromString,
             options,
             channel_credentials,
             insecure,

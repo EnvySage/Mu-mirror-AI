@@ -43,6 +43,29 @@ enum AiProtocol {
   ANTHROPIC = 2;
 }
 
+message GlossaryTerm {
+  string term = 1;
+  string description = 2;
+  repeated string aliases = 3;
+  string confirmed_at = 4;   // ISO 日期，prompt 里标注"x月确认"
+}
+
+// chunk 语料条目（ExtractTerms 抽取语料；字段与 chunks 表 / metadata JSONB 对齐）
+message ChunkDTO {
+  int64 chunk_id = 1;
+  int64 record_id = 2;
+  string segment = 3;          // 主题片段（embedding 文本；空时回退 content）
+  string content = 4;          // 整条记录原文
+  string title = 5;            // metadata.title
+  string summary = 6;          // metadata.summary
+  string content_type = 7;     // 8 类英文小写
+  repeated string moods = 8;   // 13 情绪英文小写
+  repeated string keywords = 9;
+  string task_status = 10;     // not_started/in_progress/completed；非待办类为空
+  string created_at = 11;      // 记录时间（YYYY-MM-DDTHH:mm:ss）
+  bool user_edited = 12;       // 用户编辑过（抽取语料权重优先依据）
+}
+
 message LlmConfig {
   string provider = 1;
   AiProtocol protocol = 2;

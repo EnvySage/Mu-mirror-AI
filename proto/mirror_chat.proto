@@ -11,6 +11,7 @@ service MirrorChat {
 message ExtractIntentRequest {
   string query = 1;
   LlmConfig llm_config = 2;
+  repeated GlossaryTerm glossary = 3; // 命中 query 的词条（B 侧 query 匹配，未命中传 top 高频词 grounding）
 }
 
 message ExtractIntentResponse {
@@ -28,6 +29,7 @@ message ChatRequest {
   repeated ChatMessage history = 2;
   repeated RetrievedChunk chunks = 3;
   LlmConfig llm_config = 4;
+  repeated GlossaryTerm glossary = 5;  // 用户个人词汇表（confirmed top30），软约束注入
 }
 
 message ChatMessage {

@@ -5,12 +5,36 @@ import "common.proto";
 
 service RecordProcessor {
   rpc Classify(ClassifyRequest) returns (ClassifyResponse);
+
+  // 个人词典候选抽取（lexicon-design.md 第 3 节）：语料 → 候选词条（new/evidence/update）
+  rpc ExtractTerms(ExtractTermsRequest) returns (ExtractTermsReply);
 }
 
 message ClassifyRequest {
   string content = 1;
   LlmConfig llm_config = 2;
   bool single = 3;  // true：单段模式，禁止拆分，恰好返回 1 条 ClassifyItem
+  repeated GlossaryTerm glossary = 4;  // 用户个人词汇表（confirmed top30），软约束注入
+}
+
+// 词条候选抽取请求
+message ExtractTermsRequest {
+  repeated ChunkDTO chunks = 1;             // 语料：近 14 天 confirmed chunks（user_edited 优先；月度审计换 30 天窗口）
+  repeated GlossaryTerm existing_terms = 2; // 现有词条（去重 + aliases 合并 + 漂移判断依据）
+  LlmConfig llm_config = 3;                 // LLM 配置（每次请求携带）
+}
+
+// 词条候选抽取响应
+message ExtractTermsReply {
+  message TermCandidate {
+    string term = 1;              // 词条
+    repeated string aliases = 2;  // 别名（月度合并建议：已有词建议新增的别名放这里）
+    string description = 3;       // 解释（含来源依据，用户可判断；update 时为新解释建议）
+    string kind = 4;              // new（新词）/ evidence（已有词条证据加强）/ update（解释过时，打回 pending）
+    string evidence = 5;          // 佐证摘要（如"近14天出现3次"）
+    int64 source_chunk_id = 6;    // 佐证 chunk（前端跳记录详情）
+  }
+  repeated TermCandidate candidates = 1;
 }
 
 message ClassifyResponse {

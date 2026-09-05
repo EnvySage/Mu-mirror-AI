@@ -17,6 +17,7 @@ message GenerateProfileRequest {
   string time_range = 7;
   LlmConfig llm_config = 8;
   repeated ChatRecord recent_chats = 9;  // 最近会话（优先近 7 天），可为空
+  repeated GlossaryTerm glossary = 10;   // 用户个人词汇表（confirmed top30），软约束注入
 }
 
 message TodoItem {

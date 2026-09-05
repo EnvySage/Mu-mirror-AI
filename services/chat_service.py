@@ -9,6 +9,7 @@ from generated import mirror_chat_pb2 as pb2
 from generated import mirror_chat_pb2_grpc as pb2_grpc
 
 from errors import abort_with_mapped
+from glossary_render import format_glossary
 from llm.factory import create_llm
 from llm_json import parse_json
 from prompts_loader import loader
@@ -60,7 +61,13 @@ class MirrorChatServicer(pb2_grpc.MirrorChatServicer):
                 protocol=llm_config.protocol,
             )
 
-            prompt = loader.render("intent", query=query)
+            prompt = loader.render(
+                "intent",
+                query=query,
+                glossary=format_glossary(request.glossary),
+            )
+            if request.glossary:
+                print(f"[ExtractIntent] glossary 注入 {len(request.glossary)} 条")
             response_text = llm.chat([{"role": "user", "content": prompt}])
             print(f"[ExtractIntent] LLM 响应: {response_text[:200]}")
 
@@ -103,7 +110,10 @@ class MirrorChatServicer(pb2_grpc.MirrorChatServicer):
                 question=question,
                 history=_format_history(request.history),
                 context=context_text,
+                glossary=format_glossary(request.glossary),
             )
+            if request.glossary:
+                print(f"[Chat] glossary 注入 {len(request.glossary)} 条")
 
             messages = [{"role": "system", "content": prompt}]
             messages += [{"role": m.role, "content": m.content} for m in request.history]

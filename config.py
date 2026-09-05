@@ -15,6 +15,11 @@ _defaults = {
         "timeout_seconds": 20,  # 单次 LLM 调用超时（Java 客户端 15s 就放弃，本端不应白跑）
         "max_retries": 1,       # SDK 内部重试次数（429/5xx 时），0 禁用
     },
+    "extract_terms": {
+        "max_chunks": 200,         # 单次抽取语料条数上限（超出按时间窗截断，保留最近）
+        "max_chunk_chars": 200,    # 每条语料在 prompt 中的截断长度（防 prompt 膨胀）
+        "max_candidates": 10,      # 候选词条上限（prompt 同步声明宁缺毋滥）
+    },
     "prompts": {
         "classify": "prompts/classify.txt",
         "classify_single": "prompts/classify-single.txt",
@@ -22,6 +27,7 @@ _defaults = {
         "chat": "prompts/chat.txt",
         "profile": "prompts/profile.txt",
         "inspiration": "prompts/inspiration.txt",
+        "extract_terms": "prompts/extract_terms.txt",
     },
 }
 

@@ -11,6 +11,7 @@ from generated import mirror_profile_pb2 as pb2
 from generated import mirror_profile_pb2_grpc as pb2_grpc
 
 from errors import abort_with_mapped
+from glossary_render import format_glossary
 from llm.factory import create_llm
 from llm_json import parse_json
 from prompts_loader import loader
@@ -102,6 +103,7 @@ class MirrorProfileServicer(pb2_grpc.MirrorProfileServicer):
                 total_records=request.total_records,
                 time_range=request.time_range or "（未指定）",
                 recent_chats=_fmt_recent_chats(request.recent_chats),
+                glossary=format_glossary(request.glossary),
             )
 
             response_text = llm.chat([{"role": "user", "content": prompt}])

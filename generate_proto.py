@@ -27,6 +27,9 @@ if result.returncode != 0:
 
 # 修复相对导入
 fixes = {
+    "generated/common_pb2.py": [
+        ("import common_pb2 as common__pb2", "from generated import common_pb2 as common__pb2"),
+    ],
     "generated/record_processor_pb2.py": [
         ("import common_pb2 as common__pb2", "from generated import common_pb2 as common__pb2"),
     ],
@@ -35,6 +38,9 @@ fixes = {
     ],
     "generated/embedding_pb2_grpc.py": [
         ("import embedding_pb2 as embedding__pb2", "from generated import embedding_pb2 as embedding__pb2"),
+    ],
+    "generated/mirror_profile_pb2.py": [
+        ("import common_pb2 as common__pb2", "from generated import common_pb2 as common__pb2"),
     ],
     "generated/record_processor_pb2_grpc.py": [
         ("import record_processor_pb2 as record__processor__pb2", "from generated import record_processor_pb2 as record__processor__pb2"),

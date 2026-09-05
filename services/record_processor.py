@@ -10,6 +10,7 @@ from generated import record_processor_pb2 as pb2
 from generated import record_processor_pb2_grpc as pb2_grpc
 
 from errors import abort_with_mapped
+from glossary_render import format_glossary
 from llm.factory import create_llm
 from llm_json import parse_json
 from prompts_loader import loader
@@ -78,9 +79,13 @@ class RecordProcessorServicer(pb2_grpc.RecordProcessorServicer):
                 protocol=llm_config.protocol,
             )
 
+            glossary_text = format_glossary(request.glossary)
+            if request.glossary:
+                print(f"[Classify] glossary 注入 {len(request.glossary)} 条")
+
             if single:
-                return self._classify_single(llm, content)
-            return self._classify_split(llm, content)
+                return self._classify_single(llm, content, glossary_text)
+            return self._classify_split(llm, content, glossary_text)
 
         except Exception as e:
             print(f"[Classify] 错误: {e}")
@@ -89,8 +94,8 @@ class RecordProcessorServicer(pb2_grpc.RecordProcessorServicer):
     # ------------------------------------------------------------------
     # 单段模式：用户确认过边界的完整片段，禁止拆分，恰好 1 条 ClassifyItem
     # ------------------------------------------------------------------
-    def _classify_single(self, llm, content: str):
-        prompt = loader.render("classify_single", content=content)
+    def _classify_single(self, llm, content: str, glossary_text: str = ""):
+        prompt = loader.render("classify_single", content=content, glossary=glossary_text)
         response_text = llm.chat([{"role": "user", "content": prompt}])
         print(f"[Classify/single] LLM 响应: {response_text[:200]}")
 
@@ -115,8 +120,8 @@ class RecordProcessorServicer(pb2_grpc.RecordProcessorServicer):
     # ------------------------------------------------------------------
     # 拆分模式：一次 LLM 调用完成拆分+分类
     # ------------------------------------------------------------------
-    def _classify_split(self, llm, content: str):
-        prompt = loader.render("classify", content=content)
+    def _classify_split(self, llm, content: str, glossary_text: str = ""):
+        prompt = loader.render("classify", content=content, glossary=glossary_text)
         response_text = llm.chat([{"role": "user", "content": prompt}])
         print(f"[Classify] LLM 响应: {response_text[:200]}")
 
