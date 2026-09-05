@@ -82,3 +82,20 @@ message EmbeddingConfig {
   string api_model = 5;
   string base_url = 6;
 }
+
+// ── 工具规划契约（toolcalling-vault-design.md 第 2/6 节，2026-09-06）──
+
+// 工具注册表条目：Java 侧注册表快照随 PlanToolsRequest 传入，Python 不硬编码工具清单
+message ToolSpec {
+  string name = 1;         // 工具名（如 search_records，B 侧执行时的查找键）
+  string description = 2;  // 用途描述（prompt 逐条渲染）
+  string args_schema = 3;  // 参数说明（字段清单/JSON Schema 文本，prompt 逐条渲染）
+}
+
+// 工具执行结果：Java 执行后随 ChatRequest.tool_results 回传，Python 渲染成上下文块
+message ToolResult {
+  string tool = 1;          // 工具名
+  string summary = 2;       // 结果摘要（prompt 渲染主用，如"12 条：…"）
+  string payload_json = 3;  // 完整结果 JSON（summary 缺省时回退渲染；超长由 Java 侧控制）
+  bool success = 4;         // 执行是否成功（false 时只渲染失败说明，不把失败 payload 喂给 LLM）
+}

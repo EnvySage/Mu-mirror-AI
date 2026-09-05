@@ -13,7 +13,7 @@ from generated import mirror_profile_pb2_grpc as profile_grpc
 
 from services.lexicon_service import RecordProcessorServicer
 from services.embedding_service import EmbeddingServiceServicer
-from services.chat_service import MirrorChatServicer
+from services.plan_service import MirrorChatServicer
 from services.profile_service import MirrorProfileServicer
 
 
@@ -25,6 +25,7 @@ def serve():
 
     # 注册所有服务
     # RecordProcessor 用 lexicon_service 版本：Classify（继承自 record_processor）+ ExtractTerms
+    # MirrorChat 用 plan_service 版本：ExtractIntent/Chat（继承自 chat_service）+ PlanTools
     rp_grpc.add_RecordProcessorServicer_to_server(RecordProcessorServicer(), server)
     emb_grpc.add_EmbeddingServiceServicer_to_server(EmbeddingServiceServicer(), server)
     chat_grpc.add_MirrorChatServicer_to_server(MirrorChatServicer(), server)
@@ -39,7 +40,7 @@ def serve():
     print("服务列表:")
     print("  - RecordProcessor  (Classify 含 single 单段模式, ExtractTerms 词条抽取)")
     print("  - EmbeddingService (Embed, EmbedBatch, GetModelInfo[健康检查])")
-    print("  - MirrorChat       (ExtractIntent, Chat 流式)")
+    print("  - MirrorChat       (ExtractIntent, Chat 流式, PlanTools 工具规划)")
     print("  - MirrorProfile    (GenerateProfile)")
     print("=" * 50)
 

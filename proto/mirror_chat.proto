@@ -6,6 +6,10 @@ import "common.proto";
 service MirrorChat {
   rpc ExtractIntent(ExtractIntentRequest) returns (ExtractIntentResponse);
   rpc Chat(ChatRequest) returns (stream ChatChunk);
+
+  // 工具规划（toolcalling-vault-design.md 第 1 节）：LLM 按 JSON 约定输出 ≤2 步工具计划，
+  // B 执行后把 ToolResult 塞 ChatRequest.tool_results 再走正常 Chat
+  rpc PlanTools(PlanToolsRequest) returns (PlanToolsReply);
 }
 
 message ExtractIntentRequest {
@@ -30,6 +34,7 @@ message ChatRequest {
   repeated RetrievedChunk chunks = 3;
   LlmConfig llm_config = 4;
   repeated GlossaryTerm glossary = 5;  // 用户个人词汇表（confirmed top30），软约束注入
+  repeated ToolResult tool_results = 6; // PlanTools 计划的执行结果（B 执行工具后回传）；空列表零影响
 }
 
 message ChatMessage {
@@ -57,4 +62,22 @@ message Source {
   int64 record_id = 1;
   string quote = 2;
   string date = 3;
+}
+
+// ── PlanTools 消息（toolcalling-vault-design.md 第 6 节）──
+
+message PlanToolsRequest {
+  string question = 1;               // 用户提问原文
+  repeated GlossaryTerm glossary = 2; // 个人词汇表（工具参数里的"论文"等指代依赖它）
+  repeated ToolSpec tools = 3;        // Java 侧注册表快照（Python 不硬编码工具清单）
+  LlmConfig llm_config = 4;
+}
+
+message PlanToolsReply {
+  repeated PlannedCall calls = 1;
+}
+
+message PlannedCall {
+  string tool = 1;      // 工具名（经校验：必须在传入注册表内，防幻觉）
+  string args_json = 2; // 参数 JSON 文本（经校验：可解析）
 }

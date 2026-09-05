@@ -20,6 +20,12 @@ _defaults = {
         "max_chunk_chars": 200,    # 每条语料在 prompt 中的截断长度（防 prompt 膨胀）
         "max_candidates": 10,      # 候选词条上限（prompt 同步声明宁缺毋滥）
     },
+    "plan_tools": {
+        "max_calls": 2,            # 计划步数上限（设计稿"≤2 步"）
+        "max_tools": 20,           # 注册表快照渲染条目上限
+        "max_arg_chars": 300,      # 单个工具 args_schema 在 prompt 中的截断长度
+        "max_tool_chars": 2000,    # Chat 渲染单条工具结果的截断长度
+    },
     "prompts": {
         "classify": "prompts/classify.txt",
         "classify_single": "prompts/classify-single.txt",
@@ -28,6 +34,7 @@ _defaults = {
         "profile": "prompts/profile.txt",
         "inspiration": "prompts/inspiration.txt",
         "extract_terms": "prompts/extract_terms.txt",
+        "plan_tools": "prompts/plan_tools.txt",
     },
 }
 

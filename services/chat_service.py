@@ -3,11 +3,17 @@
 ExtractIntent：query_type 四选一（profile/structured/semantic/hybrid）+ 过滤条件 + rewritten_query
 Chat：服务端流式 stream ChatChunk{content, done, sources}
 无状态：配置随请求携带，用完即弃。
+PlanTools 的工具执行结果（ChatRequest.tool_results，field 6）由 Chat 渲染成上下文块
+（_format_tool_results，截断到 config plan_tools.max_tool_chars）；空列表零影响
+（prompt 不留孤儿块，同 glossary 模式）。
 """
+
+import json
 
 from generated import mirror_chat_pb2 as pb2
 from generated import mirror_chat_pb2_grpc as pb2_grpc
 
+from config import CONFIG
 from errors import abort_with_mapped
 from glossary_render import format_glossary
 from llm.factory import create_llm
@@ -23,6 +29,35 @@ MOODS = {"happy", "excited", "satisfied", "grateful", "expecting", "calm", "bore
          "confused", "anxious", "sad", "angry", "exhausted", "stressed"}
 
 ROLE_ASSISTANT = "assistant"
+
+# 工具结果渲染截断（config plan_tools.max_tool_chars，防 prompt 膨胀）
+_MAX_TOOL_CHARS = int(CONFIG["plan_tools"]["max_tool_chars"])
+
+
+def _format_tool_results(tool_results) -> str:
+    """ToolResult 列表 → prompt 上下文块。
+
+    每条：[工具结果·{tool}] {summary 或截断的 payload_json}；失败结果只渲染失败说明，
+    不把失败 payload 喂给 LLM（防止拿错误输出当事实）。
+    空列表返回 ""（prompt 不留孤儿块，同 glossary 模式）。
+    """
+    if not tool_results:
+        return ""
+    lines = []
+    for r in tool_results:
+        tool = (r.tool or "").strip() or "unknown_tool"
+        if not r.success:
+            lines.append(f"[工具结果·{tool}] （工具执行失败，以下回答不要依赖该工具的数据）")
+            continue
+        body = (r.summary or "").strip()
+        if not body:
+            body = (r.payload_json or "").strip()
+        if not body:
+            body = "（无返回数据）"
+        if len(body) > _MAX_TOOL_CHARS:
+            body = body[:_MAX_TOOL_CHARS] + "…"
+        lines.append(f"[工具结果·{tool}] {body}")
+    return "\n".join(lines)
 
 
 def _format_context(chunks) -> str:
@@ -105,12 +140,17 @@ class MirrorChatServicer(pb2_grpc.MirrorChatServicer):
             context_text = _format_context(request.chunks)
             has_context = len(request.chunks) > 0
 
+            tool_results_text = _format_tool_results(request.tool_results)
+            if tool_results_text:
+                print(f"[Chat] tool_results 注入 {len(request.tool_results)} 条")
+
             prompt = loader.render(
                 "chat",
                 question=question,
                 history=_format_history(request.history),
                 context=context_text,
                 glossary=format_glossary(request.glossary),
+                tool_results=tool_results_text,
             )
             if request.glossary:
                 print(f"[Chat] glossary 注入 {len(request.glossary)} 条")

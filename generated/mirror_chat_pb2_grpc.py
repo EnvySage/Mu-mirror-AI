@@ -44,6 +44,11 @@ class MirrorChatStub:
                 request_serializer=mirror__chat__pb2.ChatRequest.SerializeToString,
                 response_deserializer=mirror__chat__pb2.ChatChunk.FromString,
                 _registered_method=True)
+        self.PlanTools = channel.unary_unary(
+                '/mirror.MirrorChat/PlanTools',
+                request_serializer=mirror__chat__pb2.PlanToolsRequest.SerializeToString,
+                response_deserializer=mirror__chat__pb2.PlanToolsReply.FromString,
+                _registered_method=True)
 
 
 class MirrorChatServicer:
@@ -61,6 +66,14 @@ class MirrorChatServicer:
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def PlanTools(self, request, context):
+        """工具规划（toolcalling-vault-design.md 第 1 节）：LLM 按 JSON 约定输出 ≤2 步工具计划，
+        B 执行后把 ToolResult 塞 ChatRequest.tool_results 再走正常 Chat
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_MirrorChatServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -73,6 +86,11 @@ def add_MirrorChatServicer_to_server(servicer, server):
                     servicer.Chat,
                     request_deserializer=mirror__chat__pb2.ChatRequest.FromString,
                     response_serializer=mirror__chat__pb2.ChatChunk.SerializeToString,
+            ),
+            'PlanTools': grpc.unary_unary_rpc_method_handler(
+                    servicer.PlanTools,
+                    request_deserializer=mirror__chat__pb2.PlanToolsRequest.FromString,
+                    response_serializer=mirror__chat__pb2.PlanToolsReply.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -129,6 +147,33 @@ class MirrorChat:
             '/mirror.MirrorChat/Chat',
             mirror__chat__pb2.ChatRequest.SerializeToString,
             mirror__chat__pb2.ChatChunk.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def PlanTools(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/mirror.MirrorChat/PlanTools',
+            mirror__chat__pb2.PlanToolsRequest.SerializeToString,
+            mirror__chat__pb2.PlanToolsReply.FromString,
             options,
             channel_credentials,
             insecure,

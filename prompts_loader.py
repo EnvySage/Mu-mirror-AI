@@ -18,6 +18,7 @@ _FILENAME = {
     "profile": "profile",
     "inspiration": "inspiration",
     "extract_terms": "extract_terms",
+    "plan_tools": "plan_tools",
 }
 
 # 代码内占位符 → 模板中的占位符（保持向后兼容：模板 {content}/{query} 不变）
@@ -34,6 +35,7 @@ _ALIASES = {
     },
     "inspiration": {"current_input": "current_input", "context": "context"},
     "extract_terms": {"chunks": "chunks", "existing_terms": "existing_terms"},
+    "plan_tools": {"tools": "tools", "question": "question"},
 }
 
 
