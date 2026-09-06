@@ -18,6 +18,11 @@ message GenerateProfileRequest {
   LlmConfig llm_config = 8;
   repeated ChatRecord recent_chats = 9;  // 最近会话（优先近 7 天），可为空
   repeated GlossaryTerm glossary = 10;   // 用户个人词汇表（confirmed top30），软约束注入
+  // —— 递归累计镜子（rolling-mirror-design.md §1/§4）——
+  // 注：设计稿 §4-B 原提案字段号 10/11/12 与 glossary=10 撞号，经确认修正为 11/12/13（shared-protocol.md 已登记）
+  string prev_mirror = 11;               // ① 上一份镜子全文（overall_summary+五维拼接），空=首份镜子（genesis）
+  string correction_index = 12;          // ③ 校正索引（上月镜子涉及记录的 title+日期清单），仅回看深度=0 时传入
+  optional int32 mirror_lookback = 13;   // ② 回看深度档位 0-3（默认 1）；optional 区分"未传"与"0 档纯继承"（wire 不变）
 }
 
 message TodoItem {

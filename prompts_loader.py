@@ -22,16 +22,20 @@ _FILENAME = {
 }
 
 # 代码内占位符 → 模板中的占位符（保持向后兼容：模板 {content}/{query} 不变）
+# profile 第 6 套（rolling-mirror-design.md §1）：代码侧旧名 todos/learnings → 模板新名
+# stats_facts/records（四块输入语义）；模板另含 prev_mirror/correction_index 占位符。
 _ALIASES = {
     "classify": {"content": "content"},
     "classify_single": {"content": "content"},
     "intent": {"query": "query"},
     "chat": {"question": "question", "history": "history", "context": "context"},
     "profile": {
-        "todos": "todos", "learnings": "learnings", "mood_stats": "mood_stats",
+        "todos": "stats_facts", "learnings": "records", "mood_stats": "mood_stats",
         "keywords": "keywords", "active_time": "active_time",
         "total_records": "total_records", "time_range": "time_range",
         "recent_chats": "recent_chats",
+        "prev_mirror": "prev_mirror", "correction_index": "correction_index",
+        "stats_facts": "stats_facts", "records": "records",
     },
     "inspiration": {"current_input": "current_input", "context": "context"},
     "extract_terms": {"chunks": "chunks", "existing_terms": "existing_terms"},

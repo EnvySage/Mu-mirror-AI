@@ -26,6 +26,11 @@ _defaults = {
         "max_arg_chars": 300,      # 单个工具 args_schema 在 prompt 中的截断长度
         "max_tool_chars": 2000,    # Chat 渲染单条工具结果的截断长度
     },
+    "mirror": {
+        "prev_mirror_max_chars": 30000,      # ① 上一份镜子渲染截断（累计镜子轮）
+        "correction_index_max_chars": 8000,  # ③ 校正索引渲染截断
+        "record_max_chars": 2000,            # ② 单条记录渲染截断（§3 per_chunk_max_chars 对齐）
+    },
     "prompts": {
         "classify": "prompts/classify.txt",
         "classify_single": "prompts/classify-single.txt",
