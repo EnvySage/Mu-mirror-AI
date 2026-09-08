@@ -37,17 +37,30 @@ _MAX_TOOL_CHARS = int(CONFIG["plan_tools"]["max_tool_chars"])
 def _format_tool_results(tool_results) -> str:
     """ToolResult 列表 → prompt 上下文块。
 
-    每条：[工具结果·{tool}] {summary 或截断的 payload_json}；失败结果只渲染失败说明，
-    不把失败 payload 喂给 LLM（防止拿错误输出当事实）。
+    文件类结果（find_item/recall_item 的 items/item）渲染为独立 [F编号] 行——
+    LLM 引用文件时写 [F1]，B 侧 extractVaultRefs 只认 [F\\d+] 出文件卡（fix-batch B3）。
+    日记类/汇总类工具结果仍是 [工具结果·{tool}] 汇总行，不加编号。
+    失败结果只渲染失败说明，不把失败 payload 喂给 LLM（防止拿错误输出当事实）。
     空列表返回 ""（prompt 不留孤儿块，同 glossary 模式）。
     """
     if not tool_results:
         return ""
     lines = []
+    f_no = 0  # 文件编号独立计数（跨工具结果连续，[F1][F2]…）
     for r in tool_results:
         tool = (r.tool or "").strip() or "unknown_tool"
         if not r.success:
             lines.append(f"[工具结果·{tool}] （工具执行失败，以下回答不要依赖该工具的数据）")
+            continue
+        payload = _parse_payload(r.payload_json)
+        items = _extract_file_items(tool, payload)
+        if items:
+            for it in items:
+                f_no += 1
+                lines.append(f"[F{f_no}] {_describe_file_item(it)}")
+            body = (r.summary or "").strip()
+            if body:
+                lines.append(f"[工具结果·{tool}] {body}")
             continue
         body = (r.summary or "").strip()
         if not body:
@@ -58,6 +71,52 @@ def _format_tool_results(tool_results) -> str:
             body = body[:_MAX_TOOL_CHARS] + "…"
         lines.append(f"[工具结果·{tool}] {body}")
     return "\n".join(lines)
+
+
+def _parse_payload(payload_json: str):
+    """payload_json → dict（解析失败返回 {}）"""
+    if not payload_json or not payload_json.strip():
+        return {}
+    try:
+        import json
+        data = json.loads(payload_json)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _extract_file_items(tool: str, payload: dict) -> list:
+    """从 find_item/recall_item 的 payload 提取文件卡列表（其余工具返回空）"""
+    if tool not in ("find_item", "recall_item") or not payload:
+        return []
+    if "items" in payload and isinstance(payload["items"], list):
+        return [it for it in payload["items"] if isinstance(it, dict)]
+    if isinstance(payload.get("item"), dict):
+        return [payload["item"]]
+    return []
+
+
+def _describe_file_item(item: dict) -> str:
+    """文件卡 → 一行人类可读描述（供 LLM 引用 [Fn]）"""
+    name = str(item.get("display_name") or item.get("original_name") or "未命名文件").strip()
+    ftype = str(item.get("file_type") or "").strip()
+    status = str(item.get("digest_status") or "").strip()
+    desc = str(item.get("description") or "").strip()
+    created = str(item.get("created_at") or "").strip()[:16]
+    parts = [name]
+    if ftype:
+        parts.append(ftype)
+    if status:
+        parts.append(f"状态:{status}")
+    if created:
+        parts.append(created)
+    line = " · ".join(parts)
+    if desc:
+        line += f" —— {desc}"
+    vid = item.get("vault_item_id")
+    if vid is not None:
+        line += f"（vault_item_id={vid}）"
+    return line
 
 
 def _format_context(chunks) -> str:
