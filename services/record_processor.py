@@ -14,6 +14,7 @@ from glossary_render import format_glossary
 from llm.factory import create_llm
 from llm_json import parse_json
 from prompts_loader import loader
+from todo_render import format_open_todos
 
 # 枚举映射表（proto 枚举名大写）
 CONTENT_TYPE_MAP = {
@@ -52,6 +53,31 @@ STATUS_MAP = {
 # taskStatus 必填：todo/plan 类必须落在三个真实状态里（协作清单 #3）
 VALID_STATUS = {common.TaskStatus.NOT_STARTED, common.TaskStatus.IN_PROGRESS, common.TaskStatus.COMPLETED}
 
+# TodoRef.suggested_status 白名单（LLM JSON 里的字符串状态 → 只透传三态，脏值丢弃）
+VALID_SUGGESTED_STATUS = {"NOT_STARTED", "IN_PROGRESS", "COMPLETED"}
+
+
+def _parse_todo_ref(item: dict) -> pb2.TodoRef | None:
+    """LLM 输出的 refers_to_todo → 合法 TodoRef（脏值丢弃返回 None，不设值）。
+
+    准入条件（任务书 §3）：todo_id > 0 且 suggested_status 在三态内。
+    ref 非对象 / todo_id 非数字或 ≤0 / 状态脏值 → 一律 None（宁可漏判不可错判）。
+    """
+    ref = item.get("refers_to_todo")
+    if not isinstance(ref, dict):
+        return None
+    try:
+        todo_id = int(ref.get("todo_id") or 0)
+    except (TypeError, ValueError):
+        return None
+    if todo_id <= 0:
+        return None
+    status = str(ref.get("suggested_status") or "").strip().upper()
+    if status not in VALID_SUGGESTED_STATUS:
+        print(f"[Classify] refers_to_todo 脏值丢弃: todo_id={todo_id}, status={status!r}")
+        return None
+    return pb2.TodoRef(todo_id=todo_id, suggested_status=status)
+
 
 class RecordProcessorServicer(pb2_grpc.RecordProcessorServicer):
 
@@ -83,9 +109,15 @@ class RecordProcessorServicer(pb2_grpc.RecordProcessorServicer):
             if request.glossary:
                 print(f"[Classify] glossary 注入 {len(request.glossary)} 条")
 
+            # 待办清单注入（todo-registry 判别期 §3.2）：B 查未完成 registry 传入，
+            # 空/未传 → 空串，prompt 与旧版一致（glossary 同模式零回归）
+            todos_text = format_open_todos(request.open_todos)
+            if request.open_todos:
+                print(f"[Classify] open_todos 注入 {len(request.open_todos)} 条")
+
             if single:
-                return self._classify_single(llm, content, glossary_text)
-            return self._classify_split(llm, content, glossary_text)
+                return self._classify_single(llm, content, glossary_text, todos_text)
+            return self._classify_split(llm, content, glossary_text, todos_text)
 
         except Exception as e:
             print(f"[Classify] 错误: {e}")
@@ -94,8 +126,9 @@ class RecordProcessorServicer(pb2_grpc.RecordProcessorServicer):
     # ------------------------------------------------------------------
     # 单段模式：用户确认过边界的完整片段，禁止拆分，恰好 1 条 ClassifyItem
     # ------------------------------------------------------------------
-    def _classify_single(self, llm, content: str, glossary_text: str = ""):
-        prompt = loader.render("classify_single", content=content, glossary=glossary_text)
+    def _classify_single(self, llm, content: str, glossary_text: str = "", todos_text: str = ""):
+        prompt = loader.render("classify_single", content=content, glossary=glossary_text,
+                               open_todos=todos_text)
         response_text = llm.chat([{"role": "user", "content": prompt}])
         print(f"[Classify/single] LLM 响应: {response_text[:200]}")
 
@@ -120,8 +153,9 @@ class RecordProcessorServicer(pb2_grpc.RecordProcessorServicer):
     # ------------------------------------------------------------------
     # 拆分模式：一次 LLM 调用完成拆分+分类
     # ------------------------------------------------------------------
-    def _classify_split(self, llm, content: str, glossary_text: str = ""):
-        prompt = loader.render("classify", content=content, glossary=glossary_text)
+    def _classify_split(self, llm, content: str, glossary_text: str = "", todos_text: str = ""):
+        prompt = loader.render("classify", content=content, glossary=glossary_text,
+                               open_todos=todos_text)
         response_text = llm.chat([{"role": "user", "content": prompt}])
         print(f"[Classify] LLM 响应: {response_text[:200]}")
 
@@ -152,7 +186,6 @@ class RecordProcessorServicer(pb2_grpc.RecordProcessorServicer):
         for i, item in enumerate(items_data):
             original_content = content_parts[i] if i < len(content_parts) else item.get("summary", "")
             items.append(self._build_item(item, fallback_content=original_content))
-
         print(f"[Classify] 返回 {len(items)} 条记录")
         return pb2.ClassifyResponse(skip=False, skip_reason="", items=items)
 
@@ -179,4 +212,5 @@ class RecordProcessorServicer(pb2_grpc.RecordProcessorServicer):
             moods=moods,
             status=status,
             keywords=item.get("keywords", []),
+            **({"refers_to_todo": ref} if (ref := _parse_todo_ref(item)) else {}),
         )

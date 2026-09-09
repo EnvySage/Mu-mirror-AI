@@ -15,6 +15,24 @@ message ClassifyRequest {
   LlmConfig llm_config = 2;
   bool single = 3;  // true：单段模式，禁止拆分，恰好返回 1 条 ClassifyItem
   repeated GlossaryTerm glossary = 4;  // 用户个人词汇表（confirmed top30），软约束注入
+  repeated TodoHint open_todos = 5;  // 用户未完成待办清单（todo-registry 判别期；B 侧查 registry，最近优先 ≤20 条）
+}
+
+// 待办清单条目（todo-registry-design.md §3.2）：B 侧查 todo_registry（current_status != 'completed'）注入；
+// Python 侧只做 prompt 渲染与 TodoRef 解析（无状态铁律不变）
+message TodoHint {
+  int64 todo_id = 1;
+  string title = 2;             // 来自 chunk metadata.title
+  string source_excerpt = 3;    // 原始待办片段摘要（B 侧截 100 字符）
+  string created_at = 4;        // 登记时间
+  string current_status = 5;    // not_started / in_progress（清单只含未完成项）
+}
+
+// 待办引用（LLM 判别输出）：当前片段明显在推进/完成清单中某项时由 LLM 给出；
+// Python 侧校验后透传（todo_id>0 且 suggested_status 三态内，脏值丢弃 → 不设值）
+message TodoRef {
+  int64 todo_id = 1;
+  string suggested_status = 2;  // NOT_STARTED / IN_PROGRESS / COMPLETED 三选一（与 TaskStatus 枚举名一致）
 }
 
 // 词条候选抽取请求
@@ -51,4 +69,5 @@ message ClassifyItem {
   repeated MoodType moods = 5;
   TaskStatus status = 6;
   repeated string keywords = 7;
+  TodoRef refers_to_todo = 8;       // 待办引用（todo-registry 判别期；无引用不设值）
 }

@@ -25,8 +25,8 @@ _FILENAME = {
 # profile 第 6 套（rolling-mirror-design.md §1）：代码侧旧名 todos/learnings → 模板新名
 # stats_facts/records（四块输入语义）；模板另含 prev_mirror/correction_index 占位符。
 _ALIASES = {
-    "classify": {"content": "content"},
-    "classify_single": {"content": "content"},
+    "classify": {"content": "content", "open_todos": "open_todos"},
+    "classify_single": {"content": "content", "open_todos": "open_todos"},
     "intent": {"query": "query"},
     "chat": {"question": "question", "history": "history", "context": "context"},
     "profile": {

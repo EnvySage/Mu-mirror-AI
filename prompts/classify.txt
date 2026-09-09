@@ -45,6 +45,15 @@
 - COMPLETED（已完成）
 - 其他类型用 STATUS_UNKNOWN
 
+## 用户未完成的待办清单
+
+{open_todos}上面清单（如果存在）是用户此前日记中登记的未完成待办。若当前片段明显是在推进/完成其中某项（**同一件事**），在该条 JSON 输出里加 refers_to_todo 字段：{"todo_id": 清单里的 id, "suggested_status": "NOT_STARTED/IN_PROGRESS/COMPLETED 三选一"}。注意：
+
+- 只是主题相似但**不是同一件事**的（如清单是"补算法作业"、当前写的是"补英语作业"），**不要填** refers_to_todo——宁可漏判不可错判。
+- refers_to_todo 只对清单里存在的 todo_id 填，禁止编造清单外的 id。
+- 没有引用时不要输出 refers_to_todo 字段（或填 null）。
+- 若上方无清单内容，说明用户没有未完成待办，直接忽略本节。
+
 ## 拆分输出规则（重要！）
 
 如果需要拆分成多条记录，用 "|||" 在原文中标记拆分点（不要改写原文）：
@@ -128,7 +137,8 @@
       "content_type": "类型（必须大写，如 WORK、LEARNING）",
       "moods": ["情绪（必须大写，如 HAPPY、SATISFIED）"],
       "status": "状态",
-      "keywords": ["关键词1", "关键词2"]
+      "keywords": ["关键词1", "关键词2"],
+      "refers_to_todo": {"todo_id": 0, "suggested_status": "NOT_STARTED/IN_PROGRESS/COMPLETED"}（仅当片段明显在推进/完成"未完成待办清单"中某项时输出；无引用时省略此字段或填 null）
     }
   ]
 }

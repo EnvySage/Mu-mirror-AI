@@ -20,6 +20,10 @@ _defaults = {
         "max_chunk_chars": 200,    # 每条语料在 prompt 中的截断长度（防 prompt 膨胀）
         "max_candidates": 10,      # 候选词条上限（prompt 同步声明宁缺毋滥）
     },
+    "todo_hint": {
+        "max_hints": 20,           # 待办清单注入条数上限（与 B 侧 registry 查询上限 20 同值，双保险）
+        "max_excerpt_chars": 100,  # 单条 source_excerpt 在 prompt 中的截断长度（设计稿 §3.2）
+    },
     "plan_tools": {
         "max_calls": 2,            # 计划步数上限（设计稿"≤2 步"）
         "max_tools": 20,           # 注册表快照渲染条目上限
