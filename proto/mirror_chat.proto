@@ -56,6 +56,7 @@ message ChatChunk {
   string content = 1;
   bool done = 2;
   repeated Source sources = 3;
+  optional string thinking = 4; // LLM 思考过程增量块（模型不支持思考流时永不为真；proto3 optional 区分"未传"与空串，同 mirror_lookback 模式）
 }
 
 message Source {

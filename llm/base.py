@@ -13,6 +13,7 @@ class BaseLlm(ABC):
         ...
 
     @abstractmethod
-    def chat_stream(self, messages: list[dict], temperature: float = 0.7) -> Generator[str, None, None]:
-        """流式对话，逐块返回回复"""
+    def chat_stream(self, messages: list[dict],
+                    temperature: float = 0.7) -> Generator[tuple[str, str], None, None]:
+        """流式对话，逐块返回 (kind, text)：kind ∈ {"thinking", "content"}"""
         ...

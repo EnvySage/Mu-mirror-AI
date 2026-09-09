@@ -66,7 +66,14 @@ class OpenAiLlm(BaseLlm):
             raise self._from_status(e) from e
         return response.choices[0].message.content
 
-    def chat_stream(self, messages: list[dict], temperature: float = 0.7) -> Generator[str, None, None]:
+    def chat_stream(self, messages: list[dict],
+                    temperature: float = 0.7) -> Generator[tuple[str, str], None, None]:
+        """流式对话：每项 (kind, text)，kind ∈ {"thinking", "content"}。
+
+        reasoning_content 是 DeepSeek/mimo 等 OpenAI 兼容系的扩展增量字段（SDK 的
+        ChoiceDelta 没有该属性声明，靠 model_extra 承载）——必须 getattr 防御，
+        SDK 未带该属性的 chunk 直接得 None，零影响。
+        """
         try:
             stream = self.client.chat.completions.create(
                 model=self.model,
@@ -82,8 +89,15 @@ class OpenAiLlm(BaseLlm):
             raise self._from_status(e) from e
         try:
             for chunk in stream:
-                if chunk.choices[0].delta.content:
-                    yield chunk.choices[0].delta.content
+                choices = chunk.choices or []
+                delta = choices[0].delta if choices else None
+                if delta is None:
+                    continue
+                reasoning = getattr(delta, "reasoning_content", None)
+                if reasoning:
+                    yield ("thinking", reasoning)
+                if delta.content:
+                    yield ("content", delta.content)
         except APIConnectionError as e:
             # 流中途断连（网络抖动/网关超时）
             raise LlmUnavailableError("LLM 流式传输中断（openai APIConnectionError）") from e

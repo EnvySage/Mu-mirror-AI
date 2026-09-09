@@ -1,7 +1,8 @@
 """MirrorChat 服务实现 — 意图提取 + 对话生成（协作清单 #5）
 
 ExtractIntent：query_type 四选一（profile/structured/semantic/hybrid）+ 过滤条件 + rewritten_query
-Chat：服务端流式 stream ChatChunk{content, done, sources}
+Chat：服务端流式 stream ChatChunk{content, done, sources, thinking}
+（thinking=4 为 LLM 思考过程增量块，proto3 optional，模型不支持时永不为真）
 无状态：配置随请求携带，用完即弃。
 PlanTools 的工具执行结果（ChatRequest.tool_results，field 6）由 Chat 渲染成上下文块
 （_format_tool_results，截断到 config plan_tools.max_tool_chars）；空列表零影响
@@ -218,11 +219,17 @@ class MirrorChatServicer(pb2_grpc.MirrorChatServicer):
             messages += [{"role": m.role, "content": m.content} for m in request.history]
             messages.append({"role": "user", "content": question})
 
-            # 流式输出：逐块 yield，最后一块 done=true 携带 sources
+            # 流式输出：逐块 yield，最后一块 done=true 携带 sources。
+            # thinking 通道（LLM 思考过程增量块）与正文分流：thinking 走 ChatChunk.thinking
+            # （不进 buffer，不参与 [n] 引用解析），content 照旧。模型不发思考块时
+            # 只有 content 分支 → wire 上与旧版完全一致（零回归）。
             buffer: list[str] = []
-            for piece in llm.chat_stream(messages):
-                buffer.append(piece)
-                yield pb2.ChatChunk(content=piece, done=False, sources=[])
+            for kind, text in llm.chat_stream(messages):
+                if kind == "thinking":
+                    yield pb2.ChatChunk(thinking=text)
+                    continue
+                buffer.append(text)
+                yield pb2.ChatChunk(content=text, done=False, sources=[])
 
             sources = _extract_sources("".join(buffer), request.chunks) if has_context else []
             yield pb2.ChatChunk(content="", done=True, sources=sources)

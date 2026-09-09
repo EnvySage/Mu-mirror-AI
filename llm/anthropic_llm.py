@@ -55,7 +55,14 @@ class AnthropicLlm(BaseLlm):
             raise self._from_status(e) from e
         return response.content[0].text
 
-    def chat_stream(self, messages: list[dict], temperature: float = 0.7) -> Generator[str, None, None]:
+    def chat_stream(self, messages: list[dict],
+                    temperature: float = 0.7) -> Generator[tuple[str, str], None, None]:
+        """流式对话：每项 (kind, text)，kind ∈ {"thinking", "content"}。
+
+        基于原始事件流（RawMessageStreamEvent）而非 text_stream——text_stream 只吐正文，
+        拿不到 thinking_delta。模型不发思考块（mimo 等走 anthropic 协议但无 thinking）时
+        只有 text_delta → 只有 content，行为与旧版一致（零影响）。
+        """
         system, chat_messages = self._split_system(messages)
 
         kwargs = dict(
@@ -78,8 +85,19 @@ class AnthropicLlm(BaseLlm):
 
         try:
             with stream_ctx as stream:
-                for text in stream.text_stream:
-                    yield text
+                for event in stream:  # MessageStream 可迭代 → ParsedMessageStreamEvent
+                    if event.type != "content_block_delta":
+                        continue
+                    delta = event.delta
+                    delta_type = getattr(delta, "type", "")
+                    if delta_type == "thinking_delta":
+                        thinking = getattr(delta, "thinking", None)
+                        if thinking:
+                            yield ("thinking", thinking)
+                    elif delta_type == "text_delta":
+                        text = getattr(delta, "text", None)
+                        if text:
+                            yield ("content", text)
         except APITimeoutError as e:
             raise LlmTimeoutError("LLM 流式传输超时") from e
         except APIConnectionError as e:
