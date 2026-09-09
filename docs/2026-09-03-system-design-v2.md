@@ -1164,6 +1164,7 @@ SELECT COUNT(*) FILTER (WHERE user_edited) :: float / COUNT(*) FROM chunks WHERE
 | 34 | 回看深度用抽象档位/固定窗口 | **0-3 档语义滑块**（0=纯继承+校正索引 / 1=上月原文 / 2=近三月原文 / 3=全部原文）+ **四道防洪闸全配置化**（600 chunks / 15 万字符 / 单条 2000 / 12 月摘要化） | 用户可理解语义优先于抽象档位；3 档"慢，消耗大"明示代价；闸门触发日志+toast 透明告知"已截取最近部分" |
 | 35 | 文件消化完自动 embed（done 态直接可检索） | **确认门禁：消化停在 extracted 态，用户确认后才 embed**（toolcalling-vault-design.md §3.3b） | 用户背书过的才进记忆——机器猜的 key/description 不直接用，与记录审核/词典确认同构（#22 一脉）；未确认可保管可下载，检索不到 |
 | 36 | 文件全文 embed 后靠全文命中 | **key-embed 进通用检索**：embed 文本=key+description+类型拼合（contentType='note' 挂 vault_item_id），命中出文件卡不喂全文（§3.3c） | 用户原设想：单 key 可被"论文咋样了"这类对话命中；不喂全文防上下文爆炸，内容问答走 recall_item 显式拉 |
+| 37 | 待办状态确认入库后永久锁定（taskStatus 停在日记写下那一刻，侧栏未完成项无完成路径） | **待办登记表 todo_registry**（todo-registry-design.md）：独立字典不混 user_terms；confirmReview 自动登记；新日记 Classify 注入未完成清单（≤20 条带原文）→ LLM 判 refers_to_todo → pending 建议 → 用户裁决（确认可改状态/忽略静默，新证据可再提示）；侧栏直调三态（auto/manual 通用）；chunk.metadata.taskStatus 保持唯一真源（registry 是物化索引，事务内双写） | 跨日记状态跟踪是"日记系统的自我记忆闭环"（论文素材：跨时间实体状态传播 + human-in-the-loop 门禁）；机器猜的不直接用（#22 一脉）；关联是用户背书的产物 |
 
 > 词典轮裁决 #22/#27/#28/#29 源自 `coordination/lexicon-design.md`；工具/vault 轮裁决 #23/#24/#25/#26/#30/#35/#36 源自 `coordination/toolcalling-vault-design.md` 与 `dialogue-enhancement-ideas.md`；递归镜子轮裁决 #32/#33/#34 源自 `coordination/rolling-mirror-design.md`。已砍场景留档：D2 提醒/定时任务（常驻进程+通知系统架构外）、D3 联网查询（"只照你自己"定位）、D4 多人共享问答（单人系统）。
 
