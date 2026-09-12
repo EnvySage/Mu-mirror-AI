@@ -20,6 +20,13 @@ _LLM_TIMEOUT = float(CONFIG["llm"]["timeout_seconds"])
 _LLM_MAX_RETRIES = int(CONFIG["llm"]["max_retries"])
 _LLM_ATTEMPT_TIMEOUT = max(1.0, round(_LLM_TIMEOUT / (1 + _LLM_MAX_RETRIES)))
 
+# 轻量 JSON 任务的 max_tokens 下限：关思考后实测只吐 40~50 token，256 足够且留足余量。
+# 注意不能压到 300 以下又不关思考——思考吃满预算会把 JSON 整个截断（实测裸奔）。
+_JSON_TASK_MAX_TOKENS = 256
+
+# 端点不支持 thinking 参数（400/404）时降级重试一次，避免把老模型/老代理打死
+_THINKING_UNSUPPORTED_HINTS = ("thinking", "unexpected keyword", "unknown parameter", "not supported")
+
 
 class AnthropicLlm(BaseLlm):
     """Anthropic 协议 LLM（支持非 Claude 模型）"""
@@ -125,3 +132,42 @@ class AnthropicLlm(BaseLlm):
         if code >= 500:
             return LlmUnavailableError(f"LLM 服务端错误（HTTP {code}）")
         return translate_llm_sdk_exception(exc)
+
+    def json_task(self, messages: list[dict], temperature: float = 0.7) -> str:
+        """轻量 JSON 任务：关思考 + 小 max_tokens（实测 22.6s → 2.1s，输出 1074 → 43 token）
+
+        thinking={"type": "disabled"} 是 anthropic 协议标准写法，mimo 等兼容端点同样接受。
+        端点不认该参数时（400）降级为普通调用重试一次：功能不受影响，只是慢回原样。
+        """
+        system, chat_messages = self._split_system(messages)
+        base = dict(
+            model=self.model,
+            max_tokens=_JSON_TASK_MAX_TOKENS,
+            messages=chat_messages,
+            temperature=temperature,
+        )
+        if system:
+            base["system"] = system
+
+        try:
+            return self._create_text({**base, "thinking": {"type": "disabled"}})
+        except APIStatusError as e:
+            # 只对"参数不被支持"这一种 400 降级；其余 400（如请求本身非法）照常报错
+            if e.status_code == 400 and any(
+                    h in str(getattr(e, "message", "") or e).lower()
+                    for h in _THINKING_UNSUPPORTED_HINTS):
+                return self._create_text(base)
+            raise self._from_status(e) from e
+
+    def _create_text(self, kwargs: dict) -> str:
+        """messages.create 的异常翻译 + 取正文（chat / json_task 共用）
+
+        APIStatusError 原样上抛（不翻译）：json_task 需要按 status_code 决定是否降级。
+        """
+        try:
+            response = self.client.messages.create(**kwargs)
+        except APITimeoutError as e:
+            raise LlmTimeoutError(f"LLM 请求超时（>{_LLM_TIMEOUT:.0f}s）") from e
+        except APIConnectionError as e:
+            raise LlmUnavailableError("LLM 连接失败（anthropic APIConnectionError）") from e
+        return response.content[0].text

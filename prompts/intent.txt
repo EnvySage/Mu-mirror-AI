@@ -9,10 +9,21 @@
 
 ## 过滤条件提取
 
-1. **content_type**：用户提到特定类型时返回（英文小写）：todo / thought / learning / plan / note / work / social / health。无法确定则留空 ""。
-2. **moods**：用户问到情绪相关内容时返回（英文小写）：happy / excited / satisfied / grateful / expecting / calm / bored / confused / anxious / sad / angry / exhausted / stressed。无法确定则空数组。
-3. **time_range**：用户提到的时间范围，如"最近7天"、"上周"、"2026年8月"。未提及则空字符串。
-4. **rewritten_query**：把用户问题改写成适合向量检索的短句（简洁、口语化关键词）。
+1. **content_type**：仅在用户**明确点到内容类型**时返回（英文小写）：todo / thought / learning / plan / note / work / social / health。只是话题像某类（如问"我最近学习状态"其实在问整体状态）不要填，留空 ""。
+2. **moods**：用户明确问到情绪时才返回（英文小写）：happy / excited / satisfied / grateful / expecting / calm / bored / confused / anxious / sad / angry / exhausted / stressed。无法确定则空数组。
+3. **time_range**：用户提到的时间范围原样保留（如"最近7天"、"上周"、"2026年8月"）。未提及则空字符串。
+4. **rewritten_query**：把用户问题改写成适合向量检索的短句（简洁、口语化关键词）。**即使 query_type 是 profile / structured，也要照常给出**。
+
+## 示例
+
+问："我上周都焦虑些什么？"
+{"query_type": "hybrid", "content_type": "", "moods": ["anxious"], "time_range": "上周", "rewritten_query": "焦虑 烦 压力 上周"}
+
+问："我最近状态怎么样？"
+{"query_type": "profile", "content_type": "", "moods": [], "time_range": "最近", "rewritten_query": "最近 状态 情绪 生活"}
+
+问："我有哪些待办没做完？"
+{"query_type": "structured", "content_type": "todo", "moods": [], "time_range": "", "rewritten_query": "待办 没做完"}
 
 ## 输出格式
 

@@ -140,7 +140,9 @@ class MirrorChatServicer(_BaseServicer):
             )
 
             t0 = time.monotonic()
-            response_text = llm.chat([{"role": "user", "content": prompt}])
+            # json_task：关思考（工具规划是 JSON 决策，不需要思维链）。实测 18s 级别
+            # 的耗时主要烧在思考 token 上，且它在"用户看到第一个字之前"串行执行。
+            response_text = llm.json_task([{"role": "user", "content": prompt}])
             elapsed_ms = int((time.monotonic() - t0) * 1000)
             print(f"[PlanTools] LLM 耗时 {elapsed_ms}ms | 响应: {response_text[:200]}")
 

@@ -163,7 +163,9 @@ class MirrorChatServicer(pb2_grpc.MirrorChatServicer):
             )
             if request.glossary:
                 print(f"[ExtractIntent] glossary 注入 {len(request.glossary)} 条")
-            response_text = llm.chat([{"role": "user", "content": prompt}])
+            # json_task：关思考（四选一路由不需要思维链）。实测 22.6s → 2.1s，
+            # 这是"用户看到第一个字之前"的串行前置调用，直接决定感知延迟。
+            response_text = llm.json_task([{"role": "user", "content": prompt}])
             print(f"[ExtractIntent] LLM 响应: {response_text[:200]}")
 
             result = parse_json(response_text, ctx="意图")
