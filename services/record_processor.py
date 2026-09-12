@@ -14,6 +14,7 @@ from glossary_render import format_glossary
 from llm.factory import create_llm
 from llm_json import parse_json
 from prompts_loader import loader
+from recent_context_render import format_recent_context
 from todo_render import format_open_todos
 
 # 枚举映射表（proto 枚举名大写）
@@ -115,9 +116,15 @@ class RecordProcessorServicer(pb2_grpc.RecordProcessorServicer):
             if request.open_todos:
                 print(f"[Classify] open_todos 注入 {len(request.open_todos)} 条")
 
+            # 近期语境注入（recent-context）：B 查近 7 天记录摘要传入，
+            # 空/未传 → 空串，prompt 与旧版一致（glossary/todos 同模式零回归）
+            recent_text = format_recent_context(request.recent_context)
+            if request.recent_context:
+                print(f"[Classify] recent_context 注入 {len(request.recent_context)} 条")
+
             if single:
-                return self._classify_single(llm, content, glossary_text, todos_text)
-            return self._classify_split(llm, content, glossary_text, todos_text)
+                return self._classify_single(llm, content, glossary_text, todos_text, recent_text)
+            return self._classify_split(llm, content, glossary_text, todos_text, recent_text)
 
         except Exception as e:
             print(f"[Classify] 错误: {e}")
@@ -126,9 +133,10 @@ class RecordProcessorServicer(pb2_grpc.RecordProcessorServicer):
     # ------------------------------------------------------------------
     # 单段模式：用户确认过边界的完整片段，禁止拆分，恰好 1 条 ClassifyItem
     # ------------------------------------------------------------------
-    def _classify_single(self, llm, content: str, glossary_text: str = "", todos_text: str = ""):
+    def _classify_single(self, llm, content: str, glossary_text: str = "", todos_text: str = "",
+                         recent_text: str = ""):
         prompt = loader.render("classify_single", content=content, glossary=glossary_text,
-                               open_todos=todos_text)
+                               open_todos=todos_text, recent_context=recent_text)
         response_text = llm.chat([{"role": "user", "content": prompt}])
         print(f"[Classify/single] LLM 响应: {response_text[:200]}")
 
@@ -153,9 +161,10 @@ class RecordProcessorServicer(pb2_grpc.RecordProcessorServicer):
     # ------------------------------------------------------------------
     # 拆分模式：一次 LLM 调用完成拆分+分类
     # ------------------------------------------------------------------
-    def _classify_split(self, llm, content: str, glossary_text: str = "", todos_text: str = ""):
+    def _classify_split(self, llm, content: str, glossary_text: str = "", todos_text: str = "",
+                        recent_text: str = ""):
         prompt = loader.render("classify", content=content, glossary=glossary_text,
-                               open_todos=todos_text)
+                               open_todos=todos_text, recent_context=recent_text)
         response_text = llm.chat([{"role": "user", "content": prompt}])
         print(f"[Classify] LLM 响应: {response_text[:200]}")
 

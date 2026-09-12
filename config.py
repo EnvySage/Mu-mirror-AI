@@ -24,6 +24,11 @@ _defaults = {
         "max_hints": 20,           # 待办清单注入条数上限（与 B 侧 registry 查询上限 20 同值，双保险）
         "max_excerpt_chars": 100,  # 单条 source_excerpt 在 prompt 中的截断长度（设计稿 §3.2）
     },
+    "recent_context": {
+        "max_items": 20,           # 清单条数上限（与 B 侧查询上限同值，双保险）
+        "max_title_chars": 40,     # 单条 title 渲染截断
+        "max_keywords": 5,         # 单条 keywords 渲染上限
+    },
     "plan_tools": {
         "max_calls": 2,            # 计划步数上限（设计稿"≤2 步"）
         "max_tools": 20,           # 注册表快照渲染条目上限
