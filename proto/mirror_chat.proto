@@ -63,6 +63,10 @@ message Source {
   int64 record_id = 1;
   string quote = 2;
   string date = 3;
+  // 引用编号（正文里的 [n]，1-based；与 B 仓 mirror_chat.proto 字段号 4 对齐）。
+  // 本端只回"回答里被引用到的"子集，编号会跳号——B 侧/前端必须按 n 定位来源，
+  // 不能用数组下标。
+  int32 n = 4;
 }
 
 // ── PlanTools 消息（toolcalling-vault-design.md 第 6 节）──

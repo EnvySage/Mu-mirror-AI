@@ -1,18 +1,28 @@
 # 最小依赖 - 仅包含运行 gRPC 服务和 API 调用所需的依赖
 # 不包含本地模型相关的依赖 (PyTorch, sentence-transformers)
+#
+# ⚠ 全部锁定到"本地验证通过"的具体版本，不要放成 >= 范围。
+#   理由：同一份代码在本地能跑、服务器跑不起来，几乎都是依赖漂移造成的，实测两次：
+#     ① anthropic 新版 messages.create 参数面变化（不再接收 temperature）
+#        → TypeError: Messages.create() got an unexpected keyword argument 'temperature'
+#        （被 errors.py 归类成 ContentInvalidError/INVALID_ARGUMENT，表现得像"内容不合规"）
+#     ② protobuf 过老（<4.21 无 runtime_version 模块）
+#        → grpcio-tools 生成的 *_pb2.py import 失败
+#   升级任何一项前，先在本地完整跑一遍测试再动。
 
-# gRPC 相关
-grpcio>=1.60.0
-grpcio-tools>=1.60.0
+# gRPC
+grpcio==1.83.0
+grpcio-tools==1.83.0
+protobuf==7.35.1
 
 # AI API 客户端
-openai>=1.0.0
-anthropic>=0.40.0
+openai==3.1.0
+anthropic==0.122.0
 
 # 配置和日志
-pyyaml>=6.0
-loguru>=0.7.0
+PyYAML==6.0.3
+loguru==0.7.3
 
-# 基础依赖 (会自动安装，但明确列出)
-numpy>=1.20.0
+# 基础依赖
+numpy==2.5.2
 requests>=2.28.0

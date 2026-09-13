@@ -1,0 +1,5 @@
+# 部署脚本必须强制 LF：Windows 的 autocrlf 会转成 CRLF，
+# 传到 Linux 后 bash 报 "/bin/bash^M: bad interpreter"
+deploy/** text eol=lf
+Jenkinsfile text eol=lf
+*.sh text eol=lf

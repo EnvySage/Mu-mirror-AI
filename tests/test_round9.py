@@ -220,6 +220,35 @@ class TestFindMarkers:
         src2 = chat_service._extract_sources("[1]", [chunk_no_title])[0]
         assert src2.quote == "y" * 100
 
+    def test_context_carries_relevance_note(self):
+        """上下文带相关度标注（score=余弦距离 → 相似度）；负数是"无信息"哨兵不标注"""
+        def chunk(score):
+            c = type("C", (), {"record_id": 1, "title": "t", "content": "内容",
+                               "created_at": "2026-09-01", "content_type": "learning",
+                               "moods": []})()
+            c.score = score
+            return c
+
+        out = chat_service._format_context([chunk(0.2), chunk(0.5), chunk(-1.0)])
+        lines = out.split("\n")
+        assert "〔相关度 80%〕" in lines[0]      # 距离 0.2 → 相似度 80%
+        assert "〔相关度 50%〕" in lines[1]      # 距离 0.5 → 相似度 50%
+        assert lines[2].startswith("[3] 2026-09-01")  # 无信息：不标注
+
+    def test_sources_carry_citation_number(self):
+        """n = 正文里的原始编号（1-based）：只回被引用子集，编号会跳号
+
+        [1] 和 [5] 都引用 → 列表长度 2，但 n=[1,5]；消费方按 n 定位，
+        不能用下标 sources[n-1]（那会取到第 2 项，或越界落空）。
+        """
+        chunks = [type("C", (), {"record_id": i, "title": f"t{i}", "content": "x",
+                                 "created_at": "2026-09-01"})() for i in range(1, 6)]
+        srcs = chat_service._extract_sources("见 [1] 和 [5]", chunks)
+        assert [s.n for s in srcs] == [1, 5]
+        assert [s.record_id for s in srcs] == [1, 5]
+        # 越界编号不产生 source（保持原防御）
+        assert all(s.n <= len(chunks) for s in srcs)
+
 
 # ---------------------------------------------------------------------------
 # 5. map_exception 优先级 + safe_details 不泄露原文

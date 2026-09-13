@@ -19,12 +19,15 @@ import sys
 import types
 from pathlib import Path
 
+import httpx
 import pytest
+from anthropic import APIStatusError as AnthropicStatusError
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from generated import mirror_chat_pb2 as chat_pb2  # noqa: E402
 
+from errors import AiServiceError  # noqa: E402
 from llm.anthropic_llm import AnthropicLlm  # noqa: E402
 from llm.openai_llm import OpenAiLlm  # noqa: E402
 from services.chat_service import MirrorChatServicer  # noqa: E402
@@ -186,6 +189,96 @@ class TestAnthropicEventStream:
         fake = llm.client.messages
         assert fake.last_kwargs["system"] == "S"
         assert fake.last_kwargs["messages"] == [{"role": "user", "content": "Q"}]
+
+
+# ---------------------------------------------------------------------------
+# 2b. anthropic extended thinking 显式开启（"思考过程不出现"的根因修复）
+# ---------------------------------------------------------------------------
+class _ScriptedAnthropicMessages:
+    """按脚本返回：脚本项为 Exception 则抛出，否则作为事件序列（可 with 的流）"""
+
+    def __init__(self, script):
+        self.script = list(script)
+        self.kwargs_log = []
+
+    def stream(self, **kwargs):
+        self.kwargs_log.append(kwargs)
+        item = self.script.pop(0) if self.script else []
+        if isinstance(item, Exception):
+            raise item
+        return _FakeAnthropicStream(item)
+
+
+def _make_scripted_anthropic(script):
+    llm = object.__new__(AnthropicLlm)
+    llm.model = "test-model"
+    fake = _ScriptedAnthropicMessages(script)
+    llm.client = types.SimpleNamespace(messages=fake)
+    return llm, fake
+
+
+def _status_400(message: str) -> AnthropicStatusError:
+    """构造 SDK 可读的 400（json body 必须有，否则 SDK 读 error.message 会炸）"""
+    req = httpx.Request("POST", "http://test/v1/messages")
+    resp = httpx.Response(400, request=req, json={"error": {"message": message}})
+    return AnthropicStatusError(message, response=resp, body=None)
+
+
+_THINK_EVENTS = [
+    _anthropic_event("content_block_delta", _delta("thinking_delta", thinking="先想想")),
+    _anthropic_event("content_block_delta", _delta("text_delta", text="回答")),
+]
+
+
+class TestAnthropicThinkingEnabled:
+    def test_stream_enables_thinking_and_drops_temperature(self):
+        """chat_stream 显式开启 extended thinking（不传该参数则永远收不到 thinking_delta）
+
+        anthropic 协议在 thinking 开启时只接受 temperature=1，故请求里不应带 temperature。
+        """
+        llm, fake = _make_scripted_anthropic([_THINK_EVENTS])
+        out = list(llm.chat_stream([{"role": "user", "content": "q"}]))
+        assert out == [("thinking", "先想想"), ("content", "回答")]
+        kw = fake.kwargs_log[0]
+        assert kw["thinking"]["type"] == "enabled"
+        assert kw["thinking"]["budget_tokens"] > 0
+        # 预算不能吃掉正文额度：anthropic 要求 max_tokens > budget_tokens
+        assert kw["max_tokens"] > kw["thinking"]["budget_tokens"]
+        assert "temperature" not in kw
+        assert "system" not in kw
+
+    def test_thinking_unsupported_400_falls_back_to_plain_stream(self):
+        """端点/模型不认 thinking（400 + 报错提到 thinking）→ 降级普通流，正文照常"""
+        llm, fake = _make_scripted_anthropic([
+            _status_400("thinking is not supported for this model"),
+            [_anthropic_event("content_block_delta", _delta("text_delta", text="回答"))],
+        ])
+        out = list(llm.chat_stream([{"role": "user", "content": "q"}]))
+        assert out == [("content", "回答")]
+        assert fake.kwargs_log[0]["thinking"]["type"] == "enabled"   # 首次带 thinking
+        last = fake.kwargs_log[-1]
+        assert "thinking" not in last                                # 降级后不带
+        assert last["temperature"] == 0.7
+
+    def test_400_without_thinking_hint_not_retried(self):
+        """400 但与 thinking 无关（请求本身非法）→ 不降级，照常报错（防掩盖真错误）"""
+        llm, fake = _make_scripted_anthropic([_status_400("invalid request body")])
+        with pytest.raises(AiServiceError):
+            list(llm.chat_stream([{"role": "user", "content": "q"}]))
+        assert len(fake.kwargs_log) == 1
+
+    def test_budget_zero_disables_thinking(self, monkeypatch):
+        """thinking_budget_tokens=0 → 完全回退旧行为（带 temperature、不带 thinking）"""
+        import llm.anthropic_llm as mod
+        monkeypatch.setattr(mod, "_THINKING_BUDGET", 0)
+        llm, fake = _make_scripted_anthropic([
+            [_anthropic_event("content_block_delta", _delta("text_delta", text="回答"))],
+        ])
+        out = list(llm.chat_stream([{"role": "user", "content": "q"}], temperature=0.3))
+        assert out == [("content", "回答")]
+        kw = fake.kwargs_log[0]
+        assert "thinking" not in kw
+        assert kw["temperature"] == 0.3
 
 
 # ---------------------------------------------------------------------------
