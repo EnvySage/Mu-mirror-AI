@@ -19,15 +19,18 @@
 """
 
 import json
+import os
 import sys
 
 from openai import OpenAI
 
 # ============================ 配置 ============================
-USER_ID = "248a145b-ce45-471c-9df3-8bf82342e2db"  # 目标账号（测试账号）
+USER_ID = os.environ.get("DEMO_USER_ID", "248a145b-ce45-471c-9df3-8bf82342e2db")  # 目标账号（测试账号）
 
-EMBED_BASE_URL = "https://ws-mfq7lft21wb5seq0.cn-beijing.maas.aliyuncs.com/compatible-mode/v1"
-EMBED_API_KEY = "sk-49393920f20842e7ab16c3565ff7c48a"  # 与 user_settings.embedding_api_key 同一把
+EMBED_BASE_URL = os.environ.get("EMBED_BASE_URL",
+                                "https://ws-mfq7lft21wb5seq0.cn-beijing.maas.aliyuncs.com/compatible-mode/v1")
+# 明文 key 曾写死在这里并进了 Git 历史 —— 一律改从环境变量读，禁止再入库
+EMBED_API_KEY = os.environ.get("EMBED_API_KEY", "")
 EMBED_MODEL = "qwen3.7-text-embedding"
 EXPECT_DIM = 1024
 
