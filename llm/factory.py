@@ -19,7 +19,8 @@ def create_llm(provider: str, api_key: str, base_url: str = "", model: str = "",
         protocol: AiProtocol 枚举值 (0=UNKNOWN, 1=OPENAI, 2=ANTHROPIC)
     """
     if protocol == common.AiProtocol.ANTHROPIC:
-        return AnthropicLlm(api_key=api_key, base_url=base_url, model=model or "claude-sonnet-4-20250514")
+        # 不兜底默认模型：model 为空由 AnthropicLlm 报"配置缺失"
+        return AnthropicLlm(api_key=api_key, base_url=base_url, model=model)
 
     # 默认 OpenAI 兼容
     return OpenAiLlm(api_key=api_key, base_url=base_url, model=model, provider=provider)

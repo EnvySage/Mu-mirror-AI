@@ -13,12 +13,12 @@ class LocalEmbedder(BaseEmbedder):
     _instances: dict[str, "LocalEmbedder"] = {}
     _models: dict[str, object] = {}
 
-    def __new__(cls, model_name: str = "BAAI/bge-m3"):
+    def __new__(cls, model_name: str):
         if model_name not in cls._instances:
             cls._instances[model_name] = super().__new__(cls)
         return cls._instances[model_name]
 
-    def __init__(self, model_name: str = "BAAI/bge-m3"):
+    def __init__(self, model_name: str):
         if model_name not in self._models:
             self._load_model(model_name)
         self.model_name = model_name

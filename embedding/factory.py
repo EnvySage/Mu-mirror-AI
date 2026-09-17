@@ -3,11 +3,12 @@
 from embedding.base import BaseEmbedder
 from embedding.local_embedder import LocalEmbedder
 from embedding.api_embedder import ApiEmbedder
+from errors import require_config
 
 
 def create_embedder(
     source: str = "local",
-    local_model: str = "BAAI/bge-m3",
+    local_model: str = "",
     api_provider: str = "",
     api_key: str = "",
     api_model: str = "",
@@ -25,6 +26,8 @@ def create_embedder(
         base_url: 自定义 API 地址（可选）
     """
     if source == "local":
+        # 不兜底本地模型名（原默认 BAAI/bge-m3）：没配就报错，避免静默加载一个未指定的模型
+        require_config({"本地 Embedding 模型": local_model})
         return LocalEmbedder(model_name=local_model)
     elif source == "api":
         if not api_key:

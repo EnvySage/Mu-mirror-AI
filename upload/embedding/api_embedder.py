@@ -4,13 +4,11 @@ from openai import OpenAI
 
 from config import CONFIG
 from embedding.base import BaseEmbedder
+from errors import require_config
 
-# 各厂商默认 Embedding 模型
-PROVIDER_DEFAULTS = {
-    "openai": {"model": "text-embedding-3-small", "base_url": ""},
-    "zhipu": {"model": "embedding-3", "base_url": "https://open.bigmodel.cn/api/paas/v4"},
-    "qwen": {"model": "text-embedding-v3", "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1"},
-}
+# 不再维护 PROVIDER_DEFAULTS：早期版本按 provider 兜底 embedding 模型/地址
+# （qwen→text-embedding-v3 等），"用户没配"会被静默替换成别的模型真实调用计费。
+# 契约：api_key / base_url / model 必须显式给全，缺即报错。
 
 # 显式超时（第九轮 #3）：与 LLM 调用一致，避免 SDK 默认 600s 白跑
 _EMBED_TIMEOUT = float(CONFIG["llm"]["timeout_seconds"])
@@ -20,13 +18,13 @@ class ApiEmbedder(BaseEmbedder):
     """API Embedding — 通过 OpenAI 兼容接口调用"""
 
     def __init__(self, provider: str, api_key: str, base_url: str = "", model: str = ""):
-        defaults = PROVIDER_DEFAULTS.get(provider, {})
-        self.model_name = model or defaults.get("model", "text-embedding-3-small")
-        url = base_url or defaults.get("base_url", "")
+        # 不做厂商兜底：三项缺任一直接报错（provider 仅用于日志/排障，不再据此猜模型）
+        require_config({"API Key": api_key, "API 地址": base_url, "Embedding 模型": model})
+        self.model_name = model
 
         self.client = OpenAI(
             api_key=api_key,
-            base_url=url if url else None,
+            base_url=base_url,
             timeout=_EMBED_TIMEOUT,
         )
 

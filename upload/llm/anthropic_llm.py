@@ -10,6 +10,7 @@ from errors import (
     AiServiceError,
     LlmTimeoutError,
     LlmUnavailableError,
+    require_config,
     translate_llm_sdk_exception,
 )
 from llm.base import BaseLlm
@@ -40,7 +41,11 @@ _THINKING_BUDGET = int(CONFIG["llm"].get("thinking_budget_tokens", 0))
 class AnthropicLlm(BaseLlm):
     """Anthropic 协议 LLM（支持非 Claude 模型）"""
 
-    def __init__(self, api_key: str, base_url: str = "", model: str = "claude-sonnet-4-20250514"):
+    def __init__(self, api_key: str, base_url: str = "", model: str = ""):
+        # 不兜底默认模型（原为写死的 claude-sonnet-4-20250514）：没配就报错，
+        # 否则"未配置"会被静默替换成另一个模型真实计费
+        require_config({"API Key": api_key, "模型名称": model})
+        self.model = model
         self.client = anthropic.Anthropic(
             api_key=api_key,
             base_url=base_url if base_url else None,

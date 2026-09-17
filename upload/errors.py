@@ -49,6 +49,31 @@ class ContentInvalidError(AiServiceError):
         super().__init__(message, grpc.StatusCode.INVALID_ARGUMENT)
 
 
+class ConfigMissingError(AiServiceError):
+    """必需配置缺失（api_key / base_url / model 未由调用方显式提供）。
+
+    历史版本在 llm/openai_llm.py、embedding/api_embedder.py 里按 provider 写死了
+    默认 model/base_url（qwen-plus、text-embedding-v3 等）。后果是"用户没配模型"
+    不会报错，而是被静默替换成另一个模型去真实调用并计费——账单上出现用户从未
+    配置过的模型。契约改为：缺什么报什么，绝不替调用方猜。
+    """
+
+    def __init__(self, message: str = "缺少必需的模型配置"):
+        super().__init__(message, grpc.StatusCode.INVALID_ARGUMENT)
+
+
+def require_config(values: dict) -> None:
+    """批量校验必需配置，缺任一项即抛 ConfigMissingError。
+
+    @param values: {展示名: 实际值}，空字符串/None 视为缺失
+    """
+    missing = [name for name, val in values.items() if not val]
+    if missing:
+        raise ConfigMissingError(
+            f"模型配置缺失：{'、'.join(missing)} 未配置（不提供默认值，请在设置页显式填写）"
+        )
+
+
 # 关键字表仅作最后兜底（非 SDK 异常的裸网络错误等），已降级为次优先级
 _TIMEOUT_MARKERS = ("timeout", "timed out", "超时", "deadline")
 _UNAVAILABLE_MARKERS = (

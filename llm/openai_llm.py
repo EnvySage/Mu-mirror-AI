@@ -9,16 +9,14 @@ from errors import (
     AiServiceError,
     LlmTimeoutError,
     LlmUnavailableError,
+    require_config,
     translate_llm_sdk_exception,
 )
 from llm.base import BaseLlm
 
-# 各厂商默认配置
-PROVIDER_DEFAULTS = {
-    "openai": {"base_url": "", "model": "gpt-4o-mini"},
-    "qwen":   {"base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1", "model": "qwen-plus"},
-    "zhipu":  {"base_url": "https://open.bigmodel.cn/api/paas/v4", "model": "glm-4-flash"},
-}
+# 不再维护 PROVIDER_DEFAULTS：早期版本按 provider 兜底 model/base_url（qwen→qwen-plus 等），
+# 会把"用户没配模型"静默替换成另一个模型真实调用并计费——账单上出现用户没配过的模型。
+# 契约：api_key / base_url / model 必须由调用方（Java user_settings）显式给全，缺即报错。
 
 # 显式超时（第九轮 #3）：openai SDK 默认 600s，Java 客户端 15s 就放弃，Python 白跑 585s。
 # config.yml llm.timeout_seconds 可配置，默认 20s。
@@ -46,13 +44,13 @@ class OpenAiLlm(BaseLlm):
     """通用实现 — 只要兼容 OpenAI API 就能用"""
 
     def __init__(self, api_key: str, base_url: str = "", model: str = "", provider: str = ""):
-        defaults = PROVIDER_DEFAULTS.get(provider, {})
-        url = base_url or defaults.get("base_url", "")
-        self.model = model or defaults.get("model", "gpt-4o-mini")
+        # 不做厂商兜底：三项缺任一直接报错，避免"没配"被静默换成别的模型计费
+        require_config({"API Key": api_key, "API 地址": base_url, "模型名称": model})
+        self.model = model
 
         self.client = OpenAI(
             api_key=api_key,
-            base_url=url if url else None,
+            base_url=base_url,
             timeout=_LLM_ATTEMPT_TIMEOUT,
             max_retries=_LLM_MAX_RETRIES,
         )
