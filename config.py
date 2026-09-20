@@ -52,6 +52,11 @@ _defaults = {
         "inspiration": "prompts/inspiration.txt",
         "extract_terms": "prompts/extract_terms.txt",
         "plan_tools": "prompts/plan_tools.txt",
+        # 回滚路径专用（chat-loop-design.md 裁决 0.4 / §9 验收 6）：循环版 plan_tools.txt
+        # 重写后不能再给旧 PlanTools 用——否则"关掉循环"拿到的是旧控制流 + 新 prompt 的
+        # 未验证混合体，那不叫回滚。这份是 HEAD 原文快照，逐字不动（含「情绪安慰」那条 bug，
+        # 故意保留：回滚就该退回已知的旧行为）。
+        "plan_tools_single": "prompts/plan_tools_single.txt",
     },
 }
 

@@ -19,6 +19,7 @@ _FILENAME = {
     "inspiration": "inspiration",
     "extract_terms": "extract_terms",
     "plan_tools": "plan_tools",
+    "plan_tools_single": "plan_tools_single",  # 旧 PlanTools 回滚路径专用（HEAD 原文快照）
 }
 
 # 代码内占位符 → 模板中的占位符（保持向后兼容：模板 {content}/{query} 不变）
@@ -39,7 +40,18 @@ _ALIASES = {
     },
     "inspiration": {"current_input": "current_input", "context": "context"},
     "extract_terms": {"chunks": "chunks", "existing_terms": "existing_terms"},
-    "plan_tools": {"tools": "tools", "question": "question"},
+    # plan_tools_single：旧 PlanTools 走的 HEAD 原文快照模板，占位符仍是老三样
+    # （tools/question/glossary），不含任何循环语境位——回滚路径要的就是旧行为原样。
+    "plan_tools_single": {"tools": "tools", "question": "question", "glossary": "glossary"},
+    # plan_tools 第 2 套（chat-loop-design.md §5.1 循环版，只给 PlanNextStep 用）：
+    # 除 tools/question/glossary 外新增循环语境渲染位。登记在此的 key 会在调用方漏传时
+    # 兜底成空串（render 的 setdefault 分支），所以模板里新增占位符必须同步登记，
+    # 否则漏传时 prompt 里会残留字面量 "{step}" 喂给模型。
+    "plan_tools": {
+        "tools": "tools", "question": "question", "glossary": "glossary",
+        "history": "history", "previous_results": "previous_results",
+        "step": "step", "max_steps": "max_steps", "has_retrieval": "has_retrieval",
+    },
 }
 
 

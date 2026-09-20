@@ -51,3 +51,4 @@ prompts:
   inspiration: "prompts/inspiration.txt"
   extract_terms: "prompts/extract_terms.txt"
   plan_tools: "prompts/plan_tools.txt"
+  plan_tools_single: "prompts/plan_tools_single.txt"   # 回滚路径专用（旧版原文快照）

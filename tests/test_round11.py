@@ -224,9 +224,12 @@ class TestConfig:
 # ---------------------------------------------------------------------------
 class TestPromptWiring:
     def test_plan_tools_template_renders(self):
+        """旧 PlanTools 路径的模板（chat-loop-design.md 裁决 0.4：回滚要退回已知旧行为，
+        所以 plan_tools.txt 循环化后，PlanTools 改渲染 plan_tools_single —— HEAD 原文快照，
+        本用例断言一字未改）"""
         from prompts_loader import loader
-        p = loader.render("plan_tools", tools="1. search_records：检索", question="我论文咋样了",
-                          glossary="")
+        p = loader.render("plan_tools_single", tools="1. search_records：检索",
+                          question="我论文咋样了", glossary="")
         assert "工具规划助手" in p
         assert "1. search_records：检索" in p
         assert "我论文咋样了" in p
@@ -238,11 +241,27 @@ class TestPromptWiring:
         assert "search_records" in p
         assert "get_profile" in p
 
+    def test_plan_tools_loop_template_renders(self):
+        """循环版模板（chat-loop-design.md §5.1，只给 PlanNextStep 用）——与上一个用例
+        互为对照：同一批规则换了措辞，且多出循环语境渲染位"""
+        from prompts_loader import loader
+        p = loader.render("plan_tools", tools="1. search_records：检索", question="我论文咋样了",
+                          glossary="", history="h", previous_results="（空）",
+                          step=2, max_steps=4, has_retrieval="false")
+        assert "工具规划器" in p
+        assert "这是第 2 步，最多 4 步" in p
+        assert "一步最多 2 个工具" in p
+        assert "宁可少规划" in p          # 总基调保留
+        assert "情绪安慰" not in p        # §5.1 关键修复
+        for ph in ("{tools}", "{question}", "{glossary}", "{history}",
+                   "{previous_results}", "{step}", "{max_steps}", "{has_retrieval}"):
+            assert ph not in p
+
     def test_plan_tools_glossary_placeholder(self):
         from prompts_loader import loader
         g = "以下用户个人词汇表仅供参考，解释可能过时；与近期记录矛盾时，以近期记录为准。\n- 论文：毕设"
-        p = loader.render("plan_tools", tools="t", question="q", glossary=g)
-        assert "毕设" in p
+        assert "毕设" in loader.render("plan_tools_single", tools="t", question="q", glossary=g)
+        assert "毕设" in loader.render("plan_tools", tools="t", question="q", glossary=g)
 
     def test_chat_template_tool_results_placeholder(self):
         from prompts_loader import loader
@@ -288,8 +307,9 @@ class TestProtoContract:
                           "glossary": 5, "tool_results": 6}
 
     def test_plantools_rpc_in_service(self):
+        """PlanTools 仍在（回滚路径不删）；PlanNextStep 为 chat-loop-design.md §3 新增"""
         methods = set(chat_pb2.DESCRIPTOR.services_by_name["MirrorChat"].methods_by_name)
-        assert methods == {"ExtractIntent", "Chat", "PlanTools"}
+        assert methods == {"ExtractIntent", "Chat", "PlanTools", "PlanNextStep"}
 
     def test_wire_first_bytes(self):
         """wire 冒烟：tool_results=6 → 首字节 0x32；tools=3 → 0x1a；calls=1 → 0x0a"""

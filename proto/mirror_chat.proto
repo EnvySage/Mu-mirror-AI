@@ -10,6 +10,9 @@ service MirrorChat {
   // 工具规划（toolcalling-vault-design.md 第 1 节）：LLM 按 JSON 约定输出 ≤2 步工具计划，
   // B 执行后把 ToolResult 塞 ChatRequest.tool_results 再走正常 Chat
   rpc PlanTools(PlanToolsRequest) returns (PlanToolsReply);
+  // 对话 Agent 循环（chat-loop-design.md §3）：Java 驱动，每步调一次，带上已执行结果；
+  // 服务端流式，先吐 thinking 增量（B 透传 SSE thinking，等待可感知），终帧给 calls/done
+  rpc PlanNextStep(PlanNextStepRequest) returns (stream PlanStepChunk);
 }
 
 message ExtractIntentRequest {
@@ -85,4 +88,28 @@ message PlanToolsReply {
 message PlannedCall {
   string tool = 1;      // 工具名（经校验：必须在传入注册表内，防幻觉）
   string args_json = 2; // 参数 JSON 文本（经校验：可解析）
+}
+
+// ── 对话 Agent 循环消息（chat-loop-design.md §3）──
+// 循环由 Java 驱动，本端每次只做"看着已有结果决定下一步"的单次决策，不存任何状态
+
+message PlanNextStepRequest {
+  string question = 1;                       // 用户提问原文
+  repeated GlossaryTerm glossary = 2;        // 个人词汇表（工具参数里的"论文"等指代依赖它）
+  repeated ToolSpec tools = 3;               // Java 侧注册表快照（Python 不硬编码工具清单）
+  LlmConfig llm_config = 4;
+  repeated ChatMessage history = 5;          // 对话历史（正序），用于多轮指代消解
+  repeated ToolResult previous_results = 6;  // 已执行步骤的结果（首步为空）→ prompt 渲染成"已知材料"
+  int32 step = 7;                            // 第几步（1-based）
+  int32 max_steps = 8;                       // 步数预算 → prompt 里告知"还剩几步"
+  bool has_retrieval = 9;                    // RAG 是否有命中（false = 检索空，规划要据此换策略）
+}
+
+message PlanStepChunk {
+  // 思考增量（chat_stream 的 ("thinking", text) 通道；模型不支持时永不为真）。
+  // 与 B 仓 mirror_chat.proto 字段号 1 对齐，B 逐块转发 SSE thinking
+  optional string thinking = 1;
+  repeated PlannedCall calls = 2;  // 仅终帧有效；空 + done=true = 材料够了，收尾去答
+  bool done = 3;                   // 仅终帧有效
+  bool final = 4;                  // 本块为终帧（calls/done 才可读）
 }

@@ -49,6 +49,11 @@ class MirrorChatStub:
                 request_serializer=mirror__chat__pb2.PlanToolsRequest.SerializeToString,
                 response_deserializer=mirror__chat__pb2.PlanToolsReply.FromString,
                 _registered_method=True)
+        self.PlanNextStep = channel.unary_stream(
+                '/mirror.MirrorChat/PlanNextStep',
+                request_serializer=mirror__chat__pb2.PlanNextStepRequest.SerializeToString,
+                response_deserializer=mirror__chat__pb2.PlanStepChunk.FromString,
+                _registered_method=True)
 
 
 class MirrorChatServicer:
@@ -74,6 +79,14 @@ class MirrorChatServicer:
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def PlanNextStep(self, request, context):
+        """对话 Agent 循环（chat-loop-design.md §3）：Java 驱动，每步调一次，带上已执行结果；
+        服务端流式，先吐 thinking 增量（B 透传 SSE thinking，等待可感知），终帧给 calls/done
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_MirrorChatServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -91,6 +104,11 @@ def add_MirrorChatServicer_to_server(servicer, server):
                     servicer.PlanTools,
                     request_deserializer=mirror__chat__pb2.PlanToolsRequest.FromString,
                     response_serializer=mirror__chat__pb2.PlanToolsReply.SerializeToString,
+            ),
+            'PlanNextStep': grpc.unary_stream_rpc_method_handler(
+                    servicer.PlanNextStep,
+                    request_deserializer=mirror__chat__pb2.PlanNextStepRequest.FromString,
+                    response_serializer=mirror__chat__pb2.PlanStepChunk.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -174,6 +192,33 @@ class MirrorChat:
             '/mirror.MirrorChat/PlanTools',
             mirror__chat__pb2.PlanToolsRequest.SerializeToString,
             mirror__chat__pb2.PlanToolsReply.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def PlanNextStep(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_stream(
+            request,
+            target,
+            '/mirror.MirrorChat/PlanNextStep',
+            mirror__chat__pb2.PlanNextStepRequest.SerializeToString,
+            mirror__chat__pb2.PlanStepChunk.FromString,
             options,
             channel_credentials,
             insecure,
