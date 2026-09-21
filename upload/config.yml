@@ -7,7 +7,9 @@ server:
 
 # LLM 调用参数（用户模型配置仍随每次 gRPC 请求到达，这里只定服务端兜底行为）
 llm:
-  timeout_seconds: 20      # 单次 LLM 调用超时；Java 客户端 15s 就放弃，本端不应白跑
+  timeout_seconds: 60      # 非流式调用总超时（按 max_retries 平摊，单次尝试 30s）。原 20s 注释称"Java 15s 就放弃"已过时
+  stream_read_timeout_seconds: 60  # 流式调用"两块数据之间最多等多久"。原沿用单次尝试 10s，
+                                   # 联调实测 mimo 思考中途停顿十几秒即断流、整段答案作废
   max_retries: 1           # SDK 内部重试次数（429/5xx），0 禁用
   thinking_budget_tokens: 2048   # anthropic extended thinking 预算（仅最终回答流式 chat_stream；0=关闭）
 

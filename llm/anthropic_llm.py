@@ -3,6 +3,7 @@
 from typing import Generator
 
 import anthropic
+import httpx  # anthropic SDK 自身依赖，非新增依赖
 from anthropic import APIConnectionError, APIStatusError, APITimeoutError
 
 from config import CONFIG
@@ -20,6 +21,12 @@ from llm.base import BaseLlm
 _LLM_TIMEOUT = float(CONFIG["llm"]["timeout_seconds"])
 _LLM_MAX_RETRIES = int(CONFIG["llm"]["max_retries"])
 _LLM_ATTEMPT_TIMEOUT = max(1.0, round(_LLM_TIMEOUT / (1 + _LLM_MAX_RETRIES)))
+
+# 流式调用单独的超时：read = "两块数据之间最多等多久"。不能沿用上面的单 attempt 超时——
+# 2026-09-21 联调实测 mimo 思考中途/思考转正文时会停顿十几秒，按 10s 读超时直接断流，
+# 已算好的答案全部作废、用户看到"暂时无法回答"。connect 仍保持短，死端点照样快速失败。
+_STREAM_READ_TIMEOUT = float(CONFIG["llm"].get("stream_read_timeout_seconds", 60))
+_STREAM_TIMEOUT = httpx.Timeout(_STREAM_READ_TIMEOUT, connect=10.0)
 
 # 轻量 JSON 任务的 max_tokens 下限：关思考后实测只吐 40~50 token，256 足够且留足余量。
 # 注意不能压到 300 以下又不关思考——思考吃满预算会把 JSON 整个截断（实测裸奔）。
@@ -134,9 +141,9 @@ class AnthropicLlm(BaseLlm):
         上层据此决定是否降级重试；超时/断连在此翻译为 AiServiceError。
         """
         try:
-            stream_ctx = self.client.messages.stream(**kwargs)
+            stream_ctx = self.client.messages.stream(**kwargs, timeout=_STREAM_TIMEOUT)
         except APITimeoutError as e:
-            raise LlmTimeoutError(f"LLM 请求超时（>{_LLM_TIMEOUT:.0f}s）") from e
+            raise LlmTimeoutError(f"LLM 流式连接超时（>{_STREAM_READ_TIMEOUT:.0f}s）") from e
         except APIConnectionError as e:
             raise LlmUnavailableError("LLM 连接失败（anthropic APIConnectionError）") from e
 
@@ -156,7 +163,7 @@ class AnthropicLlm(BaseLlm):
                         if text:
                             yield ("content", text)
         except APITimeoutError as e:
-            raise LlmTimeoutError("LLM 流式传输超时") from e
+            raise LlmTimeoutError(f"LLM 流式传输超时（两块数据间隔 >{_STREAM_READ_TIMEOUT:.0f}s）") from e
         except APIConnectionError as e:
             raise LlmUnavailableError("LLM 流式传输中断（anthropic APIConnectionError）") from e
 

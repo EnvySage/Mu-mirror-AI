@@ -2,6 +2,7 @@
 
 from typing import Generator
 
+import httpx  # openai SDK 自身依赖，非新增依赖
 from openai import APIConnectionError, APIStatusError, APITimeoutError, OpenAI
 
 from config import CONFIG
@@ -27,6 +28,11 @@ from llm.base import BaseLlm
 _LLM_TIMEOUT = float(CONFIG["llm"]["timeout_seconds"])
 _LLM_MAX_RETRIES = int(CONFIG["llm"]["max_retries"])
 _LLM_ATTEMPT_TIMEOUT = max(1.0, round(_LLM_TIMEOUT / (1 + _LLM_MAX_RETRIES)))
+
+# 流式调用单独的超时（同 anthropic_llm）：read = 两块数据之间最多等多久。联调实测推理模型
+# 思考中途会停顿十几秒，沿用单 attempt 超时会直接断流、整段答案作废。connect 保持短。
+_STREAM_READ_TIMEOUT = float(CONFIG["llm"].get("stream_read_timeout_seconds", 60))
+_STREAM_TIMEOUT = httpx.Timeout(_STREAM_READ_TIMEOUT, connect=10.0)
 
 # 轻量 JSON 任务的 max_tokens（关思考后实测只吐 40~50 token，256 足够且留足余量）
 _JSON_TASK_MAX_TOKENS = 256
@@ -88,9 +94,10 @@ class OpenAiLlm(BaseLlm):
                 messages=messages,
                 temperature=temperature,
                 stream=True,
+                timeout=_STREAM_TIMEOUT,
             )
         except APITimeoutError as e:
-            raise LlmTimeoutError(f"LLM 请求超时（>{_LLM_TIMEOUT:.0f}s）") from e
+            raise LlmTimeoutError(f"LLM 流式连接超时（>{_STREAM_READ_TIMEOUT:.0f}s）") from e
         except APIConnectionError as e:
             raise LlmUnavailableError("LLM 连接失败（openai APIConnectionError）") from e
         except APIStatusError as e:

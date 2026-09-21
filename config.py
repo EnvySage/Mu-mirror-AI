@@ -12,7 +12,10 @@ _CONFIG_PATH = Path(__file__).parent / "config.yml"
 _defaults = {
     "server": {"port": 10003, "workers": 4},
     "llm": {
-        "timeout_seconds": 20,  # 单次 LLM 调用超时（Java 客户端 15s 就放弃，本端不应白跑）
+        "timeout_seconds": 60,  # 非流式调用总超时（按 max_retries 平摊，单次尝试 30s）
+        # 流式调用"两块数据之间最多等多久"。原先沿用单次尝试超时（10s），2026-09-21 联调实测
+        # mimo 思考中途停顿十几秒即断流，已算好的答案整段作废、用户看到"暂时无法回答"
+        "stream_read_timeout_seconds": 60,
         "max_retries": 1,       # SDK 内部重试次数（429/5xx 时），0 禁用
         # anthropic 协议 extended thinking（思考流）预算 token 上限；0 = 关闭。
         # Anthropic 不会默认产出思考块，必须显式开启才有 thinking_delta 事件。
