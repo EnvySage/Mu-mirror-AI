@@ -51,6 +51,7 @@ _ALIASES = {
         "tools": "tools", "question": "question", "glossary": "glossary",
         "history": "history", "previous_results": "previous_results",
         "step": "step", "max_steps": "max_steps", "has_retrieval": "has_retrieval",
+        "today": "today",
     },
 }
 

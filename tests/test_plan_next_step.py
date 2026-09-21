@@ -275,6 +275,36 @@ class TestFinalBatchPrompt:
         assert [c.tool for c in last.calls] == ["get_stats"]
 
 
+class TestTodayDate:
+    """2026-09-21 联调：问"十二号弹了什么曲子"，规划器不知道今天几号，只能猜；
+    工具也没有按日期查的参数，只好拿 query 逐字匹配"弹曲子"，0 条。"""
+
+    def test_today_text_format_and_weekday(self):
+        from datetime import datetime
+        import services.plan_service as ps
+        assert ps.today_text(datetime(2026, 9, 21, 10, 0, tzinfo=ps._CN_TZ)) == "2026-09-21（星期一）"
+        assert ps.today_text(datetime(2026, 9, 20, 10, 0, tzinfo=ps._CN_TZ)) == "2026-09-20（星期日）"
+
+    def test_today_uses_east8_not_utc(self):
+        """UTC 16:30 已是北京时间次日 0:30——必须按东八区算"""
+        from datetime import datetime, timezone
+        import services.plan_service as ps
+        assert ps.today_text(datetime(2026, 9, 20, 16, 30, tzinfo=timezone.utc)).startswith("2026-09-21")
+
+    def test_prompt_contains_today(self):
+        import services.plan_service as ps
+        llm = _ScriptedLlm([("content", '{"calls": [], "done": true}')])
+        _run(MirrorChatServicer(), _request(), llm)
+        assert "今天是 **" + ps.today_text() + "**" in llm.prompt
+        assert "{today}" not in llm.prompt
+
+    def test_prompt_teaches_date_lookup_without_query(self):
+        llm = _ScriptedLlm([("content", '{"calls": [], "done": true}')])
+        _run(MirrorChatServicer(), _request(), llm)
+        assert "不要带 query" in llm.prompt
+        assert '{"tool": "search_records", "args": {"date": "2026-09-12"}}' in llm.prompt
+
+
 class TestRegistrySanitize:
     def test_hallucinated_tool_dropped(self):
         llm = _ScriptedLlm([("content",

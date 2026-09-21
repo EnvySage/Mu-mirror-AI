@@ -121,10 +121,11 @@ def _render_tool_payload(payload: dict, raw: str) -> str:
     records = payload.get("records") if isinstance(payload, dict) else None
     if isinstance(records, list) and records:
         rows = []
-        for rec in records:
-            if not isinstance(rec, dict):
-                continue
-            date = str(rec.get("date") or "")[:10]
+        # 按时间正序、保留到分钟：原先只留日期且沿用 SQL 的倒序，问"十二号做了什么"时模型看不出
+        # 一天里的先后，实测把"先想直接练春日影→太难→改练小星星"讲反了
+        recs = sorted((r for r in records if isinstance(r, dict)), key=lambda r: str(r.get("date") or ""))
+        for rec in recs:
+            date = str(rec.get("date") or "")[:16].replace("T", " ")
             ctype = rec.get("content_type") or ""
             title = rec.get("title") or ""
             quote = rec.get("quote") or ""
@@ -234,13 +235,20 @@ class _FakeCiteFilter:
     只拦**本轮真实用过的工具名**和「工具结果」前缀——[n]、[F1] 是真引用原样放行；
     其他方括号内容（如口语里的 [笑]）也放行，避免误伤。
     跨块安全：遇到 "[" 先扣住，等到 "]" 再判；超长或遇换行说明不是标记，原样吐出。
+
+    max_cite：本轮资料编号上限（= chunks 条数）。超出的 [n] 是模型自己编的号——实测检索 0 条、
+    证据全来自工具结果（工具结果不编号）时，它会给工具结果的行自行编号写出 [4][6][7]，
+    前端渲染成点不开的死引用。None = 不校验编号（兼容旧调用）。
     """
 
     _MAX_HOLD = 40
 
-    def __init__(self, tool_names):
+    def __init__(self, tool_names, max_cite: int | None = None, max_file_cite: int | None = None):
         self._names = {(n or "").strip() for n in tool_names} - {""}
+        self._max_cite = max_cite
+        self._max_file_cite = max_file_cite
         self._hold = ""
+        self._space = ""  # 扣住的一个空格：后面若是假标记，连同这个空格一起删，不留"弹出来了 ，"
 
     def feed(self, text: str) -> str:
         out = []
@@ -255,21 +263,34 @@ class _FakeCiteFilter:
                     out.append(self._hold)
                     self._hold = ""
             elif ch == "[":
-                self._hold = ch
+                self._hold = self._space + ch
+                self._space = ""
+            elif ch == " ":
+                out.append(self._space)
+                self._space = ch
             else:
-                out.append(ch)
+                out.append(self._space + ch)
+                self._space = ""
         return "".join(out)
 
     def flush(self) -> str:
-        held, self._hold = self._hold, ""
+        held = self._space + self._hold
+        self._space = self._hold = ""
         return held
 
     def _is_fake(self, token: str) -> bool:
-        inner = token[1:-1].strip()
+        inner = token.strip()[1:-1].strip()
+        # [Fn] 超出本轮真实文件数 = 模型编的文件引用（实测没查任何文件时写出 [F1]）
+        if self._max_file_cite is not None and inner[:1] in "Ff" and inner[1:].isdigit():
+            n = int(inner[1:])
+            return n < 1 or n > self._max_file_cite
         # 以"工具"开头的一律视为假标记：实测模型会从 prompt 章节名自造变体
         # （[工具结果]、[工具查询结果]…），逐个列举追不上
         if inner.startswith("工具"):
             return True
+        if self._max_cite is not None and inner.isdigit():
+            n = int(inner)
+            return n < 1 or n > self._max_cite
         return inner.split("·")[0].strip() in self._names
 
 
@@ -367,7 +388,10 @@ class MirrorChatServicer(pb2_grpc.MirrorChatServicer):
             # （不进 buffer，不参与 [n] 引用解析），content 照旧。模型不发思考块时
             # 只有 content 分支 → wire 上与旧版完全一致（零回归）。
             buffer: list[str] = []
-            fake_cites = _FakeCiteFilter(r.tool for r in request.tool_results)
+            n_files = sum(len(_extract_file_items(r.tool, _parse_payload(r.payload_json)))
+                          for r in request.tool_results if r.success)
+            fake_cites = _FakeCiteFilter((r.tool for r in request.tool_results),
+                                         max_cite=len(request.chunks), max_file_cite=n_files)
             for kind, text in llm.chat_stream(messages):
                 if kind == "thinking":
                     yield pb2.ChatChunk(thinking=text)

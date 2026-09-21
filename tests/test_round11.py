@@ -207,8 +207,19 @@ class TestFormatToolResults:
                    '{"record_id": 9, "title": "", "quote": "又失眠了", "date": "2026-09-05", "content_type": "health"}]}')
         out = _format_tool_results([self._tr(summary="search_records:2条", payload=payload)])
         assert out.startswith("工具 search_records 返回：search_records:2条\n")
-        assert "- 2026-09-02（work） 开题：导师说框架要重做，好焦虑" in out
+        assert "- 2026-09-02 23:10（work） 开题：导师说框架要重做，好焦虑" in out  # 保留到分钟
         assert "- 2026-09-05（health）：又失眠了" in out  # 无标题不留孤儿空格
+
+    def test_records_rendered_chronologically_with_time(self):
+        """问"某一天做了什么"时先后顺序是关键：SQL 是倒序，渲染要转正序并保留时刻"""
+        payload = json.dumps({"count": 3, "records": [
+            {"record_id": 3, "quote": "我终于能弹出小星星了", "date": "2026-09-12T20:29:24", "content_type": "note"},
+            {"record_id": 2, "quote": "春日影还是太难了，从小星星开始吧", "date": "2026-09-12T14:56:01", "content_type": "note"},
+            {"record_id": 1, "quote": "直接开始尝试演奏春日影", "date": "2026-09-12T14:34:53", "content_type": "note"},
+        ]}, ensure_ascii=False)
+        out = _format_tool_results([self._tr(summary="search_records:3条（2026-09-12）", payload=payload)])
+        i1, i2, i3 = out.index("14:34"), out.index("14:56"), out.index("20:29")
+        assert i1 < i2 < i3
 
     def test_stats_payload_rendered_as_json_unescaped(self):
         payload = '{"days": 30, "record_count": 12, "moods": {"anxious": 5, "calm": 2}}'
@@ -266,7 +277,7 @@ class TestFakeCiteFilter:
     def test_drops_tool_result_prefix_and_dot_variant(self):
         assert self._run(["a[工具结果]b[工具结果·get_stats]c[search_records·x]d"]) == "abcd"
         # 实测变体：模型从 prompt 章节标题「工具查询结果」自造
-        assert self._run(["空空如也 [工具查询结果]。"]) == "空空如也 。"
+        assert self._run(["空空如也 [工具查询结果]。"]) == "空空如也。"  # 前导空格一起删
 
     def test_keeps_real_citations(self):
         assert self._run(["你写过 [2] 和 [F1]，还有[12]"]) == "你写过 [2] 和 [F1]，还有[12]"
@@ -280,6 +291,32 @@ class TestFakeCiteFilter:
 
     def test_unclosed_bracket_flushed_at_end(self):
         assert self._run(["结尾是个 [未闭合"]) == "结尾是个 [未闭合"
+
+    def _run_cap(self, pieces, max_cite):
+        from services.chat_service import _FakeCiteFilter
+        f = _FakeCiteFilter(("search_records",), max_cite=max_cite)
+        return "".join(f.feed(p) for p in pieces) + f.flush()
+
+    def test_out_of_range_citations_dropped(self):
+        """2026-09-21 联调实测：检索 0 条、证据全来自工具结果时，模型自编 [4][6][7]"""
+        assert self._run_cap(["春日影还是太难了 [6][7]。突飞猛进 [4]。"], 0) == "春日影还是太难了。突飞猛进。"
+
+    def test_in_range_citations_kept(self):
+        assert self._run_cap(["你写过 [3]，还有 [6] 和 [0]"], 5) == "你写过 [3]，还有 和"
+        assert self._run_cap(["文件 [F2] 不受编号上限影响"], 0) == "文件 [F2] 不受编号上限影响"
+
+    def test_file_citation_capped_by_real_file_count(self):
+        """实测：没查任何文件时模型写出 [F1]"""
+        from services.chat_service import _FakeCiteFilter
+        f = _FakeCiteFilter((), max_cite=0, max_file_cite=0)
+        assert f.feed("还记着第二天要问导师 [F1]。") + f.flush() == "还记着第二天要问导师。"
+        f = _FakeCiteFilter((), max_cite=0, max_file_cite=2)
+        assert f.feed("见 [F2]，另见 [F3]") + f.flush() == "见 [F2]，另见"
+
+    def test_space_kept_when_bracket_is_real(self):
+        from services.chat_service import _FakeCiteFilter
+        f = _FakeCiteFilter((), max_cite=3)
+        assert "".join(f.feed(p) for p in ["A ", "[2] B  C "]) + f.flush() == "A [2] B  C "
 
     def test_newline_or_overlong_releases_hold(self):
         assert self._run(["[不是标记\n下一行"]) == "[不是标记\n下一行"

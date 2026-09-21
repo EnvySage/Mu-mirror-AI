@@ -40,6 +40,7 @@ prompt 模板一分为二（裁决 0.4 / §9 验收 6 的回滚语义要求）�
 
 import json
 import time
+from datetime import datetime, timedelta, timezone
 
 from generated import mirror_chat_pb2 as pb2
 from generated import mirror_chat_pb2_grpc as pb2_grpc
@@ -51,6 +52,19 @@ from glossary_render import format_glossary
 from llm.factory import create_llm
 from llm_json import parse_json
 from prompts_loader import loader
+
+# 今天的日期（东八区，与 B 侧 Asia/Shanghai 一致）。不用 zoneinfo：Windows 没有系统时区库，
+# 要额外装 tzdata；固定 +8 足够（中国大陆无夏令时）。
+# 2026-09-21 联调：问"十二号弹了什么曲子"，规划器不知道今天几号，在思考里猜"假设今天是 10 月 15 号"，
+# 也算不出"最近几天""上周"对应哪天。
+_CN_TZ = timezone(timedelta(hours=8))
+_WEEKDAYS = "一二三四五六日"
+
+
+def today_text(now: datetime | None = None) -> str:
+    """"2026-09-21（星期一）"——给规划器换算"十二号""前天""上周"用"""
+    d = (now or datetime.now(_CN_TZ)).astimezone(_CN_TZ).date()
+    return f"{d.isoformat()}（星期{_WEEKDAYS[d.weekday()]}）"
 
 # 上限（config plan_tools 段，各上限配置化）
 _MAX_CALLS = int(CONFIG["plan_tools"]["max_calls"])
@@ -286,6 +300,7 @@ class MirrorChatServicer(_BaseServicer):
                 max_steps=max_steps,
                 # 小写 true/false 与 prompt 里的字面量对齐（Python 的 True 会让模型读到大写）
                 has_retrieval="true" if request.has_retrieval else "false",
+                today=today_text(),
             )
 
             t0 = time.monotonic()
