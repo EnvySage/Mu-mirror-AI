@@ -55,6 +55,8 @@ from prompts_loader import loader
 # 上限（config plan_tools 段，各上限配置化）
 _MAX_CALLS = int(CONFIG["plan_tools"]["max_calls"])
 _MAX_TOOLS = int(CONFIG["plan_tools"]["max_tools"])
+# 循环规划器单独的思考预算（见 config.py plan_tools.thinking_budget_tokens 的实测说明）
+_PLAN_THINKING_BUDGET = int(CONFIG["plan_tools"].get("thinking_budget_tokens", 0))
 _MAX_ARG_CHARS = int(CONFIG["plan_tools"]["max_arg_chars"])
 # 循环里"已有材料"逐条渲染的截断长度——与 Chat 渲染工具结果同一口径，复用同一配置项
 _MAX_TOOL_CHARS = int(CONFIG["plan_tools"]["max_tool_chars"])
@@ -291,7 +293,8 @@ class MirrorChatServicer(_BaseServicer):
             # thinking 立刻外推给 B；content 是 JSON 正文，只能进 buffer 不能外推。
             buffer: list[str] = []
             thinking_blocks = 0
-            for kind, text in llm.chat_stream([{"role": "user", "content": prompt}]):
+            for kind, text in llm.chat_stream([{"role": "user", "content": prompt}],
+                                              thinking_budget=_PLAN_THINKING_BUDGET):
                 if kind == "thinking":
                     thinking_blocks += 1
                     yield pb2.PlanStepChunk(thinking=text)

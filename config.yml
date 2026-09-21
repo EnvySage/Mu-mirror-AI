@@ -34,6 +34,10 @@ plan_tools:
   max_tools: 20            # 注册表快照在 prompt 中渲染的条目上限（防 prompt 膨胀）
   max_arg_chars: 300       # 单个工具 args_schema 在 prompt 中的截断长度
   max_tool_chars: 2000     # Chat 渲染单条工具结果（summary/payload）的截断长度
+  # 循环规划器思考预算（仅 anthropic 协议；0 = 不传 thinking 参数）。实测 mimo-v2.5：
+  # 2048→第1步必撞60s超时；1024→单步11~60+s波动大；0→9s/28s 且照样吐 thinking（原生推理模型）。
+  # 换真 Claude 时 0 = 规划阶段无思考，届时可设 1024（Anthropic 下限）
+  thinking_budget_tokens: 0
 
 # 累计镜子（rolling-mirror-design.md；回看深度档位闸门在 B 侧四闸，Python 只做渲染层防线）
 mirror:

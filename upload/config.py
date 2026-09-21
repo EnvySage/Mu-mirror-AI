@@ -37,6 +37,13 @@ _defaults = {
         "max_tools": 20,           # 注册表快照渲染条目上限
         "max_arg_chars": 300,      # 单个工具 args_schema 在 prompt 中的截断长度
         "max_tool_chars": 2000,    # Chat 渲染单条工具结果的截断长度
+        # 循环规划器的思考预算（仅 anthropic 协议生效；0 = 不传 thinking 参数）。
+        # 2026-09-21 联调实测（mimo-v2.5，~36 token/s）：
+        #   · 沿用 llm.thinking_budget_tokens=2048 → 光思考 ~57s，第 1 步必撞 B 侧 60s 单步 deadline
+        #   · 1024 → 单步 11~60+s 且波动极大，mimo 不严格守预算，显式预算反而诱导它"想满"
+        #   · 0    → 单步 9s / 28s，且 mimo 作为原生推理模型照样吐 thinking，思考面板不受影响
+        # 换成真 Claude 时注意：0 = 规划器完全不思考（面板在规划阶段为空），届时可设 1024（其下限）
+        "thinking_budget_tokens": 0,
     },
     "mirror": {
         "prev_mirror_max_chars": 30000,      # ① 上一份镜子渲染截断（累计镜子轮）

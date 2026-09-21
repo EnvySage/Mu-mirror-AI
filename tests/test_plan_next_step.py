@@ -48,10 +48,12 @@ class _ScriptedLlm:
     def __init__(self, pieces):
         self._pieces = pieces
         self.stream_calls: list[list[dict]] = []
+        self.thinking_budgets: list = []
         self.json_task_calls = 0
 
-    def chat_stream(self, messages, temperature=0.7):
+    def chat_stream(self, messages, temperature=0.7, thinking_budget=None):
         self.stream_calls.append(messages)
+        self.thinking_budgets.append(thinking_budget)
         yield from self._pieces
 
     def json_task(self, messages, temperature=0.7):
@@ -227,6 +229,52 @@ class TestStreamOrdering:
 # ---------------------------------------------------------------------------
 # 3. 注册表校验（防幻觉工具名）
 # ---------------------------------------------------------------------------
+class TestPlannerThinkingBudget:
+    """2026-09-21 联调回归：规划器沿用全局 2048 思考预算时，mimo-v2.5（~36 token/s）
+    光思考 ~57s，第 1 步必撞 B 侧 60s 单步 deadline，循环一个工具都执行不了。"""
+
+    def test_plan_next_step_passes_planner_budget(self):
+        import services.plan_service as ps
+        llm = _ScriptedLlm([("content", '{"calls": [], "done": true}')])
+        _run(MirrorChatServicer(), _request(), llm)
+        assert llm.thinking_budgets == [ps._PLAN_THINKING_BUDGET]
+
+    def test_planner_budget_smaller_than_answer_budget(self):
+        """规划器预算必须小于最终回答预算，否则等于没修"""
+        import services.plan_service as ps
+        from config import CONFIG
+        assert ps._PLAN_THINKING_BUDGET < int(CONFIG["llm"]["thinking_budget_tokens"])
+        # 0（不传 thinking 参数）或 ≥1024（Anthropic extended thinking 下限），中间值会被端点拒
+        assert ps._PLAN_THINKING_BUDGET == 0 or ps._PLAN_THINKING_BUDGET >= 1024
+
+    def test_prompt_tells_model_thinking_is_user_visible(self):
+        llm = _ScriptedLlm([("content", '{"calls": [], "done": true}')])
+        _run(MirrorChatServicer(), _request(), llm)
+        assert "思考过程会原样显示给用户看" in llm.prompt
+
+
+class TestFinalBatchPrompt:
+    """2026-09-21 联调后改定：done=true 可带 calls（查完这批即收尾），互不依赖的查询同一步做。
+    实测 mimo 每轮规划 20~60s，"单独花一轮说够了"和"一步只查一个"都是纯等待。"""
+
+    def test_prompt_teaches_final_batch_and_batching(self):
+        llm = _ScriptedLlm([("content", '{"calls": [], "done": true}')])
+        _run(MirrorChatServicer(), _request(), llm)
+        p = llm.prompt
+        assert "查完这批就能答" in p
+        assert "互不依赖的查询放在同一步" in p
+        # 情绪类示例：两个工具 + done=true 同帧
+        assert '{"tool": "get_stats", "args": {"days": 30}}, {"tool": "search_records"' in p
+
+    def test_done_with_calls_passes_through(self):
+        """done=true + calls 非空 → 终帧原样透传（由 B 侧执行完即收尾）"""
+        llm = _ScriptedLlm([("content",
+            '{"calls": [{"tool": "get_stats", "args": {"days": 30}}], "done": true}')])
+        last = _run(MirrorChatServicer(), _request(), llm)[-1]
+        assert last.final and last.done
+        assert [c.tool for c in last.calls] == ["get_stats"]
+
+
 class TestRegistrySanitize:
     def test_hallucinated_tool_dropped(self):
         llm = _ScriptedLlm([("content",
@@ -478,7 +526,7 @@ class TestErrorPath:
         """LLM 层异常沿用 errors.py 映射（不裸抛）"""
 
         class _BoomLlm:
-            def chat_stream(self, messages, temperature=0.7):
+            def chat_stream(self, messages, temperature=0.7, thinking_budget=None):
                 raise AiServiceError("炸了")
                 yield  # pragma: no cover
 

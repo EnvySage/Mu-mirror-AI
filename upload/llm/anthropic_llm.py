@@ -77,7 +77,8 @@ class AnthropicLlm(BaseLlm):
         return response.content[0].text
 
     def chat_stream(self, messages: list[dict],
-                    temperature: float = 0.7) -> Generator[tuple[str, str], None, None]:
+                    temperature: float = 0.7,
+                    thinking_budget: int | None = None) -> Generator[tuple[str, str], None, None]:
         """流式对话：每项 (kind, text)，kind ∈ {"thinking", "content"}。
 
         基于原始事件流（RawMessageStreamEvent）而非 text_stream——text_stream 只吐正文，
@@ -98,12 +99,14 @@ class AnthropicLlm(BaseLlm):
         if system:
             base["system"] = system
 
-        if _THINKING_BUDGET > 0:
+        # 调用方可覆盖预算（规划器用小预算，见 plan_service.PlanNextStep）；None = 全局配置
+        budget = _THINKING_BUDGET if thinking_budget is None else int(thinking_budget)
+        if budget > 0:
             thinking_kwargs = {
                 **base,
                 # anthropic 要求 max_tokens > budget_tokens（否则 400），给正文留足余量
-                "max_tokens": max(_CHAT_MAX_TOKENS, _THINKING_BUDGET + 1024),
-                "thinking": {"type": "enabled", "budget_tokens": _THINKING_BUDGET},
+                "max_tokens": max(_CHAT_MAX_TOKENS, budget + 1024),
+                "thinking": {"type": "enabled", "budget_tokens": budget},
                 # 开启 thinking 时 anthropic 只接受 temperature=1，故此处不传该参数
             }
             try:

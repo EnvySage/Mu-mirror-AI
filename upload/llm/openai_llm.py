@@ -71,8 +71,12 @@ class OpenAiLlm(BaseLlm):
         return response.choices[0].message.content
 
     def chat_stream(self, messages: list[dict],
-                    temperature: float = 0.7) -> Generator[tuple[str, str], None, None]:
+                    temperature: float = 0.7,
+                    thinking_budget: int | None = None) -> Generator[tuple[str, str], None, None]:
         """流式对话：每项 (kind, text)，kind ∈ {"thinking", "content"}。
+
+        thinking_budget 仅为与 base 签名对齐而接收，本实现**不生效**：OpenAI 兼容系
+        （DeepSeek/mimo 的 reasoning_content 等）没有统一的思考预算字段，硬传会 400。
 
         reasoning_content 是 DeepSeek/mimo 等 OpenAI 兼容系的扩展增量字段（SDK 的
         ChoiceDelta 没有该属性声明，靠 model_extra 承载）——必须 getattr 防御，

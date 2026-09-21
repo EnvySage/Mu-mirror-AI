@@ -170,7 +170,7 @@ class TestFormatToolResults:
 
     def test_summary_rendered(self):
         out = _format_tool_results([self._tr()])
-        assert out == "[工具结果·search_records] 12 条"
+        assert out == "工具 search_records 返回：12 条"
 
     def test_payload_fallback_when_summary_empty(self):
         out = _format_tool_results([self._tr(summary="", payload='[{"date":"9-01"}]')])
@@ -199,10 +199,92 @@ class TestFormatToolResults:
         out = _format_tool_results([self._tr(tool="")])
         assert "unknown_tool" in out
 
+    def test_payload_rendered_alongside_summary(self):
+        """2026-09-21 联调回归：summary 非空时 payload 也必须渲染（原先被吞，回答模型只看到"12条"）"""
+        payload = ('{"count": 2, "records": ['
+                   '{"record_id": 7, "title": "开题", "quote": "导师说框架要重做，好焦虑", '
+                   '"date": "2026-09-02T23:10:00", "content_type": "work"},'
+                   '{"record_id": 9, "title": "", "quote": "又失眠了", "date": "2026-09-05", "content_type": "health"}]}')
+        out = _format_tool_results([self._tr(summary="search_records:2条", payload=payload)])
+        assert out.startswith("工具 search_records 返回：search_records:2条\n")
+        assert "- 2026-09-02（work） 开题：导师说框架要重做，好焦虑" in out
+        assert "- 2026-09-05（health）：又失眠了" in out  # 无标题不留孤儿空格
+
+    def test_stats_payload_rendered_as_json_unescaped(self):
+        payload = '{"days": 30, "record_count": 12, "moods": {"anxious": 5, "calm": 2}}'
+        out = _format_tool_results([self._tr(tool="get_stats", summary="get_stats:记录12条/30天", payload=payload)])
+        assert '"anxious": 5' in out and "record_count" in out
+
+    def test_failed_tool_payload_still_hidden(self):
+        """失败结果即使带 payload 也不渲染（隔离不因本次改动放松）"""
+        out = _format_tool_results([self._tr(summary="x", payload='{"records":[{"quote":"泄露"}]}', success=False)])
+        assert "泄露" not in out
+
+    def test_recall_item_excerpts_rendered(self):
+        """2026-09-21 联调回归：recall_item 读到正文，回答仍说"只看到上传记录"——摘录原先被丢"""
+        payload = json.dumps({
+            "item": {"vault_item_id": 3, "display_name": "mirror项目的设计文档.md", "file_type": "md"},
+            "quote": "首段", "digest_status": "confirmed",
+            "quotes": [{"text": "架构分 B/F/AI 三仓"}, {"text": "gRPC 打通 Java 与 Python"}],
+        }, ensure_ascii=False)
+        out = _format_tool_results([self._tr(tool="recall_item", summary="recall_item:mirror项目的设计文档.md",
+                                             payload=payload)])
+        assert "[F1] mirror项目的设计文档.md" in out
+        assert "[F1] 正文摘录" in out
+        assert "- 架构分 B/F/AI 三仓" in out and "- gRPC 打通 Java 与 Python" in out
+        assert "首段" not in out  # 有 quotes 时不重复塞 quote
+
+    def test_find_item_still_metadata_only(self):
+        """find_item 只负责找文件，不出正文摘录（payload 没有顶层 quotes/quote）"""
+        payload = json.dumps({"count": 1, "items": [
+            {"vault_item_id": 3, "display_name": "设计.md", "quote": "命中片段"}]}, ensure_ascii=False)
+        out = _format_tool_results([self._tr(tool="find_item", summary="find_item:1个文件", payload=payload)])
+        assert "[F1] 设计.md" in out and "正文摘录" not in out
+
+    def test_context_text_when_only_tools_have_data(self):
+        from services.chat_service import _context_text, _CONTEXT_EMPTY_WITH_TOOLS
+        assert _context_text([], "工具 get_stats 返回：…") == _CONTEXT_EMPTY_WITH_TOOLS
+        assert _context_text([], "") == "（没有找到相关记录）"  # 两边都空：旧文案不变
+
     def test_mixed_success_and_failure(self):
         out = _format_tool_results([self._tr(tool="get_stats"), self._tr(tool="find_item", success=False)])
-        assert out.count("[工具结果·") == 2
+        assert out.count("工具 ") == 2 and "[" not in out
         assert "（工具执行失败" in out
+
+
+class TestFakeCiteFilter:
+    """2026-09-21 联调回归：模型把工具数据"引用"成 [get_stats] 写进回答，prompt 禁止也拦不住"""
+
+    def _run(self, pieces, tools=("get_stats", "search_records")):
+        from services.chat_service import _FakeCiteFilter
+        f = _FakeCiteFilter(tools)
+        return "".join(f.feed(p) for p in pieces) + f.flush()
+
+    def test_drops_tool_name_markers(self):
+        assert self._run(["12条焦虑[get_stats]。还有[search_records]一条"]) == "12条焦虑。还有一条"
+
+    def test_drops_tool_result_prefix_and_dot_variant(self):
+        assert self._run(["a[工具结果]b[工具结果·get_stats]c[search_records·x]d"]) == "abcd"
+        # 实测变体：模型从 prompt 章节标题「工具查询结果」自造
+        assert self._run(["空空如也 [工具查询结果]。"]) == "空空如也 。"
+
+    def test_keeps_real_citations(self):
+        assert self._run(["你写过 [2] 和 [F1]，还有[12]"]) == "你写过 [2] 和 [F1]，还有[12]"
+
+    def test_keeps_unknown_brackets(self):
+        """只拦本轮真实用过的工具名，口语里的 [笑] 之类不误伤"""
+        assert self._run(["哈哈[笑]，[find_item]"]) == "哈哈[笑]，[find_item]"
+
+    def test_marker_split_across_chunks(self):
+        assert self._run(["统计显示[get_", "sta", "ts]，嗯"]) == "统计显示，嗯"
+
+    def test_unclosed_bracket_flushed_at_end(self):
+        assert self._run(["结尾是个 [未闭合"]) == "结尾是个 [未闭合"
+
+    def test_newline_or_overlong_releases_hold(self):
+        assert self._run(["[不是标记\n下一行"]) == "[不是标记\n下一行"
+        long = "[" + "长" * 60
+        assert self._run([long]) == long
 
 
 # ---------------------------------------------------------------------------
@@ -266,8 +348,8 @@ class TestPromptWiring:
     def test_chat_template_tool_results_placeholder(self):
         from prompts_loader import loader
         p = loader.render("chat", question="q", history="h", context="c", glossary="",
-                          tool_results="[工具结果·get_stats] 30 天 42 条")
-        assert "[工具结果·get_stats] 30 天 42 条" in p
+                          tool_results="工具 get_stats 返回：30 天 42 条")
+        assert "工具 get_stats 返回：30 天 42 条" in p
         assert "{tool_results}" not in p
         # 空工具结果：占位符清空，不留孤儿节内容（节头保留由模板固定，内容行为空）
         p_empty = loader.render("chat", question="q", history="h", context="c", glossary="",

@@ -14,8 +14,13 @@ class BaseLlm(ABC):
 
     @abstractmethod
     def chat_stream(self, messages: list[dict],
-                    temperature: float = 0.7) -> Generator[tuple[str, str], None, None]:
-        """流式对话，逐块返回 (kind, text)：kind ∈ {"thinking", "content"}"""
+                    temperature: float = 0.7,
+                    thinking_budget: int | None = None) -> Generator[tuple[str, str], None, None]:
+        """流式对话，逐块返回 (kind, text)：kind ∈ {"thinking", "content"}
+
+        thinking_budget：本次调用的思考预算（token）；None = 用全局 llm.thinking_budget_tokens。
+        规划器要单独传一个小预算——见 plan_service.PlanNextStep 的说明。
+        """
         ...
 
     def json_task(self, messages: list[dict], temperature: float = 0.7) -> str:
