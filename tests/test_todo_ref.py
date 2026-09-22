@@ -40,19 +40,20 @@ def _hint(todo_id=7, title="补作业", excerpt="明天要补作业", created="2
 # ---------------------------------------------------------------------------
 class TestProtoContract:
     def test_classify_request_field_numbers(self):
-        """open_todos=5（glossary=4 顺延，无撞号）；recent_context=6（recent-context 轮新增）"""
+        """open_todos=5（glossary=4 顺延，无撞号）；recent_context=6（recent-context 轮新增）；
+        reference_date=7（相对时间消解，对齐 B 仓）"""
         fields = rp_pb2.ClassifyRequest.DESCRIPTOR.fields_by_name
         assert {n: f.number for n, f in fields.items()} == {
             "content": 1, "llm_config": 2, "single": 3, "glossary": 4, "open_todos": 5,
-            "recent_context": 6,
+            "recent_context": 6, "reference_date": 7,
         }
 
     def test_classify_item_field_numbers(self):
-        """refers_to_todo=8（keywords=7 顺延，无撞号）"""
+        """refers_to_todo=8（keywords=7 顺延，无撞号）；time_substitutions=9（相对时间消解，对齐 B 仓）"""
         fields = rp_pb2.ClassifyItem.DESCRIPTOR.fields_by_name
         assert {n: f.number for n, f in fields.items()} == {
             "title": 1, "summary": 2, "content": 3, "content_type": 4, "moods": 5,
-            "status": 6, "keywords": 7, "refers_to_todo": 8,
+            "status": 6, "keywords": 7, "refers_to_todo": 8, "time_substitutions": 9,
         }
 
     def test_todo_hint_fields(self):

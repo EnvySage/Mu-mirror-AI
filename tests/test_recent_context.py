@@ -47,11 +47,11 @@ SAMPLE = [
 # ---------------------------------------------------------------------------
 class TestProtoContract:
     def test_classify_request_field_numbers(self):
-        """recent_context=6（open_todos=5 顺延，无撞号）"""
+        """recent_context=6（open_todos=5 顺延，无撞号）；reference_date=7（相对时间消解，对齐 B 仓）"""
         fields = rp_pb2.ClassifyRequest.DESCRIPTOR.fields_by_name
         assert {n: f.number for n, f in fields.items()} == {
             "content": 1, "llm_config": 2, "single": 3, "glossary": 4,
-            "open_todos": 5, "recent_context": 6,
+            "open_todos": 5, "recent_context": 6, "reference_date": 7,
         }
 
     def test_recent_hint_fields(self):

@@ -17,6 +17,18 @@ message ClassifyRequest {
   repeated GlossaryTerm glossary = 4;  // 用户个人词汇表（confirmed top30），软约束注入
   repeated TodoHint open_todos = 5;  // 用户未完成待办清单（todo-registry 判别期；B 侧查 registry，最近优先 ≤20 条）
   repeated RecentHint recent_context = 6;  // 近 7 天记录摘要（B 侧查 chunks.metadata 注入；Python 只渲染不查库）
+  // 相对时间消解的参照日期（yyyy-MM-dd，Asia/Shanghai）= 这条记录里的「今天」是几号。
+  // B 侧取 record.created_at 的日期部分；未传 = 不消解，prompt 与旧版一致（零回归）。
+  // 与 B 仓 record_processor.proto 字段号 7 对齐（B 侧 2026-09-20 bc54a8c 已上线，本端此前漏做）
+  string reference_date = 7;
+}
+
+// 时间词替换项：把片段里的相对时间词替换成绝对日期。
+// 分工：本端负责「识别 + 计算」，B 侧 TimeSubstitutionApplier 负责「执行替换」——不让 LLM
+// 直接吐改写后的全文，避免它顺手润色掉非时间内容。与 B 仓字段号 1/2 对齐
+message TimeSubstitution {
+  string original = 1;   // 片段原文里逐字出现的时间词，如「大后天」
+  string resolved = 2;   // 消解后的日期文本，如「9月22日」（跨年时带年份）
 }
 
 // 待办清单条目（todo-registry-design.md §3.2）：B 侧查 todo_registry（current_status != 'completed'）注入；
@@ -78,4 +90,5 @@ message ClassifyItem {
   TaskStatus status = 6;
   repeated string keywords = 7;
   TodoRef refers_to_todo = 8;       // 待办引用（todo-registry 判别期；无引用不设值）
+  repeated TimeSubstitution time_substitutions = 9;  // 本片段内的时间词替换（无参照日期 / 无相对时间词时为空）
 }

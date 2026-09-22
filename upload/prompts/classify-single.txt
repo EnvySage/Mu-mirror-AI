@@ -51,7 +51,7 @@ HAPPY、EXCITED、SATISFIED、GRATEFUL、EXPECTING、CALM、BORED、CONFUSED、A
 - COMPLETED（已完成）
 - content_type 不是 TODO/PLAN 时用 STATUS_UNKNOWN；是 TODO/PLAN 时必须从上面三个里选，不许用 STATUS_UNKNOWN
 
-{open_todos}{recent_context}
+{open_todos}{recent_context}{time_rule}
 ## 输出格式
 
 只输出 JSON（不要多余解释）：
