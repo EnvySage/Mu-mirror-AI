@@ -9,7 +9,7 @@ toolcalling sprint PlanTools 全链路五场景 + tool_results 渲染实测：
 6. 步数超限（3 步 → 截断 2）+ args 坏 JSON（仅剔除该步）附加场景
 7. Chat tool_results 渲染：带工具结果流式正常；空列表零影响；B1/B2/B4 场景接线（coverage/persona 计划）
 
-前置：coordination/stub_llm.py 已在 127.0.0.1:18080 运行，server.py 已在 50051 运行。
+前置：coordination/stub_llm.py 已在 127.0.0.1:18080 运行，server.py 已在 10003 运行。
 用法：.venv/Scripts/python.exe tests/e2e_round11.py
 """
 
@@ -98,7 +98,7 @@ def main():
     badjson = ThreadingHTTPServer(("127.0.0.1", BADJSON_PORT), BadJsonHandler)
     threading.Thread(target=badjson.serve_forever, daemon=True).start()
 
-    with grpc.insecure_channel("localhost:50051") as channel:
+    with grpc.insecure_channel("localhost:10003") as channel:
         grpc.channel_ready_future(channel).result(timeout=5)
         chat = chat_grpc.MirrorChatStub(channel)
 

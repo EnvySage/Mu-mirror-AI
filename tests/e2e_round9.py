@@ -68,7 +68,7 @@ def main():
     slow = ThreadingHTTPServer(("127.0.0.1", SLOW_PORT), SlowHandler)
     threading.Thread(target=slow.serve_forever, daemon=True).start()
 
-    with grpc.insecure_channel("localhost:50051") as channel:
+    with grpc.insecure_channel("localhost:10003") as channel:
         grpc.channel_ready_future(channel).result(timeout=5)
         chat = chat_grpc.MirrorChatStub(channel)
         emb = emb_grpc.EmbeddingServiceStub(channel)

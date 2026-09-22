@@ -11,7 +11,7 @@ rolling-mirror 累计镜子 GenerateProfile 全链路场景（设计稿 §4-AI-3
    且 prompt 段落渲染实测（E2E 断言输出含校正校准表述）；lookback≠0 不带
 5. 回归保障：B 未升级（三字段缺省）旧式请求正常六维输出
 
-前置：coordination/stub_llm.py 已在 127.0.0.1:18080 运行，server.py 已在 50051 运行。
+前置：coordination/stub_llm.py 已在 127.0.0.1:18080 运行，server.py 已在 10003 运行。
 桩启动（AI 仓 venv python，裸 python 退出码 49）：
   E:/project/mirror/own/Mu-mirror-AI/.venv/Scripts/python.exe E:/project/mirror/own/coordination/stub_llm.py
 用法：.venv/Scripts/python.exe tests/e2e_round12.py
@@ -57,7 +57,7 @@ def main():
     print("第十二轮 E2E：累计镜子 GenerateProfile（真实 server + 桩 LLM）")
     print("=" * 60)
 
-    with grpc.insecure_channel("localhost:50051") as channel:
+    with grpc.insecure_channel("localhost:10003") as channel:
         grpc.channel_ready_future(channel).result(timeout=5)
         profile = profile_grpc.MirrorProfileStub(channel)
 

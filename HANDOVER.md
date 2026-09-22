@@ -8,7 +8,7 @@
 | 项 | 值 |
 |---|---|
 | Python 3 + gRPC 同步 server（**非 aio**） | `server.py` |
-| 端口 | **50051**，workers 4 |
+| 端口 | **10003**，workers 4 |
 | 虚拟环境 | `.venv/`（**必须用 `.venv/Scripts/python.exe`，裸 python 启动桩会退出码 49**） |
 | 启动 | `.venv/Scripts/python.exe server.py` |
 | 桩 LLM | `coordination/stub_llm.py`，**OpenAI 兼容 18080 端口**，同样必须用 AI 仓 venv python 启动 |
@@ -53,7 +53,7 @@ tests/                  按轮次：test_round9~12 + e2e_round9~12
 ```
 单测：test_round9~12 共 143 项        → .venv/Scripts/python.exe -m pytest tests/test_round12.py（逐文件跑）
 冒烟：test_client.py --stub 18 项     → 需桩 LLM 18080 在线
-E2E：e2e_round9~12                    → 需 server 50051 + 桩 18080 都在线
+E2E：e2e_round9~12                    → 需 server 10003 + 桩 18080 都在线
 环境自检：test_environment.py
 ```
 
@@ -70,6 +70,6 @@ E2E：e2e_round9~12                    → 需 server 50051 + 桩 18080 都在�
 
 ## 7. 联调提醒
 
-- 服务启动顺序无强依赖；但**改了 services/ 或 prompts/ 必须重启 50051**
+- 服务启动顺序无强依赖；但**改了 services/ 或 prompts/ 必须重启 10003**
 - Java 侧 gRPC 超时 15s，本端 LLM timeout 20s——Java 会先放弃，本端不应白跑
 - 词典轮 dev 要点：glossary_render 空词条不留孤儿话术（B 未传 glossary 时 prompt 与旧版完全一致，零回归）

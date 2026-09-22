@@ -266,7 +266,7 @@ def main():
         start_stub()
         print(f"桩 LLM 已启动: http://127.0.0.1:{STUB_PORT}/v1")
 
-    with grpc.insecure_channel('localhost:50051') as channel:
+    with grpc.insecure_channel('localhost:10003') as channel:
         grpc.channel_ready_future(channel).result(timeout=5)
         print("\n[连接] OK")
 

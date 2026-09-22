@@ -9,8 +9,8 @@ RUN pip install --no-cache-dir -r requirements.txt -i https://pypi.tuna.tsinghua
 # 复制代码
 COPY . .
 
-# 暴露端口
-EXPOSE 50051
+# 暴露端口（与 config.yml / Java 侧 grpc 地址一致）
+EXPOSE 10003
 
 # 启动服务
 CMD ["python", "server.py"]

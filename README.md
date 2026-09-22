@@ -76,7 +76,7 @@ upload/                  部署镜像副本（与根目录逐字节同步，见�
 .venv/Scripts/python.exe server.py
 ```
 
-服务默认监听 `config.yml` 中的 `server.port`。**注意根目录 `config.yml` 默认 50051，而 `upload/config.yml` 是 10003** —— Java 侧 dev 环境期望 10003，联调时需对齐（详见「常见坑」）。
+服务默认监听 `config.yml` 中的 `server.port`。**注意根目录 `config.yml` 默认 10003，与 `upload/config.yml` 完全一致** —— Java 侧 dev 环境期望 10003，联调时需对齐（详见「常见坑」）。
 
 ### 冒烟与测试
 
@@ -163,7 +163,7 @@ Windows 一键部署见仓库外层的 `部署AI.bat`。**打包用排除法而�
 
 ## 关于 `upload/`
 
-`upload/` 是部署镜像副本，与根目录**逐字节同步**（`generate_proto.py` 自动同步 stub，其余文件手工同步）。它不是死代码：`upload/config.yml` 的端口（10003）才是与部署一致的那份。
+`upload/` 是部署镜像副本，与根目录**逐字节同步**（`generate_proto.py` 自动同步 stub，其余文件手工同步）。它不是死代码：两份 `config.yml` 的端口已统一为 10003。
 
 **改动本仓代码时需双写**（根目录 + `upload/`），否则部署出去的是旧版本。
 
@@ -171,10 +171,10 @@ Windows 一键部署见仓库外层的 `部署AI.bat`。**打包用排除法而�
 
 | 坑 | 现象 | 解决 |
 |---|---|---|
-| 端口不一致 | 从仓库根起 Python 听 50051，而 Java 打 10003，表现为"对话没有工具轨迹"（规划失败静默降级），**不报错** | 对齐 `config.yml` 的 port 与 Java 侧 `application-dev.yml` |
+| 端口不一致 | 历史上根目录 config.yml 为 50051 而 Java 侧期望 10003，表现为"对话没有工具轨迹"（规划失败静默降级），**不报错** | 对齐 `config.yml` 的 port 与 Java 侧 `application-dev.yml` |
 | 用裸 python 启动 | 退出码 49 | 用 `.venv/Scripts/python.exe` |
 | 改了桩 LLM 没重启 | E2E 场景假失败 | 重启 18080 进程 |
-| 改了 services/ 或 prompts/ 没重启 | 改动不生效 | 重启 50051 |
+| 改了 services/ 或 prompts/ 没重启 | 改动不生效 | 重启 10003 对应的服务 |
 | 依赖漂移 | 本地能跑服务器跑不起来 | `requirements-minimal.txt` 全部锁定具体版本，升级前先本地跑完整测试 |
 
 ## 相关仓库
