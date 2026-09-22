@@ -82,9 +82,28 @@ class TestReferenceDateAndRule:
     def test_templates_render_rule_with_reference(self):
         for name in ("classify", "classify_single"):
             p = loader.render(name, content="x", glossary="", open_todos="", recent_context="",
-                              time_rule=format_time_rule(REF))
-            assert "这条记录写于 2026-09-12（星期六）" in p, name
+                              time_rule=format_time_rule(REF, single=(name == "classify_single")))
+            assert "相对时间词消解" in p, name
+            assert "这段记录写于 **2026-09-12（星期" in p, name
             assert re.findall(r"\{[a-z_]+\}", p) == [], name
+
+    def test_rule_placement_is_right_after_output_format(self):
+        """规则段必须紧贴「输出格式」（2026-09-22 真机实测：放 prompt 中部时模型频繁漏字段）"""
+        for name, single in (("classify", False), ("classify_single", True)):
+            p = loader.render(name, content="USER_TXT", glossary="", open_todos="", recent_context="",
+                              time_rule=format_time_rule(REF, single=single))
+            rule_at = p.find("相对时间词消解")
+            # 规则在「输出格式」之后、且距用户输入不远（中间只隔 JSON 骨架与说明）
+            assert p.find("输出格式") < rule_at, name
+            assert rule_at < p.rfind("USER_TXT"), name
+            assert p.rfind("USER_TXT") - rule_at < 1200, name
+
+    def test_rule_wording_matches_mode(self):
+        """单段模式 JSON 是平铺的，文案必须说"在这个 JSON 对象里"，不能说"每个 item 内部" """
+        split_rule = format_time_rule(REF)
+        single_rule = format_time_rule(REF, single=True)
+        assert "每个 item 对象内部" in split_rule and "每个 item 对象内部" not in single_rule
+        assert "在这个 JSON 对象里" in single_rule
 
 
 # ---------------------------------------------------------------------------
@@ -133,14 +152,27 @@ class TestResolveSubstitutions:
     def test_cross_year_fixed_word_gets_year(self):
         ref = date(2026, 12, 31)
         out = resolve_substitutions([_sub("明天"), _sub("今天")], "今天跨年，明天放假", ref)
-        assert out == [("明天", "2027年1月1日"), ("今天", "12月31日")]
+        # 兜底扫描按原文出现顺序产出（2026-09-22 起固定词由本端独立扫描，不再依赖 LLM 顺序）
+        assert out == [("今天", "12月31日"), ("明天", "2027年1月1日")]
 
     def test_shorter_word_contained_in_longer_is_skipped(self):
-        """文本里有"大后天"而替换表只有"后天"：替换"后天"会把"大后天"改成"大9月14日"，跳过"""
+        """文本里"后天"与"大后天"并存：两者都必须替换，且"后天"不得吃掉"大后天"的前缀
+
+        （2026-09-22 起由兜底扫描保证——LLM 是否列出都不影响）
+        """
         text = "后天考试，大后天放假"
-        assert resolve_substitutions([_sub("后天")], text, REF) == []
-        both = resolve_substitutions([_sub("后天"), _sub("大后天")], text, REF)
-        assert sorted(both) == [("后天", "9月14日"), ("大后天", "9月15日")]
+        out = resolve_substitutions([_sub("后天")], text, REF)
+        assert sorted(out) == [("后天", "9月14日"), ("大后天", "9月15日")]
+        # B 侧按长词优先执行替换后的实际文本（与 TimeSubstitutionApplier 同口径）
+        applied = text
+        for o, r in sorted(out, key=lambda x: -len(x[0])):
+            applied = applied.replace(o, r)
+        assert applied == "9月14日考试，9月15日放假"
+
+    def test_scan_does_not_emit_shorter_word_when_only_longer_present(self):
+        """文本里只有"大后天"：扫描按长词优先消费跨度，不得额外产出"后天" """
+        out = resolve_substitutions([], "大后天放假", REF)
+        assert out == [("大后天", "9月15日")]
 
     def test_duplicates_and_cap(self):
         text = "今天、明天、后天、昨天、前天都在忙，今晚也是"
@@ -158,9 +190,22 @@ class TestResolveSubstitutions:
         assert "前天" not in originals or "大前天" in originals
 
     def test_no_reference_or_malformed_input(self):
-        assert resolve_substitutions([_sub("明天")], "明天见", None) == []
-        assert resolve_substitutions("明天", "明天见", REF) == []
-        assert resolve_substitutions([None, "明天", 3], "明天见", REF) == []
+        assert resolve_substitutions([_sub("明天")], "明天见", None) == []      # 无参照日期 → 全不产出
+        # raw 畸形（非列表/含脏元素）不再导致整体放弃：固定词兜底独立于 LLM 输出
+        assert resolve_substitutions("明天", "明天见", REF) == [("明天", "9月13日")]
+        assert resolve_substitutions([None, "明天", 3], "明天见", REF) == [("明天", "9月13日")]
+
+    def test_fixed_terms_substituted_even_when_llm_omits_them(self):
+        """核心回归护栏（2026-09-22 真机实测 33% 成功率）：LLM 完全不给替换表时，固定词照样消解"""
+        out = resolve_substitutions([], "昨天好累啊", REF)
+        assert out == [("昨天", "9月11日")]
+        out = resolve_substitutions(None, "今天把PPT做完了，明天开始补文献综述", REF)
+        assert sorted(out) == [("今天", "9月12日"), ("明天", "9月13日")]
+
+    def test_llm_result_never_overrides_deterministic_fixed_date(self):
+        """LLM 把固定词日期算错（此处给 2030）：必须被本端确定性结果覆盖"""
+        out = resolve_substitutions([_sub("明天", "2030-01-01")], "明天开会", REF)
+        assert out == [("明天", "9月13日")]
 
 
 # ---------------------------------------------------------------------------
@@ -205,7 +250,7 @@ class TestClassifyIntegration:
             "time_substitutions": [_sub("今天", "2026-09-12"), _sub("明天", "2026-09-13")],
         }, ensure_ascii=False))
         resp = _classify(llm, content, single=True, reference_date="2026-09-12")
-        assert "这条记录写于 2026-09-12（星期六）" in llm.prompt
+        assert "这段记录写于 **2026-09-12（星期" in llm.prompt
         assert _subs(resp.items[0]) == [("今天", "9月12日"), ("明天", "9月13日")]
 
     def test_split_mode_validates_against_each_part(self):
@@ -233,3 +278,47 @@ class TestClassifyIntegration:
         resp = _classify(llm, "明天去剪头", single=True)
         assert "相对时间消解" not in llm.prompt
         assert _subs(resp.items[0]) == []
+
+    # ---- 外层字段容忍（2026-09-22 真机实测：模型单条时把字段提到顶层） ----
+
+    def test_outer_level_subs_accepted_when_single_item(self):
+        """模型把 time_substitutions 放到与 items 平级的顶层（单条场景）→ 采纳"""
+        content = "昨天好累啊"
+        llm = _SpyLlm(json.dumps({
+            "skip": False, "split_content": content,
+            "items": [{"title": "累", "summary": "累", "content_type": "THOUGHT", "moods": [],
+                       "status": "", "keywords": []}],
+            "time_substitutions": [_sub("昨天", "2026-09-11")],   # ← 在外层
+        }, ensure_ascii=False))
+        resp = _classify(llm, content, reference_date="2026-09-12")
+        assert _subs(resp.items[0]) == [("昨天", "9月11日")]
+
+    def test_outer_level_subs_rejected_when_multiple_items(self):
+        """多条时外层字段归属不明：不采纳，只认 item 内（推理类词不受影响仍靠 item）"""
+        content = "今天做A。明天做B"
+        llm = _SpyLlm(json.dumps({
+            "skip": False, "split_content": "今天做A|||明天做B",
+            "items": [
+                {"title": "A", "summary": "A", "content_type": "WORK", "moods": [], "status": "",
+                 "keywords": [], "time_substitutions": [_sub("今天")]},
+                {"title": "B", "summary": "B", "content_type": "PLAN", "moods": [], "status": "",
+                 "keywords": []},
+            ],
+            "time_substitutions": [_sub("下周三", "2026-09-16")],   # ← 外层，多条时不认
+        }, ensure_ascii=False))
+        resp = _classify(llm, content, reference_date="2026-09-12")
+        assert _subs(resp.items[0]) == [("今天", "9月12日")]
+        # 外层"下周三"归属不明 → 不采纳；各条只拿自己段里的固定词（兜底扫描）
+        assert _subs(resp.items[1]) == [("明天", "9月13日")]
+        assert all("下周三" not in o for i in resp.items for o, _ in _subs(i))
+
+    def test_fixed_words_substituted_even_when_model_says_nothing(self):
+        """端到端护栏：模型一个替换都没给，固定词仍被消解（真机 33% 成功率的直接修复）"""
+        content = "昨天好累啊"
+        llm = _SpyLlm(json.dumps({
+            "skip": False, "split_content": content,
+            "items": [{"title": "累", "summary": "累", "content_type": "THOUGHT",
+                       "moods": [], "status": "", "keywords": []}],
+        }, ensure_ascii=False))     # ← 完全没有 time_substitutions 字段
+        resp = _classify(llm, content, reference_date="2026-09-12")
+        assert _subs(resp.items[0]) == [("昨天", "9月11日")]

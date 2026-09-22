@@ -53,7 +53,7 @@
 - content_type 是 TODO 或 PLAN 时，**必须**从上面三个里选，不许用 STATUS_UNKNOWN
 - 其他类型（THOUGHT/NOTE/LEARNING/WORK/SOCIAL/HEALTH）一律用 STATUS_UNKNOWN
 
-{open_todos}{recent_context}{time_rule}
+{open_todos}{recent_context}
 ## 拆分输出规则（重要！）
 
 如果需要拆分成多条记录，用 "|||" 在原文中标记拆分点（不要改写原文）：
@@ -146,6 +146,7 @@
 
 说明：`refers_to_todo` 是**必填**字段——有引用时写 {"todo_id": 清单里的 id, "suggested_status": "NOT_STARTED/IN_PROGRESS/COMPLETED 三选一"}，无引用时写 {"todo_id": 0, "suggested_status": "STATUS_UNKNOWN"}。`todo_confidence` 填 0-1 的判断把握度（无引用时填 0 到 0.3 之间）。
 
+{time_rule}
 用户输入：
 {content}
 

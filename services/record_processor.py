@@ -126,15 +126,14 @@ class RecordProcessorServicer(pb2_grpc.RecordProcessorServicer):
             # 相对时间消解（time_substitution.py）：B 传参照日期 = 记录创建日；
             # 未传/非法 → 不渲染本节、不产出替换（prompt 与旧版一致，零回归）
             ref_date = parse_reference_date(request.reference_date)
-            time_rule = format_time_rule(ref_date)
             if ref_date:
                 print(f"[Classify] reference_date={ref_date.isoformat()}（相对时间消解开启）")
 
             if single:
                 return self._classify_single(llm, content, glossary_text, todos_text, recent_text,
-                                             time_rule, ref_date)
+                                             format_time_rule(ref_date, single=True), ref_date)
             return self._classify_split(llm, content, glossary_text, todos_text, recent_text,
-                                        time_rule, ref_date)
+                                        format_time_rule(ref_date), ref_date)
 
         except Exception as e:
             print(f"[Classify] 错误: {e}")
@@ -165,7 +164,8 @@ class RecordProcessorServicer(pb2_grpc.RecordProcessorServicer):
 
         # 恰好 1 条：取第一条，原文就是请求的完整片段。
         # 替换表按请求原片段校验：B 侧单段路径（ChunkServiceImpl）是对请求里的 segmentText 执行替换
-        item = self._build_item(item_data[0], fallback_content=content, ref_date=ref_date, subs_text=content)
+        item = self._build_item(item_data[0], fallback_content=content, ref_date=ref_date,
+                                subs_text=content, outer_subs=result.get("time_substitutions"))
         print(f"[Classify/single] 返回 1 条: {item.title}")
         return pb2.ClassifyResponse(skip=False, skip_reason="", items=[item])
 
@@ -202,20 +202,29 @@ class RecordProcessorServicer(pb2_grpc.RecordProcessorServicer):
         print(f"[Classify] split_content: {repr(split_content)}")
         print(f"[Classify] content_parts: {content_parts}")
 
+        # 外层字段容忍（2026-09-22 真机实测）：模型只拆出 1 条时，常把 time_substitutions
+        # 提到与 items 平级的顶层。多条时归属不明，不能猜——那种情况只认 item 内的。
+        outer_subs = result.get("time_substitutions") if len(items_data) == 1 else None
+        if outer_subs:
+            print(f"[Classify] time_substitutions 出现在 items 外层（单条场景），已采纳")
+
         items = []
         for i, item in enumerate(items_data):
             original_content = content_parts[i] if i < len(content_parts) else item.get("summary", "")
-            items.append(self._build_item(item, fallback_content=original_content, ref_date=ref_date))
+            items.append(self._build_item(item, fallback_content=original_content, ref_date=ref_date,
+                                          outer_subs=outer_subs))
         print(f"[Classify] 返回 {len(items)} 条记录")
         return pb2.ClassifyResponse(skip=False, skip_reason="", items=items)
 
     # ------------------------------------------------------------------
     def _build_item(self, item: dict, fallback_content: str, ref_date=None,
-                    subs_text: str | None = None) -> pb2.ClassifyItem:
+                    subs_text: str | None = None, outer_subs=None) -> pb2.ClassifyItem:
         """dict → ClassifyItem，含枚举兜底 + taskStatus 必填保证 + 时间词替换表
 
         subs_text：替换表的校验文本（original 必须逐字出现在其中）。须与 B 侧实际执行替换的
         文本一致——拆分模式是 ClassifyItem.content（缺省即用它），单段模式是请求原片段。
+        outer_subs：模型把 time_substitutions 放到 items 外层时的顶层值（仅单条场景传入）；
+        item 内已有时以其为准。
         """
         content_type = CONTENT_TYPE_MAP.get(
             str(item.get("content_type", "")).upper(), common.ContentType.CONTENT_UNKNOWN
@@ -230,7 +239,10 @@ class RecordProcessorServicer(pb2_grpc.RecordProcessorServicer):
             status = common.TaskStatus.NOT_STARTED
 
         item_content = item.get("content") or fallback_content
-        subs = resolve_substitutions(item.get("time_substitutions"),
+        raw_subs = item.get("time_substitutions")
+        if not raw_subs:
+            raw_subs = outer_subs
+        subs = resolve_substitutions(raw_subs,
                                      subs_text if subs_text is not None else item_content, ref_date)
         if subs:
             print(f"[Classify] 时间词替换 {len(subs)} 处: {subs}")

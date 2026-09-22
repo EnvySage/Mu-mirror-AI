@@ -13,6 +13,13 @@ B 侧 2026-09-20（bc54a8c）已上线替换执行器并开始传 reference_date
 2. 其余（下周三/这周末/三天后/月底……）采用 LLM 的结果，但必须解析成真实日期、距参照日期
    不超过一年、original 逐字出现在片段里且像个时间词，否则丢弃
 
+固定词**不依赖 LLM 是否列出**（2026-09-22 真机实测补充）：prompt 要求模型在每条记录里输出
+time_substitutions，但 mimo-v2.5 实测只有约 1/3 的请求照做——同一句话连跑 6 次，2 次替换成功、
+4 次原样落库；抓完整响应发现模型有时把该字段放到 items 外层（与 items 平级），有时甚至不放。
+固定偏移词是纯算术（参照日期 ± N 天），本就该由代码算，不该赌模型每次记得说。故 resolve_
+substitutions 在遍历 LLM 结果之外，**独立扫描原文补齐固定词**（见 _scan_fixed_terms）。
+LLM 只管它真正擅长的推理类词（下周三/三天后/月底）。
+
 无参照日期时：prompt 不渲染本节（空串，模板与旧版一致）、不产出任何替换——零回归。
 """
 
@@ -67,27 +74,44 @@ def parse_reference_date(value: str) -> date | None:
         return None
 
 
-def format_time_rule(ref: date | None) -> str:
-    """prompt 的{time_rule}段落；无参照日期返回空串（整节消失，模板与旧版一致）"""
+def format_time_rule(ref: date | None, single: bool = False) -> str:
+    """prompt 的{time_rule}段落；无参照日期返回空串（整节消失，模板与旧版一致）
+
+    single=True 用于单段模式：那份 JSON 是平铺的（没有 items 数组），字段直接放顶层——
+    文案必须跟着变，否则模型会照抄"每个 item 对象内部"，反而误导。
+
+    渲染位置紧贴「输出格式」之后（2026-09-22）：原先放在 prompt 中部，距 JSON 骨架 70 行，
+    真机实测模型频繁漏字段或把它提到 items 外层。格式要求与字段骨架必须挨着。
+    """
     if ref is None:
         return ""
-    day = f"{ref.isoformat()}（星期{_WEEKDAYS[ref.weekday()]}）"
-    return f"""## 相对时间消解（这条记录写于 {day}）
+    if single:
+        where = "在这个 JSON 对象里加 `time_substitutions` 字段"
+        example = (f"""```json
+{{"title": "补综述", "summary": "2026-09-13 起补文献综述", "...": "其余字段照常",
+ "time_substitutions": [{{"original": "明天", "resolved": "2026-09-13"}}]}}
+```""")
+    else:
+        where = "**每个 item 对象内部**加 `time_substitutions` 字段"
+        example = (f"""```json
+"items": [
+  {{"title": "补综述", "summary": "2026-09-13 起补文献综述", "...": "其余字段照常",
+   "time_substitutions": [{{"original": "明天", "resolved": "2026-09-13"}}, {{"original": "下周三", "resolved": "2026-09-16"}}]}}
+]
+```""")
+    return f"""## 输出格式补充：相对时间词消解
 
-原文里的"今天""明天""下周三""这周末""三天后"这类相对时间词，脱离写日记的这一天就读不懂了。
-请在**每条记录**的 JSON 里额外输出 `time_substitutions` 字段（单条模式就是那一个 JSON 对象），
-把**能确定到具体某一天**的相对时间词列出来：
+这段记录写于 **{ref.isoformat()}（星期{_WEEKDAYS[ref.weekday()]}）**。原文里的"明天""下周三"这类相对时间词，脱离这一天就读不懂了。请{where}：
 
-- `original`：原文里**逐字出现**的时间词本身，不带上下文（"明天上午去开会"只写"明天"）
-- `resolved`：算出来的日期，格式 yyyy-MM-dd，以 {ref.isoformat()} 为"今天"
-- 一周从周一算起："这周五""本周五"= {ref.isoformat()} 所在这一周的周五；"下周三"= 下一周的周三
-- 只写**具体某一天**；指一段时间的（"下周""这个月""最近""这几天""以后"）不要写
-- 不是时间意思的不要写（如"明天会更好"这类套话）
-- 没有相对时间词时写空列表：`"time_substitutions": []`
-- **其他字段照常输出、不要改写原文**，替换由系统按这个列表自动完成
+- 只列能**确定到具体某一天**的词；指一段时间的（"下周""这个月""最近""这几天"）不列
+- `original` 必须是原文中**逐字出现**的词本身（"明天上午去开会"写 `"明天"`，不写"明天上午"）
+- `resolved` 用 `yyyy-MM-dd`，以 {ref.isoformat()} 为"今天"；一周从周一起算
+- 没有相对时间词时写 `[]`
 
-示例（记录写于 2026-09-12 星期六）：原文"明天开始补文献综述，下周三交初稿"
-→ `"time_substitutions": [{{"original": "明天", "resolved": "2026-09-13"}}, {{"original": "下周三", "resolved": "2026-09-16"}}]`
+同时输出的 `summary`/`keywords` 里的相对时间词也一并换成绝对日期。
+
+示例：写于 2026-09-12，原文"明天开始补文献综述，下周三交初稿"
+{example}
 
 """
 
@@ -122,13 +146,46 @@ def _cn_date(d: date, ref: date) -> str:
     return f"{d.month}月{d.day}日" if d.year == ref.year else f"{d.year}年{d.month}月{d.day}日"
 
 
+def _scan_fixed_terms(text: str) -> list[str]:
+    """独立扫描原文，按长词优先取出所有固定偏移词（"大后天"不额外产出"后天"）
+
+    贪心 + 消费已匹配跨度：扫到"大后天"就跳过 3 个字符，不会再从中间匹配出"后天"。
+    这是"不依赖 LLM 是否列出固定词"的兜底——纯算术，代码自己算。
+    """
+    found: list[str] = []
+    i, n = 0, len(text)
+    while i < n:
+        for w in _FIXED_BY_LEN:
+            if text.startswith(w, i):
+                found.append(w)
+                i += len(w)
+                break
+        else:
+            i += 1
+    return found
+
+
 def resolve_substitutions(raw, text: str, ref: date | None) -> list[tuple[str, str]]:
-    """LLM 输出的 time_substitutions → 校验规整后的 [(original, resolved)]（脏值丢弃，不阻断分类）"""
-    if ref is None or not isinstance(raw, list) or not text:
+    """LLM 输出的 time_substitutions → 校验规整后的 [(original, resolved)]（脏值丢弃，不阻断分类）
+
+    raw 允许是 None / 非列表 / 空列表——固定词兜底扫描独立于它，照样产出。
+    """
+    if ref is None or not text:
         return []
+
     picked: list[tuple[str, str]] = []
     seen: set[str] = set()
-    for sub in raw:
+
+    # ① 固定词兜底：代码自己扫原文，不看 LLM 脸色（真机实测 LLM 只有约 1/3 的请求会列出替换表）
+    for word in _scan_fixed_terms(text):
+        if word in seen:
+            continue
+        offset, suffix = _FIXED[word]
+        seen.add(word)
+        picked.append((word, _cn_date(ref + timedelta(days=offset), ref) + suffix))
+
+    # ② LLM 结果：固定词用确定性日期覆盖它的 resolved；其余走防线 2 校验
+    for sub in (raw if isinstance(raw, list) else []):
         if not isinstance(sub, dict):
             continue
         original = str(sub.get("original") or "").strip()
@@ -141,6 +198,8 @@ def resolve_substitutions(raw, text: str, ref: date | None) -> list[tuple[str, s
             offset, suffix = _FIXED[fixed]
             original = fixed
             resolved = _cn_date(ref + timedelta(days=offset), ref) + suffix
+            if original in seen:      # ①已扫到，跳过（值相同）
+                continue
         else:
             # 防线 2：LLM 算的日期必须站得住
             if not (_TIME_CHARS & set(original)) or _ABSOLUTE_DATE.search(original):

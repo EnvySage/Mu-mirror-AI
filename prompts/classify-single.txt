@@ -51,7 +51,7 @@ HAPPY、EXCITED、SATISFIED、GRATEFUL、EXPECTING、CALM、BORED、CONFUSED、A
 - COMPLETED（已完成）
 - content_type 不是 TODO/PLAN 时用 STATUS_UNKNOWN；是 TODO/PLAN 时必须从上面三个里选，不许用 STATUS_UNKNOWN
 
-{open_todos}{recent_context}{time_rule}
+{open_todos}{recent_context}
 ## 输出格式
 
 只输出 JSON（不要多余解释）：
@@ -67,6 +67,8 @@ HAPPY、EXCITED、SATISFIED、GRATEFUL、EXPECTING、CALM、BORED、CONFUSED、A
   "refers_to_todo": {"todo_id": 0, "suggested_status": "STATUS_UNKNOWN"},
   "todo_confidence": 0.0
 }
+
+{time_rule}
 
 说明：`refers_to_todo` 是**必填**字段——有引用时写 {"todo_id": 清单里的 id, "suggested_status": "NOT_STARTED/IN_PROGRESS/COMPLETED 三选一"}，无引用时写 {"todo_id": 0, "suggested_status": "STATUS_UNKNOWN"}。`todo_confidence` 填 0-1 的判断把握度（无引用时填 0 到 0.3 之间）。
 
