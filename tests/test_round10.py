@@ -103,6 +103,37 @@ class TestSanitizeCandidates:
         ]})
         assert list(out[0].aliases) == ["a", "b", "123"]
 
+    # ---- 语料内校验（2026-09-23：挡住模型抄行号/写错数字后挂到别人 chunk 上）----
+
+    def test_chunk_id_outside_corpus_zeroed(self):
+        """chunk_id 不在本次语料内 → 归 0（该整数必然命中库里另一条 chunk）"""
+        out = _sanitize_candidates({"candidates": [
+            {"term": "论文", "source_chunk_id": 999},      # 不在语料里
+            {"term": "毕设", "source_chunk_id": 3},        # 在语料里
+        ]}, valid_chunk_ids={3, 7, 8})
+        assert [c.source_chunk_id for c in out] == [0, 3]
+
+    def test_chunk_id_local_index_zeroed(self):
+        """模型误填本地行号（1/2/3）→ 不在语料内 → 归 0，绝不挂到同号 chunk 上"""
+        out = _sanitize_candidates({"candidates": [
+            {"term": "论文", "source_chunk_id": 1},
+        ]}, valid_chunk_ids={152, 153})
+        assert out[0].source_chunk_id == 0
+
+    def test_chunk_id_not_validated_without_corpus(self):
+        """不传 valid_chunk_ids → 不校验（历史行为，兼容直接调用）"""
+        out = _sanitize_candidates({"candidates": [
+            {"term": "论文", "source_chunk_id": 999},
+        ]})
+        assert out[0].source_chunk_id == 999
+
+    def test_chunk_id_zero_stays_zero_with_corpus(self):
+        """填 0（无对应片段）= 合法值，不因校验被改"""
+        out = _sanitize_candidates({"candidates": [
+            {"term": "论文", "source_chunk_id": 0},
+        ]}, valid_chunk_ids={3})
+        assert out[0].source_chunk_id == 0
+
     def test_cap_at_max_candidates(self):
         """超过 max_candidates 截断（默认 10，宁缺毋滥防线）"""
         raw = [{"term": f"词{i}"} for i in range(50)]
@@ -239,8 +270,24 @@ class TestChunkTruncation:
             _chunk(chunk_id=8, segment="日常", created_at="2026-09-02", user_edited=False),
         ]
         text = _fmt_chunks(chunks)
-        assert "[1] [用户手动修改过] 2026-09-01 chunk_id=7：论文开题" in text
-        assert "[2] 2026-09-02 chunk_id=8：日常" in text
+        assert "[用户手动修改过] 2026-09-01 chunk_id=7：论文开题" in text
+        assert "2026-09-02 chunk_id=8：日常" in text
+
+    def test_fmt_chunks_has_single_number_per_line(self):
+        """每行只有一个可抄的数字 = chunk_id（2026-09-23 去掉本地行号 [1]）
+
+        原先渲染 `[1] ... chunk_id=7`，"编号"两解；模型若抄行号，那个小整数会指向库里
+        另一条真实 chunk（chunks.id 全局自增），静默挂错佐证。
+        """
+        import re
+        chunks = [
+            _chunk(chunk_id=7, segment="论文开题", created_at="2026-09-01"),
+            _chunk(chunk_id=8, segment="日常", created_at="2026-09-02"),
+        ]
+        for line in _fmt_chunks(chunks).splitlines():
+            rest = re.sub(r"\d{4}-\d{2}-\d{2}", "", line)   # 去日期
+            rest = re.sub(r"chunk_id=\d+", "", rest)        # 去 chunk_id
+            assert not re.search(r"\d", rest), f"行内残留数字: {line}"
 
     def test_fmt_chunks_segment_fallback_and_truncate(self):
         """segment 空 → 回退 content；超长截断到 max_chunk_chars"""

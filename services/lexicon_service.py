@@ -61,20 +61,25 @@ def truncate_chunks(chunks) -> tuple[list, int]:
     return kept, len(chunks) - len(kept)
 
 
-def _fmt_chunk(idx: int, chunk) -> str:
-    """单条语料 → prompt 行。user_edited 前置标注（权重更高的说明）。"""
+def _fmt_chunk(chunk) -> str:
+    """单条语料 → prompt 行。user_edited 前置标注（权重更高的说明）。
+
+    行内**只出现一个数字**：chunk_id（2026-09-23 起去掉本地行号）。原先同时渲染 `[3]` 与
+    `chunk_id=152`，而指令写"填片段编号对应的 chunk_id"——"编号"两解。模型若抄了行号，
+    那个小整数会指向另一条真实 chunk（chunks.id 全局自增），静默挂错佐证且不报错。
+    """
     seg = (chunk.segment or chunk.content or chunk.summary or "").strip()
     if len(seg) > _MAX_CHUNK_CHARS:
         seg = seg[:_MAX_CHUNK_CHARS] + "…"
-    edited = " [用户手动修改过]" if chunk.user_edited else ""
+    edited = "[用户手动修改过] " if chunk.user_edited else ""
     date = (chunk.created_at or "").strip()[:10] or "日期未知"
-    return f"[{idx}]{edited} {date} chunk_id={chunk.chunk_id}：{seg}"
+    return f"{edited}{date} chunk_id={chunk.chunk_id}：{seg}"
 
 
 def _fmt_chunks(chunks) -> str:
     if not chunks:
         return "（无语料）"
-    return "\n".join(_fmt_chunk(i, c) for i, c in enumerate(chunks, start=1))
+    return "\n".join(_fmt_chunk(c) for c in chunks)
 
 
 def _fmt_existing_terms(terms) -> str:
@@ -92,8 +97,13 @@ def _fmt_existing_terms(terms) -> str:
     return "\n".join(lines) if lines else "（用户词汇表还是空的，所有候选都算 new）"
 
 
-def _sanitize_candidates(data: dict) -> list[pb2.ExtractTermsReply.TermCandidate]:
-    """LLM JSON → 合法 TermCandidate 列表：kind 白名单、term 非空、上限截断。"""
+def _sanitize_candidates(data: dict, valid_chunk_ids: set[int] | None = None) -> list[pb2.ExtractTermsReply.TermCandidate]:
+    """LLM JSON → 合法 TermCandidate 列表：kind 白名单、term 非空、上限截断。
+
+    valid_chunk_ids 非空时，source_chunk_id 必须落在本次语料内，否则归 0（防线：模型写错
+    数字或抄了行号时，不该让那个整数指向库里的另一条 chunk——chunks.id 全局自增，小整数
+    必然命中别的用户的记录）。None = 不校验（兼容直接调用，历史行为）。
+    """
     raw = data.get("candidates")
     if not isinstance(raw, list):
         return []
@@ -114,6 +124,9 @@ def _sanitize_candidates(data: dict) -> list[pb2.ExtractTermsReply.TermCandidate
         try:
             chunk_id = int(item.get("source_chunk_id") or 0)
         except (TypeError, ValueError):
+            chunk_id = 0
+        if chunk_id and valid_chunk_ids is not None and chunk_id not in valid_chunk_ids:
+            print(f"[ExtractTerms] source_chunk_id={chunk_id} 不在本次语料内，归 0（词: {term}）")
             chunk_id = 0
         out.append(pb2.ExtractTermsReply.TermCandidate(
             term=term,
@@ -162,7 +175,8 @@ class RecordProcessorServicer(_BaseServicer):
             print(f"[ExtractTerms] LLM 响应: {response_text[:200]}")
 
             result = parse_json(response_text, ctx="词条抽取")
-            candidates = _sanitize_candidates(result)
+            valid_ids = {c.chunk_id for c in kept}
+            candidates = _sanitize_candidates(result, valid_ids)
             print(f"[ExtractTerms] 候选 {len(candidates)} 条: "
                   f"{[(c.term, c.kind) for c in candidates]}")
             return pb2.ExtractTermsReply(candidates=candidates)
