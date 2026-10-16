@@ -8,7 +8,7 @@
 4. {"calls":[],"done":true} → 终帧 calls 空 + done=True
 5. 注册表为空 → 不调 LLM（create_llm 被替换成会炸的桩，调了就失败），直接终帧 done=True
 6. done 语义一致性：calls 为空时 done 恒为 True（B 侧两个终止条件语义对齐）
-7. prompt 渲染：五个新占位符（previous_results/step/max_steps/has_retrieval/history）
+7. prompt 渲染：循环上下文占位符落值，旧 has_retrieval 字段不再影响规划
    全部落值，模板里不残留字面量 {step}
 8. 用 chat_stream 而不是 json_task（黑屏根因修复的对账点）
 
@@ -263,7 +263,7 @@ class TestFinalBatchPrompt:
         p = llm.prompt
         assert "查完这批就能答" in p
         assert "互不依赖的查询放在同一步" in p
-        # 情绪类示例：两个工具 + done=true 同帧
+        # 两个独立查询同一步规划，且执行完这一批直接收尾
         assert '{"tool": "get_stats", "args": {"days": 30}}, {"tool": "search_records"' in p
 
     def test_done_with_calls_passes_through(self):
@@ -301,8 +301,8 @@ class TestTodayDate:
     def test_prompt_teaches_date_lookup_without_query(self):
         llm = _ScriptedLlm([("content", '{"calls": [], "done": true}')])
         _run(MirrorChatServicer(), _request(), llm)
-        assert "不要带 query" in llm.prompt
-        assert '{"tool": "search_records", "args": {"date": "2026-09-12"}}' in llm.prompt
+        assert "不带逐字 query" in llm.prompt
+        assert '{"tool": "search_records", "args": {"mode": "structured", "date": "2026-09-12"}}' in llm.prompt
 
 
 class TestRegistrySanitize:
@@ -410,7 +410,7 @@ class TestPromptRendering:
         _run(MirrorChatServicer(), req, llm)
         prompt = llm.prompt
         assert "这是第 2 步，最多 4 步" in prompt
-        assert "**false**" in prompt                     # has_retrieval 小写字面量
+        assert "has_retrieval" not in prompt
         assert "1. get_stats → 30 天共 42 条；anxious 11" in prompt
         assert "我上周写了什么" in prompt and "你写了三条待办" in prompt
         assert "get_stats" in prompt and "search_records" in prompt  # 注册表
@@ -422,13 +422,13 @@ class TestPromptRendering:
         _run(MirrorChatServicer(), _request(), llm)
         prompt = llm.prompt
         for ph in ("{tools}", "{question}", "{glossary}", "{history}",
-                   "{previous_results}", "{step}", "{max_steps}", "{has_retrieval}"):
+                   "{previous_results}", "{step}", "{max_steps}", "{max_calls}"):
             assert ph not in prompt, f"占位符未渲染: {ph}"
 
-    def test_has_retrieval_true_rendered_lowercase(self):
+    def test_legacy_has_retrieval_field_is_ignored(self):
         llm = _ScriptedLlm([("content", '{"calls": [], "done": true}')])
         _run(MirrorChatServicer(), _request(has_retrieval=True), llm)
-        assert "**true**" in llm.prompt
+        assert "has_retrieval" not in llm.prompt
 
     def test_first_step_previous_results_placeholder_text(self):
         llm = _ScriptedLlm([("content", '{"calls": [], "done": true}')])
@@ -442,22 +442,32 @@ class TestPromptRendering:
         assert "执行失败" in rendered
         assert "boom" not in rendered and "炸了" not in rendered
 
-    def test_prompt_no_longer_forbids_emotional_support_in_loop_template(self):
-        """§5.1 关键修复：规则 1 里不许再出现"情绪安慰 → 必须空计划"，且要有 get_stats 摸底规则"""
+    def test_success_previous_result_includes_payload_for_followup_decisions(self):
+        rendered = format_previous_results([common_pb2.ToolResult(
+            tool="find_item", summary="find_item:1 个文件",
+            payload_json='{"items":[{"vault_item_id":31,"display_name":"设计.md"}]}',
+            success=True)])
+        assert "find_item:1 个文件" in rendered
+        assert '"vault_item_id":31' in rendered
+        assert "设计.md" in rendered
+
+    def test_prompt_allows_agent_to_choose_tools_dynamically(self):
+        """规划器按工具能力判断，而不是固定把情绪问题转成统计查询。"""
         llm = _ScriptedLlm([("content", '{"calls": [], "done": true}')])
         _run(MirrorChatServicer(), _request(), llm)
         prompt = llm.prompt
-        assert "情绪安慰" not in prompt
-        assert "宁可少规划，不可错规划" in prompt          # 总基调保留
-        assert "禁止编造注册表里不存在的工具" in prompt      # 防幻觉基调保留
-        assert "get_stats" in prompt and "摸底" in prompt   # 新规则：情绪类先摸底
+        assert "普通寒暄" in prompt
+        assert "零个、一个或多个调用" in prompt
+        assert "互不依赖" in prompt
+        assert "get_profile" in prompt and "search_records" in prompt
+        assert "摸底" not in prompt
 
 
 # ---------------------------------------------------------------------------
 # 7. 两套模板隔离（chat-loop-design.md 裁决 0.4 / §9 验收 6：回滚必须退回已知旧行为）
 # ---------------------------------------------------------------------------
 # 渲染后的循环版特征（不是模板字面量——占位符渲染完就没了）
-_LOOP_MARKERS = ("已有材料", '"done"', "先自评", "本轮进度", "工具规划器", "这是第")
+_LOOP_MARKERS = ("已取得的工具结果", '"done"', "决策方式", "本轮进度", "对话 Agent", "这是第")
 _SINGLE_MARKERS = ("工具规划助手", "情绪安慰", "最多 2 步")
 
 # prompts/plan_tools_single.txt 必须与 `git show HEAD:prompts/plan_tools.txt` 逐字一致。

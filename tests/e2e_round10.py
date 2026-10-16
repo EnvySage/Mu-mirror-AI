@@ -157,7 +157,7 @@ def main():
 
         ri = chat.ExtractIntent(chat_pb2.ExtractIntentRequest(
             query="我论文咋样了", llm_config=llm_config(), glossary=glossary))
-        check("ExtractIntent 带 glossary 正常", ri.query_type in ("profile", "structured", "semantic", "hybrid"),
+        check("ExtractIntent 带 glossary 正常", ri.query_type in ("structured", "semantic", "hybrid"),
               ri.query_type)
 
         req = chat_pb2.ChatRequest(question="我论文进展如何？", glossary=glossary, llm_config=llm_config(),

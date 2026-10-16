@@ -1,6 +1,6 @@
 """MirrorChat 服务实现 — 意图提取 + 对话生成（协作清单 #5）
 
-ExtractIntent：query_type 四选一（profile/structured/semantic/hybrid）+ 过滤条件 + rewritten_query
+ExtractIntent（兼容回滚路径）：结构化/语义/组合检索路由 + 过滤条件
 Chat：服务端流式 stream ChatChunk{content, done, sources, thinking}
 （thinking=4 为 LLM 思考过程增量块，proto3 optional，模型不支持时永不为真）
 无状态：配置随请求携带，用完即弃。
@@ -21,8 +21,8 @@ from llm.factory import create_llm
 from llm_json import parse_json
 from prompts_loader import loader
 
-# query_type 四选一（英文小写），非法值兜底 hybrid
-QUERY_TYPES = {"profile", "structured", "semantic", "hybrid"}
+# 兼容回滚路径的 query_type（三选一，英文小写），非法值兜底 hybrid
+QUERY_TYPES = {"structured", "semantic", "hybrid"}
 DEFAULT_QUERY_TYPE = "hybrid"
 
 CONTENT_TYPES = {"todo", "thought", "learning", "plan", "note", "work", "social", "health"}
@@ -40,15 +40,21 @@ def _format_tool_results(tool_results) -> str:
 
     文件类结果（find_item/recall_item 的 items/item）渲染为独立 [F编号] 行——
     LLM 引用文件时写 [F1]，B 侧 extractVaultRefs 只认 [F\\d+] 出文件卡（fix-batch B3）。
-    日记类/汇总类工具结果渲染为「工具 {tool} 返回：…」行，不加编号。
-    （原先是 [工具结果·{tool}] 方括号标签——长得像 [n]/[F1] 引用编号，联调实测模型会把它
-    原样抄进回答里当引用，前端显示出一串假标记；prompt 里禁止也拦不住，所以从格式上根治）
+    search_records 的可见记录按 chunks 之后的连续编号渲染为 [n]，并建立真实 sources；
+    统计等其他工具仍渲染为「工具 {tool} 返回：…」且不编号。
+    禁止使用长得像 [n]/[F1] 的工具名方括号标签，避免模型把它抄成假引用。
     失败结果只渲染失败说明，不把失败 payload 喂给 LLM（防止拿错误输出当事实）。
     空列表返回 ""（prompt 不留孤儿块，同 glossary 模式）。
     """
+    return _format_tool_results_with_sources(tool_results)[0]
+
+
+def _format_tool_results_with_sources(tool_results, citation_offset: int = 0) -> tuple[str, list[dict]]:
+    """渲染工具结果，并为实际展示的 search_records 行分配与 chunks 连续的引用编号。"""
     if not tool_results:
-        return ""
+        return "", []
     lines = []
+    record_sources: list[dict] = []
     f_no = 0  # 文件编号独立计数（跨工具结果连续，[F1][F2]…）
     for r in tool_results:
         tool = (r.tool or "").strip() or "unknown_tool"
@@ -69,6 +75,42 @@ def _format_tool_results(tool_results) -> str:
                     body = body[:_MAX_TOOL_CHARS] + "…"
                 lines.append(f"工具 {tool} 返回：{body}")
             continue
+        if tool == "search_records" and isinstance(payload.get("records"), list):
+            summary = (r.summary or "").strip()
+            body_lines = [summary] if summary else []
+            visible_len = len("\n".join(body_lines))
+            records = sorted((it for it in payload["records"] if isinstance(it, dict)),
+                             key=lambda it: str(it.get("date") or ""))
+            truncated = False
+            for rec in records:
+                record_id = _positive_int(rec.get("record_id"))
+                n = citation_offset + len(record_sources) + 1 if record_id is not None else None
+                date = str(rec.get("date") or "")[:16].replace("T", " ")
+                ctype = str(rec.get("content_type") or "")
+                title = str(rec.get("title") or "")
+                quote = str(rec.get("quote") or "")
+                head = f"{date}（{ctype}）" if ctype else date
+                detail = f"{head} {title}：{quote}".replace(" ：", "：").strip()
+                line = (f"[{n}]{_relevance_note(rec.get('score'))} {detail}"
+                        if n is not None else detail)
+                candidate_len = visible_len + (1 if body_lines else 0) + len(line)
+                if candidate_len > _MAX_TOOL_CHARS:
+                    truncated = True
+                    break
+                body_lines.append(line)
+                visible_len = candidate_len
+                if n is not None:
+                    record_sources.append({
+                        "n": n,
+                        "record_id": record_id,
+                        "quote": title or quote[:100],
+                        "date": str(rec.get("date") or ""),
+                    })
+            if truncated and visible_len < _MAX_TOOL_CHARS:
+                body_lines.append("…")
+            body = "\n".join(body_lines) or "（无返回数据）"
+            lines.append(f"工具 {tool} 返回：{body}")
+            continue
         # summary 当标题、payload 当明细。原先 summary 非空就不渲染 payload——而 Java 侧每个工具
         # 都填 summary，于是回答模型只看得到 "search_records:12条" 这几个字、看不到任何一条内容
         # （违背 common.proto ToolResult.payload_json「完整结果 JSON（进 prompt 上下文块）」）。
@@ -81,7 +123,15 @@ def _format_tool_results(tool_results) -> str:
         if len(body) > _MAX_TOOL_CHARS:
             body = body[:_MAX_TOOL_CHARS] + "…"
         lines.append(f"工具 {tool} 返回：{body}")
-    return "\n".join(lines)
+    return "\n".join(lines), record_sources
+
+
+def _positive_int(value):
+    try:
+        number = int(value)
+        return number if number > 0 else None
+    except (TypeError, ValueError):
+        return None
 
 
 def _render_file_excerpts(payload: dict, f_no: int) -> str:
@@ -113,7 +163,7 @@ def _render_file_excerpts(payload: dict, f_no: int) -> str:
 def _render_tool_payload(payload: dict, raw: str) -> str:
     """非文件类工具的 payload → 给回答模型看的明细文本。
 
-    - 带 records 列表（search_records）→ 逐行 "- 日期（类型）标题：摘录"，比 JSON 省字且好读
+    - 带 records 列表 → 逐行 "- 日期（类型）标题：摘录"，比 JSON 省字且好读
     - 其余 dict（get_stats 等）→ 紧凑 JSON（ensure_ascii=False，中文不转义）
     - 不是 dict 的合法 JSON（如列表）→ 原文
     """
@@ -140,14 +190,34 @@ def _render_tool_payload(payload: dict, raw: str) -> str:
 
 # 检索没命中但工具查到了数据：不能再写"（没有找到相关记录）"——那句话会让回答模型
 # 以为真的没数据，和下方「工具查询结果」打架（联调实测它会信前者）
-_CONTEXT_EMPTY_WITH_TOOLS = "（语义检索没有直接命中的日记片段——这一轮的依据在下方「工具查询结果」里，以它为准）"
+_CONTEXT_EMPTY_WITH_TOOLS = "（本轮没有预检索日记片段；下方工具结果是本轮已取得的依据）"
+_CONTEXT_NOT_SEARCHED = "（本轮尚未检索日记记录；这不表示用户没有相关记录。普通对话可直接回应，涉及历史事实时不要猜）"
+_CONTEXT_SEARCH_EMPTY = "（本轮已成功检索日记记录，但没有匹配片段；这只表示本次查询未命中，不表示用户从未记录）"
+_CONTEXT_SEARCH_FAILED = "（本轮日记检索失败或部分失败；不能据此判断用户是否有相关记录。若有成功结果，只能依据实际返回的内容）"
 
 
-def _context_text(chunks, tool_results_text: str) -> str:
-    """{context} 渲染：有 chunks 照旧；无 chunks 时看工具有没有数据"""
-    if not chunks and tool_results_text:
+def _context_text(chunks, tool_results) -> str:
+    """区分未检索、成功零命中、检索失败和工具返回了其他依据。"""
+    if chunks:
+        return _format_context(chunks)
+    if isinstance(tool_results, str):  # 旧调用兼容
+        return _CONTEXT_EMPTY_WITH_TOOLS if tool_results else _CONTEXT_NOT_SEARCHED
+    results = list(tool_results or [])
+    searches = [r for r in results if (r.tool or "").strip() == "search_records"]
+    if searches:
+        failed = any(not r.success for r in searches)
+        has_records = any(bool(_parse_payload(r.payload_json).get("records"))
+                          for r in searches if r.success)
+        if failed:
+            return _CONTEXT_SEARCH_FAILED
+        if has_records:
+            return _CONTEXT_EMPTY_WITH_TOOLS
+        return _CONTEXT_SEARCH_EMPTY
+    if any(r.success for r in results):
         return _CONTEXT_EMPTY_WITH_TOOLS
-    return _format_context(chunks)
+    if results:
+        return _CONTEXT_SEARCH_FAILED
+    return _CONTEXT_NOT_SEARCHED
 
 
 def _parse_payload(payload_json: str):
@@ -236,8 +306,9 @@ class _FakeCiteFilter:
     其他方括号内容（如口语里的 [笑]）也放行，避免误伤。
     跨块安全：遇到 "[" 先扣住，等到 "]" 再判；超长或遇换行说明不是标记，原样吐出。
 
-    max_cite：本轮资料编号上限（= chunks 条数）。超出的 [n] 是模型自己编的号——实测检索 0 条、
-    证据全来自工具结果（工具结果不编号）时，它会给工具结果的行自行编号写出 [4][6][7]，
+    max_cite：本轮可引用资料编号上限（chunks + 实际渲染出来的 search_records 结果数）。
+    超出的 [n] 是模型自己编的号——检索 0 条、
+    证据全来自没有编号的统计工具时，它会自行编出 [4][6][7]，
     前端渲染成点不开的死引用。None = 不校验编号（兼容旧调用）。
     """
 
@@ -360,18 +431,15 @@ class MirrorChatServicer(pb2_grpc.MirrorChatServicer):
                 protocol=llm_config.protocol,
             )
 
-            tool_results_text = _format_tool_results(request.tool_results)
-            # 检索为空 → 明确告知（6.6 兜底）；但工具有数据时改口，别让两段互相打架
-            context_text = _context_text(request.chunks, tool_results_text)
-            has_context = len(request.chunks) > 0
+            tool_results_text, tool_sources = _format_tool_results_with_sources(
+                request.tool_results, citation_offset=len(request.chunks))
+            context_text = _context_text(request.chunks, request.tool_results)
 
             if tool_results_text:
                 print(f"[Chat] tool_results 注入 {len(request.tool_results)} 条")
 
             prompt = loader.render(
                 "chat",
-                question=question,
-                history=_format_history(request.history),
                 context=context_text,
                 glossary=format_glossary(request.glossary),
                 tool_results=tool_results_text,
@@ -391,7 +459,8 @@ class MirrorChatServicer(pb2_grpc.MirrorChatServicer):
             n_files = sum(len(_extract_file_items(r.tool, _parse_payload(r.payload_json)))
                           for r in request.tool_results if r.success)
             fake_cites = _FakeCiteFilter((r.tool for r in request.tool_results),
-                                         max_cite=len(request.chunks), max_file_cite=n_files)
+                                         max_cite=len(request.chunks) + len(tool_sources),
+                                         max_file_cite=n_files)
             for kind, text in llm.chat_stream(messages):
                 if kind == "thinking":
                     yield pb2.ChatChunk(thinking=text)
@@ -406,7 +475,7 @@ class MirrorChatServicer(pb2_grpc.MirrorChatServicer):
                 buffer.append(tail)
                 yield pb2.ChatChunk(content=tail, done=False, sources=[])
 
-            sources = _extract_sources("".join(buffer), request.chunks) if has_context else []
+            sources = _extract_sources("".join(buffer), request.chunks, tool_sources)
             yield pb2.ChatChunk(content="", done=True, sources=sources)
             print(f"[Chat] 完成，共 {len(buffer)} 块，sources={len(sources)}")
 
@@ -415,7 +484,7 @@ class MirrorChatServicer(pb2_grpc.MirrorChatServicer):
             abort_with_mapped(context, e)
 
 
-def _extract_sources(answer: str, chunks) -> list[pb2.Source]:
+def _extract_sources(answer: str, chunks, tool_sources=()) -> list[pb2.Source]:
     """从回答中解析 [n] 引用标记 → Source{record_id, quote, date, n}
 
     n 是正文里的原始引用编号（1-based）：本函数只返回"被引用到的"子集，
@@ -425,7 +494,9 @@ def _extract_sources(answer: str, chunks) -> list[pb2.Source]:
     sources: dict[int, pb2.Source] = {}
     for token in _find_markers(answer):
         idx = token - 1  # 回答里 [1] 对应 chunks[0]
-        if 0 <= idx < len(chunks) and idx not in sources:
+        if idx in sources:
+            continue
+        if 0 <= idx < len(chunks):
             c = chunks[idx]
             sources[idx] = pb2.Source(
                 record_id=c.record_id,
@@ -433,6 +504,16 @@ def _extract_sources(answer: str, chunks) -> list[pb2.Source]:
                 date=c.created_at,
                 n=idx + 1,                        # 引用编号回传（B 侧/前端据此对齐）
             )
+        else:
+            tool_idx = idx - len(chunks)
+            if 0 <= tool_idx < len(tool_sources):
+                source = tool_sources[tool_idx]
+                sources[idx] = pb2.Source(
+                    record_id=source["record_id"],
+                    quote=source["quote"],
+                    date=source["date"],
+                    n=source["n"],
+                )
     return list(sources.values())
 
 
