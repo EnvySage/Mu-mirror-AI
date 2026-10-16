@@ -232,7 +232,8 @@ def _classify(llm, content, **req_kw):
     servicer.Classify.__globals__["create_llm"] = lambda **kw: llm
     try:
         return servicer.Classify(rp_pb2.ClassifyRequest(
-            content=content, llm_config=common.LlmConfig(provider="stub"), **req_kw), _Ctx())
+            content=content, processing_authorized=True,
+            llm_config=common.LlmConfig(provider="stub"), **req_kw), _Ctx())
     finally:
         servicer.Classify.__globals__["create_llm"] = orig
 

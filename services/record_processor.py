@@ -84,6 +84,9 @@ def _parse_todo_ref(item: dict) -> pb2.TodoRef | None:
 class RecordProcessorServicer(pb2_grpc.RecordProcessorServicer):
 
     def Classify(self, request, context):
+        if not request.processing_authorized:
+            context.abort(grpc.StatusCode.PERMISSION_DENIED, "AI 整理未获得用户本次授权")
+            return pb2.ClassifyResponse(skip=True, skip_reason="未获得用户授权")
         content = request.content
         llm_config = request.llm_config
         single = request.single

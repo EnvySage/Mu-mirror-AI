@@ -52,6 +52,7 @@ class TestProtoContract:
         assert {n: f.number for n, f in fields.items()} == {
             "content": 1, "llm_config": 2, "single": 3, "glossary": 4,
             "open_todos": 5, "recent_context": 6, "reference_date": 7,
+            "processing_authorized": 8,
         }
 
     def test_recent_hint_fields(self):
@@ -240,6 +241,7 @@ def _classify(llm, **req_kw):
     try:
         return servicer.Classify(rp_pb2.ClassifyRequest(
             content="练了会曲子",
+            processing_authorized=True,
             llm_config=common.LlmConfig(provider="stub"),
             **req_kw,
         ), _CapturedContext())

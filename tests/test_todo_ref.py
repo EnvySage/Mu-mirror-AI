@@ -45,7 +45,7 @@ class TestProtoContract:
         fields = rp_pb2.ClassifyRequest.DESCRIPTOR.fields_by_name
         assert {n: f.number for n, f in fields.items()} == {
             "content": 1, "llm_config": 2, "single": 3, "glossary": 4, "open_todos": 5,
-            "recent_context": 6, "reference_date": 7,
+            "recent_context": 6, "reference_date": 7, "processing_authorized": 8,
         }
 
     def test_classify_item_field_numbers(self):
@@ -365,6 +365,7 @@ def _classify(llm, **req_kw):
     try:
         return servicer.Classify(rp_pb2.ClassifyRequest(
             content="作业终于补完了，明天继续背单词",
+            processing_authorized=True,
             llm_config=common.LlmConfig(provider="stub"),
             **req_kw,
         ), _CapturedContext())
