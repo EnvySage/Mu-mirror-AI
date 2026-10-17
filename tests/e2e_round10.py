@@ -151,13 +151,13 @@ def main():
         print("\n[4] glossary 注入（Classify / ExtractIntent / Chat / GenerateProfile）")
         glossary = [common.GlossaryTerm(term="论文", description="毕设《AI日记镜子系统》",
                                         aliases=["毕设"], confirmed_at="2026-06-01")]
-        rc = rp.Classify(rp_pb2.ClassifyRequest(content="今天推进了论文的检索模块", llm_config=llm_config(),
+        rc = rp.Classify(rp_pb2.ClassifyRequest(content="今天推进了论文的检索模块", processing_authorized=True, llm_config=llm_config(),
                                                 single=True, glossary=glossary))
         check("Classify 带 glossary 正常", not rc.skip and len(rc.items) == 1, f"n={len(rc.items)}")
 
         ri = chat.ExtractIntent(chat_pb2.ExtractIntentRequest(
             query="我论文咋样了", llm_config=llm_config(), glossary=glossary))
-        check("ExtractIntent 带 glossary 正常", ri.query_type in ("profile", "structured", "semantic", "hybrid"),
+        check("ExtractIntent 带 glossary 正常", ri.query_type in ("structured", "semantic", "hybrid"),
               ri.query_type)
 
         req = chat_pb2.ChatRequest(question="我论文进展如何？", glossary=glossary, llm_config=llm_config(),

@@ -207,8 +207,8 @@ class TestFormatToolResults:
                    '{"record_id": 9, "title": "", "quote": "又失眠了", "date": "2026-09-05", "content_type": "health"}]}')
         out = _format_tool_results([self._tr(summary="search_records:2条", payload=payload)])
         assert out.startswith("工具 search_records 返回：search_records:2条\n")
-        assert "- 2026-09-02 23:10（work） 开题：导师说框架要重做，好焦虑" in out  # 保留到分钟
-        assert "- 2026-09-05（health）：又失眠了" in out  # 无标题不留孤儿空格
+        assert "[1] 2026-09-02 23:10（work） 开题：导师说框架要重做，好焦虑" in out  # 保留到分钟
+        assert "[2] 2026-09-05（health）：又失眠了" in out  # 无标题不留孤儿空格
 
     def test_records_rendered_chronologically_with_time(self):
         """问"某一天做了什么"时先后顺序是关键：SQL 是倒序，渲染要转正序并保留时刻"""
@@ -253,9 +253,47 @@ class TestFormatToolResults:
         assert "[F1] 设计.md" in out and "正文摘录" not in out
 
     def test_context_text_when_only_tools_have_data(self):
-        from services.chat_service import _context_text, _CONTEXT_EMPTY_WITH_TOOLS
-        assert _context_text([], "工具 get_stats 返回：…") == _CONTEXT_EMPTY_WITH_TOOLS
-        assert _context_text([], "") == "（没有找到相关记录）"  # 两边都空：旧文案不变
+        from services.chat_service import (
+            _context_text, _CONTEXT_EMPTY_WITH_TOOLS, _CONTEXT_NOT_SEARCHED,
+            _CONTEXT_SEARCH_EMPTY, _CONTEXT_SEARCH_FAILED,
+        )
+        stats = common.ToolResult(tool="get_stats", success=True)
+        assert _context_text([], [stats]) == _CONTEXT_EMPTY_WITH_TOOLS
+        assert _context_text([], []) == _CONTEXT_NOT_SEARCHED
+        no_match = common.ToolResult(tool="search_records", success=True,
+                                     payload_json='{"count":0,"records":[]}')
+        assert _context_text([], [no_match]) == _CONTEXT_SEARCH_EMPTY
+        failed = common.ToolResult(tool="search_records", success=False)
+        assert _context_text([], [failed]) == _CONTEXT_SEARCH_FAILED
+
+    def test_tool_records_share_citation_sequence_with_rag_chunks(self):
+        from services.chat_service import _format_tool_results_with_sources, _extract_sources
+        payload = json.dumps({"records": [
+            {"record_id": 7, "title": "开题", "quote": "导师让我重做", "date": "2026-09-02",
+             "content_type": "work", "score": 0.2},
+            {"record_id": 9, "title": "复盘", "quote": "终于理清了", "date": "2026-09-05",
+             "content_type": "learning", "score": 0.3},
+        ]}, ensure_ascii=False)
+        rendered, tool_sources = _format_tool_results_with_sources(
+            [self._tr(summary="search_records:2条", payload=payload)], citation_offset=2)
+        assert "[3]〔相关度 80%〕" in rendered and "[4]〔相关度 70%〕" in rendered
+        chunks = [type("C", (), {"record_id": 1, "title": "旧记录", "content": "x",
+                                 "created_at": "2026-09-01"})(),
+                  type("C", (), {"record_id": 2, "title": "近期记录", "content": "y",
+                                 "created_at": "2026-09-02"})()]
+        sources = _extract_sources("参照 [2]、[3] 和 [4]", chunks, tool_sources)
+        assert [(s.n, s.record_id) for s in sources] == [(2, 2), (3, 7), (4, 9)]
+
+    def test_truncated_tool_records_do_not_create_invisible_citations(self):
+        from services.chat_service import _format_tool_results_with_sources
+        payload = json.dumps({"records": [
+            {"record_id": 7, "quote": "可见", "date": "2026-09-02"},
+            {"record_id": 9, "quote": "隐藏" * 3000, "date": "2026-09-05"},
+        ]}, ensure_ascii=False)
+        rendered, sources = _format_tool_results_with_sources(
+            [self._tr(summary="search_records:2条", payload=payload)])
+        assert "[1]" in rendered and "[2]" not in rendered
+        assert [s["record_id"] for s in sources] == [7]
 
     def test_mixed_success_and_failure(self):
         out = _format_tool_results([self._tr(tool="get_stats"), self._tr(tool="find_item", success=False)])
@@ -354,7 +392,7 @@ class TestPromptWiring:
         assert "我论文咋样了" in p
         assert "{tools}" not in p and "{question}" not in p and "{glossary}" not in p
         # 决策规则/输出约定在模板里（B1/B2/B4 场景判定约束写死）
-        assert "宁可少规划" in p
+        assert "情绪安慰" in p
         assert "最多 2 步" in p
         assert "get_coverage" in p
         assert "search_records" in p
@@ -366,14 +404,14 @@ class TestPromptWiring:
         from prompts_loader import loader
         p = loader.render("plan_tools", tools="1. search_records：检索", question="我论文咋样了",
                           glossary="", history="h", previous_results="（空）",
-                          step=2, max_steps=4, has_retrieval="false")
-        assert "工具规划器" in p
+                          step=2, max_steps=4, max_calls=2)
+        assert "对话 Agent" in p
         assert "这是第 2 步，最多 4 步" in p
-        assert "一步最多 2 个工具" in p
-        assert "宁可少规划" in p          # 总基调保留
-        assert "情绪安慰" not in p        # §5.1 关键修复
+        assert "每步最多安排 2 个互不依赖的工具调用" in p
+        assert "同一步安排多项调用" in p
+        assert "get_profile" in p and "search_records" in p
         for ph in ("{tools}", "{question}", "{glossary}", "{history}",
-                   "{previous_results}", "{step}", "{max_steps}", "{has_retrieval}"):
+                   "{previous_results}", "{step}", "{max_steps}", "{max_calls}"):
             assert ph not in p
 
     def test_plan_tools_glossary_placeholder(self):
@@ -384,21 +422,24 @@ class TestPromptWiring:
 
     def test_chat_template_tool_results_placeholder(self):
         from prompts_loader import loader
-        p = loader.render("chat", question="q", history="h", context="c", glossary="",
+        p = loader.render("chat", question="CHAT_QUESTION_42", history="CHAT_HISTORY_77",
+                          context="c", glossary="",
                           tool_results="工具 get_stats 返回：30 天 42 条")
         assert "工具 get_stats 返回：30 天 42 条" in p
+        assert "CHAT_QUESTION_42" not in p and "CHAT_HISTORY_77" not in p
         assert "{tool_results}" not in p
         # 空工具结果：占位符清空，不留孤儿节内容（节头保留由模板固定，内容行为空）
         p_empty = loader.render("chat", question="q", history="h", context="c", glossary="",
                                 tool_results="")
-        assert "工具查询结果" in p_empty  # 节头仍在（模板静态），内容为空串
+        assert "本轮工具结果" in p_empty  # 节头仍在（模板静态），内容为空串
 
     def test_chat_template_backward_compat(self):
         """chat 模板既有占位符不受影响（回归保障）"""
         from prompts_loader import loader
-        p = loader.render("chat", question="问题", history="历史", context="[1] 资料",
+        p = loader.render("chat", question="CHAT_USER_Q_MARKER", history="CHAT_HISTORY_MARKER",
+                          context="[1] 资料",
                           glossary="", tool_results="")
-        assert "问题" in p and "历史" in p and "[1] 资料" in p
+        assert "CHAT_USER_Q_MARKER" not in p and "CHAT_HISTORY_MARKER" not in p and "[1] 资料" in p
 
 
 # ---------------------------------------------------------------------------

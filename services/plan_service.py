@@ -21,7 +21,7 @@ PlannedCall 校验（任务书 #2，违规剔除而非报错——防幻觉 + �
 
 PlanNextStep（chat-loop-design.md §3，循环版，新增）：
   B 驱动循环，每步调一次 PlanNextStep(question, history, previous_results, step,
-  max_steps, has_retrieval) → 服务端流式 PlanStepChunk：
+  max_steps) → 服务端流式 PlanStepChunk：
     ① 先逐块 yield PlanStepChunk(thinking=增量)  —— B 透传 SSE thinking，等待可感知
     ② 最后 yield 一个 PlanStepChunk(final=True, calls=[...], done=bool) 终帧
   **必须用 llm.chat_stream() 而不是 json_task()**：json_task 非流式 + 显式关思考，
@@ -149,7 +149,7 @@ def format_previous_results(previous_results) -> str:
     - 空列表 → 中性文案（第一步；prompt 不留孤儿占位符）
     - success=false → 只渲染失败说明，**不把失败 payload 喂给模型**（同 chat_service 口径，
       防止模型把错误输出当事实，也防它原样重试）
-    - summary 缺省回退 payload_json，超长截断到 max_tool_chars
+    - 成功时把 summary 与 payload_json 都交给下一步决策（保证 ID 和结果明细可见），超长截断到 max_tool_chars
     """
     if not previous_results:
         return _NO_PREV_RESULTS
@@ -159,7 +159,12 @@ def format_previous_results(previous_results) -> str:
         if not r.success:
             lines.append(f"{i}. {tool} → 执行失败（这条数据不可用，不要原样重试同一个工具）")
             continue
-        body = (r.summary or "").strip() or (r.payload_json or "").strip() or "（无返回数据）"
+        summary = (r.summary or "").strip()
+        payload = (r.payload_json or "").strip()
+        parts = [summary] if summary else []
+        if payload and payload != summary:
+            parts.append(payload)
+        body = "\n".join(parts) or "（无返回数据）"
         if len(body) > _MAX_TOOL_CHARS:
             body = body[:_MAX_TOOL_CHARS] + "…"
         lines.append(f"{i}. {tool} → {body}")
@@ -267,8 +272,7 @@ class MirrorChatServicer(_BaseServicer):
         max_steps = request.max_steps or step
 
         print(f"[PlanNextStep] step={step}/{max_steps} | "
-              f"prev_results={len(request.previous_results)} | "
-              f"has_retrieval={request.has_retrieval}")
+              f"prev_results={len(request.previous_results)}")
         print(f"[PlanNextStep] question: {question[:80]} | tools={len(registry_names)} | "
               f"glossary={len(request.glossary)} | history={len(request.history)}")
         print(f"[PlanNextStep] LLM: provider={llm_config.provider}, model={llm_config.model}, "
@@ -298,8 +302,7 @@ class MirrorChatServicer(_BaseServicer):
                 history=format_plan_history(request.history),
                 step=step,
                 max_steps=max_steps,
-                # 小写 true/false 与 prompt 里的字面量对齐（Python 的 True 会让模型读到大写）
-                has_retrieval="true" if request.has_retrieval else "false",
+                max_calls=_MAX_CALLS,
                 today=today_text(),
             )
 

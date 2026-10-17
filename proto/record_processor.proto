@@ -21,6 +21,9 @@ message ClassifyRequest {
   // B 侧取 record.created_at 的日期部分；未传 = 不消解，prompt 与旧版一致（零回归）。
   // 与 B 仓 record_processor.proto 字段号 7 对齐（B 侧 2026-09-20 bc54a8c 已上线，本端此前漏做）
   string reference_date = 7;
+  // Java 仅在用户主动请求本次整理或明确确认片段时设置；缺省 false 一律拒绝分类。
+  // 服务端在创建 LLM 前执行 fail-closed 检查。
+  bool processing_authorized = 8;
 }
 
 // 时间词替换项：把片段里的相对时间词替换成绝对日期。

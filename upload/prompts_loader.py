@@ -31,7 +31,7 @@ _ALIASES = {
     "classify_single": {"content": "content", "open_todos": "open_todos", "recent_context": "recent_context",
                  "time_rule": "time_rule"},
     "intent": {"query": "query"},
-    "chat": {"question": "question", "history": "history", "context": "context"},
+    "chat": {"context": "context", "glossary": "glossary", "tool_results": "tool_results"},
     "profile": {
         "todos": "stats_facts", "learnings": "records", "mood_stats": "mood_stats",
         "keywords": "keywords", "active_time": "active_time",
@@ -52,8 +52,7 @@ _ALIASES = {
     "plan_tools": {
         "tools": "tools", "question": "question", "glossary": "glossary",
         "history": "history", "previous_results": "previous_results",
-        "step": "step", "max_steps": "max_steps", "has_retrieval": "has_retrieval",
-        "today": "today",
+        "step": "step", "max_steps": "max_steps", "max_calls": "max_calls", "today": "today",
     },
 }
 

@@ -11,7 +11,7 @@
 
 要点：
 - 时间戳按天写死（不走 now()），否则 100 条全挤在导入那一刻，日历/情绪曲线/日均统计全废。
-- embedding 走「真实 API」计算（阿里云百炼 qwen3.7-text-embedding，1024 维），
+- embedding 走「真实 API」计算（阿里云百炼 qwen3.7-text-embedding-flash，1024 维），
   否则 chunks.embedding 为空 → 对话检索一条都命中不了，"镜子"的核心功能没法演示。
 - records/chunks 用 CTE 串起来插入，不显式指定 id，避免与已有数据撞主键。
 - 开头先清该用户的历史数据，脚本可反复执行。
@@ -31,7 +31,7 @@ EMBED_BASE_URL = os.environ.get("EMBED_BASE_URL",
                                 "https://ws-mfq7lft21wb5seq0.cn-beijing.maas.aliyuncs.com/compatible-mode/v1")
 # 明文 key 曾写死在这里并进了 Git 历史 —— 一律改从环境变量读，禁止再入库
 EMBED_API_KEY = os.environ.get("EMBED_API_KEY", "")
-EMBED_MODEL = "qwen3.7-text-embedding"
+EMBED_MODEL = "qwen3.7-text-embedding-flash"
 EXPECT_DIM = 1024
 
 # ============================ 日记素材 ============================

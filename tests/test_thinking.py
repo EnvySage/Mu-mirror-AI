@@ -376,11 +376,13 @@ class _ScriptedLlm:
 
     def __init__(self, pieces):
         self._pieces = pieces
+        self.last_messages = None
 
     def chat(self, messages, temperature=0.7):
         return "".join(t for k, t in self._pieces if k == "content")
 
     def chat_stream(self, messages, temperature=0.7):
+        self.last_messages = messages
         yield from self._pieces
 
 
@@ -401,6 +403,31 @@ def _chat_request():
 
 
 class TestChatRpcThinkingSplit:
+    def test_tool_record_citations_and_messages_are_not_duplicated(self):
+        request = _chat_request()
+        request.question = "CHAT_CURRENT_QUESTION"
+        request.history.add(role="assistant", content="CHAT_HISTORY_ENTRY")
+        request.tool_results.add(
+            tool="search_records", summary="search_records:1条（semantic）", success=True,
+            payload_json='{"count":1,"records":[{"record_id":99,"title":"复盘",'
+                         '"quote":"今天把问题理顺了","date":"2026-10-16",'
+                         '"content_type":"learning","score":0.2}]}')
+        llm = _ScriptedLlm([("content", "我找到了这条记录 [2]。")])
+        servicer = MirrorChatServicer()
+        orig = servicer.Chat.__globals__["create_llm"]
+        servicer.Chat.__globals__["create_llm"] = lambda **kw: llm
+        try:
+            chunks = list(servicer.Chat(request, _CapturedContext()))
+        finally:
+            servicer.Chat.__globals__["create_llm"] = orig
+
+        assert chunks[-1].done
+        assert [(s.n, s.record_id) for s in chunks[-1].sources] == [(2, 99)]
+        system = llm.last_messages[0]["content"]
+        assert "CHAT_CURRENT_QUESTION" not in system and "CHAT_HISTORY_ENTRY" not in system
+        assert sum(m["content"] == "CHAT_CURRENT_QUESTION" for m in llm.last_messages) == 1
+        assert sum(m["content"] == "CHAT_HISTORY_ENTRY" for m in llm.last_messages) == 1
+
     def test_thinking_and_content_separate_chunks(self):
         """thinking → ChatChunk(thinking=...)；content → ChatChunk(content=..., done=False)"""
         servicer = MirrorChatServicer()

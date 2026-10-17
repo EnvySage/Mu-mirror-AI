@@ -25,7 +25,7 @@ _sym_db = _symbol_database.Default()
 from generated import common_pb2 as common__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x16record_processor.proto\x12\x06mirror\x1a\x0c\x63ommon.proto\"\xeb\x01\n\x0f\x43lassifyRequest\x12\x0f\n\x07\x63ontent\x18\x01 \x01(\t\x12%\n\nllm_config\x18\x02 \x01(\x0b\x32\x11.mirror.LlmConfig\x12\x0e\n\x06single\x18\x03 \x01(\x08\x12&\n\x08glossary\x18\x04 \x03(\x0b\x32\x14.mirror.GlossaryTerm\x12$\n\nopen_todos\x18\x05 \x03(\x0b\x32\x10.mirror.TodoHint\x12*\n\x0erecent_context\x18\x06 \x03(\x0b\x32\x12.mirror.RecentHint\x12\x16\n\x0ereference_date\x18\x07 \x01(\t\"6\n\x10TimeSubstitution\x12\x10\n\x08original\x18\x01 \x01(\t\x12\x10\n\x08resolved\x18\x02 \x01(\t\"n\n\x08TodoHint\x12\x0f\n\x07todo_id\x18\x01 \x01(\x03\x12\r\n\x05title\x18\x02 \x01(\t\x12\x16\n\x0esource_excerpt\x18\x03 \x01(\t\x12\x12\n\ncreated_at\x18\x04 \x01(\t\x12\x16\n\x0e\x63urrent_status\x18\x05 \x01(\t\";\n\nRecentHint\x12\x0c\n\x04\x64\x61te\x18\x01 \x01(\t\x12\r\n\x05title\x18\x02 \x01(\t\x12\x10\n\x08keywords\x18\x03 \x03(\t\"4\n\x07TodoRef\x12\x0f\n\x07todo_id\x18\x01 \x01(\x03\x12\x18\n\x10suggested_status\x18\x02 \x01(\t\"\x8c\x01\n\x13\x45xtractTermsRequest\x12 \n\x06\x63hunks\x18\x01 \x03(\x0b\x32\x10.mirror.ChunkDTO\x12,\n\x0e\x65xisting_terms\x18\x02 \x03(\x0b\x32\x14.mirror.GlossaryTerm\x12%\n\nllm_config\x18\x03 \x01(\x0b\x32\x11.mirror.LlmConfig\"\xce\x01\n\x11\x45xtractTermsReply\x12;\n\ncandidates\x18\x01 \x03(\x0b\x32\'.mirror.ExtractTermsReply.TermCandidate\x1a|\n\rTermCandidate\x12\x0c\n\x04term\x18\x01 \x01(\t\x12\x0f\n\x07\x61liases\x18\x02 \x03(\t\x12\x13\n\x0b\x64\x65scription\x18\x03 \x01(\t\x12\x0c\n\x04kind\x18\x04 \x01(\t\x12\x10\n\x08\x65vidence\x18\x05 \x01(\t\x12\x17\n\x0fsource_chunk_id\x18\x06 \x01(\x03\"Z\n\x10\x43lassifyResponse\x12\x0c\n\x04skip\x18\x01 \x01(\x08\x12\x13\n\x0bskip_reason\x18\x02 \x01(\t\x12#\n\x05items\x18\x03 \x03(\x0b\x32\x14.mirror.ClassifyItem\"\xa0\x02\n\x0c\x43lassifyItem\x12\r\n\x05title\x18\x01 \x01(\t\x12\x0f\n\x07summary\x18\x02 \x01(\t\x12\x0f\n\x07\x63ontent\x18\x03 \x01(\t\x12)\n\x0c\x63ontent_type\x18\x04 \x01(\x0e\x32\x13.mirror.ContentType\x12\x1f\n\x05moods\x18\x05 \x03(\x0e\x32\x10.mirror.MoodType\x12\"\n\x06status\x18\x06 \x01(\x0e\x32\x12.mirror.TaskStatus\x12\x10\n\x08keywords\x18\x07 \x03(\t\x12\'\n\x0erefers_to_todo\x18\x08 \x01(\x0b\x32\x0f.mirror.TodoRef\x12\x34\n\x12time_substitutions\x18\t \x03(\x0b\x32\x18.mirror.TimeSubstitution2\x98\x01\n\x0fRecordProcessor\x12=\n\x08\x43lassify\x12\x17.mirror.ClassifyRequest\x1a\x18.mirror.ClassifyResponse\x12\x46\n\x0c\x45xtractTerms\x12\x1b.mirror.ExtractTermsRequest\x1a\x19.mirror.ExtractTermsReplyb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x16record_processor.proto\x12\x06mirror\x1a\x0c\x63ommon.proto\"\x8a\x02\n\x0f\x43lassifyRequest\x12\x0f\n\x07\x63ontent\x18\x01 \x01(\t\x12%\n\nllm_config\x18\x02 \x01(\x0b\x32\x11.mirror.LlmConfig\x12\x0e\n\x06single\x18\x03 \x01(\x08\x12&\n\x08glossary\x18\x04 \x03(\x0b\x32\x14.mirror.GlossaryTerm\x12$\n\nopen_todos\x18\x05 \x03(\x0b\x32\x10.mirror.TodoHint\x12*\n\x0erecent_context\x18\x06 \x03(\x0b\x32\x12.mirror.RecentHint\x12\x16\n\x0ereference_date\x18\x07 \x01(\t\x12\x1d\n\x15processing_authorized\x18\x08 \x01(\x08\"6\n\x10TimeSubstitution\x12\x10\n\x08original\x18\x01 \x01(\t\x12\x10\n\x08resolved\x18\x02 \x01(\t\"n\n\x08TodoHint\x12\x0f\n\x07todo_id\x18\x01 \x01(\x03\x12\r\n\x05title\x18\x02 \x01(\t\x12\x16\n\x0esource_excerpt\x18\x03 \x01(\t\x12\x12\n\ncreated_at\x18\x04 \x01(\t\x12\x16\n\x0e\x63urrent_status\x18\x05 \x01(\t\";\n\nRecentHint\x12\x0c\n\x04\x64\x61te\x18\x01 \x01(\t\x12\r\n\x05title\x18\x02 \x01(\t\x12\x10\n\x08keywords\x18\x03 \x03(\t\"4\n\x07TodoRef\x12\x0f\n\x07todo_id\x18\x01 \x01(\x03\x12\x18\n\x10suggested_status\x18\x02 \x01(\t\"\x8c\x01\n\x13\x45xtractTermsRequest\x12 \n\x06\x63hunks\x18\x01 \x03(\x0b\x32\x10.mirror.ChunkDTO\x12,\n\x0e\x65xisting_terms\x18\x02 \x03(\x0b\x32\x14.mirror.GlossaryTerm\x12%\n\nllm_config\x18\x03 \x01(\x0b\x32\x11.mirror.LlmConfig\"\xce\x01\n\x11\x45xtractTermsReply\x12;\n\ncandidates\x18\x01 \x03(\x0b\x32\'.mirror.ExtractTermsReply.TermCandidate\x1a|\n\rTermCandidate\x12\x0c\n\x04term\x18\x01 \x01(\t\x12\x0f\n\x07\x61liases\x18\x02 \x03(\t\x12\x13\n\x0b\x64\x65scription\x18\x03 \x01(\t\x12\x0c\n\x04kind\x18\x04 \x01(\t\x12\x10\n\x08\x65vidence\x18\x05 \x01(\t\x12\x17\n\x0fsource_chunk_id\x18\x06 \x01(\x03\"Z\n\x10\x43lassifyResponse\x12\x0c\n\x04skip\x18\x01 \x01(\x08\x12\x13\n\x0bskip_reason\x18\x02 \x01(\t\x12#\n\x05items\x18\x03 \x03(\x0b\x32\x14.mirror.ClassifyItem\"\xa0\x02\n\x0c\x43lassifyItem\x12\r\n\x05title\x18\x01 \x01(\t\x12\x0f\n\x07summary\x18\x02 \x01(\t\x12\x0f\n\x07\x63ontent\x18\x03 \x01(\t\x12)\n\x0c\x63ontent_type\x18\x04 \x01(\x0e\x32\x13.mirror.ContentType\x12\x1f\n\x05moods\x18\x05 \x03(\x0e\x32\x10.mirror.MoodType\x12\"\n\x06status\x18\x06 \x01(\x0e\x32\x12.mirror.TaskStatus\x12\x10\n\x08keywords\x18\x07 \x03(\t\x12\'\n\x0erefers_to_todo\x18\x08 \x01(\x0b\x32\x0f.mirror.TodoRef\x12\x34\n\x12time_substitutions\x18\t \x03(\x0b\x32\x18.mirror.TimeSubstitution2\x98\x01\n\x0fRecordProcessor\x12=\n\x08\x43lassify\x12\x17.mirror.ClassifyRequest\x1a\x18.mirror.ClassifyResponse\x12\x46\n\x0c\x45xtractTerms\x12\x1b.mirror.ExtractTermsRequest\x1a\x19.mirror.ExtractTermsReplyb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -33,25 +33,25 @@ _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'record_processor_pb2', _glo
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
   _globals['_CLASSIFYREQUEST']._serialized_start=49
-  _globals['_CLASSIFYREQUEST']._serialized_end=284
-  _globals['_TIMESUBSTITUTION']._serialized_start=286
-  _globals['_TIMESUBSTITUTION']._serialized_end=340
-  _globals['_TODOHINT']._serialized_start=342
-  _globals['_TODOHINT']._serialized_end=452
-  _globals['_RECENTHINT']._serialized_start=454
-  _globals['_RECENTHINT']._serialized_end=513
-  _globals['_TODOREF']._serialized_start=515
-  _globals['_TODOREF']._serialized_end=567
-  _globals['_EXTRACTTERMSREQUEST']._serialized_start=570
-  _globals['_EXTRACTTERMSREQUEST']._serialized_end=710
-  _globals['_EXTRACTTERMSREPLY']._serialized_start=713
-  _globals['_EXTRACTTERMSREPLY']._serialized_end=919
-  _globals['_EXTRACTTERMSREPLY_TERMCANDIDATE']._serialized_start=795
-  _globals['_EXTRACTTERMSREPLY_TERMCANDIDATE']._serialized_end=919
-  _globals['_CLASSIFYRESPONSE']._serialized_start=921
-  _globals['_CLASSIFYRESPONSE']._serialized_end=1011
-  _globals['_CLASSIFYITEM']._serialized_start=1014
-  _globals['_CLASSIFYITEM']._serialized_end=1302
-  _globals['_RECORDPROCESSOR']._serialized_start=1305
-  _globals['_RECORDPROCESSOR']._serialized_end=1457
+  _globals['_CLASSIFYREQUEST']._serialized_end=315
+  _globals['_TIMESUBSTITUTION']._serialized_start=317
+  _globals['_TIMESUBSTITUTION']._serialized_end=371
+  _globals['_TODOHINT']._serialized_start=373
+  _globals['_TODOHINT']._serialized_end=483
+  _globals['_RECENTHINT']._serialized_start=485
+  _globals['_RECENTHINT']._serialized_end=544
+  _globals['_TODOREF']._serialized_start=546
+  _globals['_TODOREF']._serialized_end=598
+  _globals['_EXTRACTTERMSREQUEST']._serialized_start=601
+  _globals['_EXTRACTTERMSREQUEST']._serialized_end=741
+  _globals['_EXTRACTTERMSREPLY']._serialized_start=744
+  _globals['_EXTRACTTERMSREPLY']._serialized_end=950
+  _globals['_EXTRACTTERMSREPLY_TERMCANDIDATE']._serialized_start=826
+  _globals['_EXTRACTTERMSREPLY_TERMCANDIDATE']._serialized_end=950
+  _globals['_CLASSIFYRESPONSE']._serialized_start=952
+  _globals['_CLASSIFYRESPONSE']._serialized_end=1042
+  _globals['_CLASSIFYITEM']._serialized_start=1045
+  _globals['_CLASSIFYITEM']._serialized_end=1333
+  _globals['_RECORDPROCESSOR']._serialized_start=1336
+  _globals['_RECORDPROCESSOR']._serialized_end=1488
 # @@protoc_insertion_point(module_scope)

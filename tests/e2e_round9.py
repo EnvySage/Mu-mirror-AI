@@ -76,7 +76,7 @@ def main():
         # --- 1. 正常意图提取（桩 LLM 返回 content_type=""）---
         print("\n[1] ExtractIntent 正常路径")
         r = chat.ExtractIntent(chat_pb2.ExtractIntentRequest(query="最近状态", llm_config=llm_config()))
-        check("正常意图 query_type 合法", r.query_type in ("profile", "structured", "semantic", "hybrid"), r.query_type)
+        check("正常意图 query_type 合法", r.query_type in ("structured", "semantic", "hybrid"), r.query_type)
 
         # --- 2. 脏 content_type E2E：直连桩发自定义 content_type ---
         print("\n[2] content_type 白名单 E2E")
