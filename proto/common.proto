@@ -90,6 +90,7 @@ message ToolSpec {
   string name = 1;         // 工具名（如 search_records，B 侧执行时的查找键）
   string description = 2;  // 用途描述（prompt 逐条渲染）
   string args_schema = 3;  // 参数说明（字段清单/JSON Schema 文本，prompt 逐条渲染）
+  string effect = 4;       // READ | PREPARE_WRITE; submission tools are not available
 }
 
 // 工具执行结果：Java 执行后随 ChatRequest.tool_results 回传，Python 渲染成上下文块

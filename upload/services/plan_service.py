@@ -33,9 +33,9 @@ PlanNextStep（chat-loop-design.md §3，循环版，新增）：
 
 prompt 模板一分为二（裁决 0.4 / §9 验收 6 的回滚语义要求）：
   - PlanNextStep → prompts/plan_tools.txt（循环版：自评环节 + done 字段 + 循环语境渲染位）
-  - PlanTools    → prompts/plan_tools_single.txt（旧版原文快照，逐字不动）
+  - PlanTools    → prompts/plan_tools_single.txt（单次规划版，与循环版共用 READ/PREPARE_WRITE 边界）
 两者共用同一个模板会让 chat-loop-enabled=false 拿到"旧控制流 + 新 prompt"的未验证混合体，
-那不是回滚而是第三种模式；回滚路径要退回的是**已知的旧行为**（含旧 prompt 里的已知 bug）。
+那不是回滚而是第三种模式；两条控制流保持独立；操作卡的提交边界在两条路径均生效。
 """
 
 import json
@@ -94,7 +94,10 @@ def format_tool_registry(tools) -> str:
             continue
         desc = (t.description or "").strip()
         schema = (t.args_schema or "").strip()
-        lines.append(f"{i}. {name}：{desc}" if desc else f"{i}. {name}")
+        effect = (t.effect or "READ").strip()
+        if effect not in ("READ", "PREPARE_WRITE"):
+            continue
+        lines.append(f"{i}. {name} [{effect}]：{desc}" if desc else f"{i}. {name} [{effect}]")
         if schema:
             lines.append(f"   参数：{schema[:_MAX_ARG_CHARS]}")
     return "\n".join(lines)
@@ -134,6 +137,9 @@ def sanitize_calls(data: dict, registry_names: set[str]) -> list[pb2.PlannedCall
                 continue
         if not isinstance(args, dict):
             args = {}  # 缺 args/非对象：工具执行侧自兜底默认值，不算违规
+        if _has_authority_argument(args):
+            dropped += 1
+            continue
         try:
             args_json = json.dumps(args, ensure_ascii=False)
         except (TypeError, ValueError):
@@ -198,6 +204,22 @@ def resolve_done(data: dict, calls: list) -> bool:
     return False
 
 
+def _has_authority_argument(value) -> bool:
+    if isinstance(value, dict):
+        return any(str(key).replace("_", "").lower() in
+                   {"userid", "confirmed", "confirmation", "preparekey", "sourcesessionid", "sourcemessageid", "requestid"}
+                   or _has_authority_argument(child) for key, child in value.items())
+    if isinstance(value, list):
+        return any(_has_authority_argument(child) for child in value)
+    return False
+
+
+def allowed_registry_names(tools) -> set[str]:
+    # Empty effect is the compatible legacy READ value; unknown effects fail closed.
+    return {(t.name or "").strip() for t in tools
+            if (t.name or "").strip() and (t.effect or "READ").strip() in ("READ", "PREPARE_WRITE")}
+
+
 class MirrorChatServicer(_BaseServicer):
     """PlanTools / PlanNextStep servicer——继承 chat_service 的 ExtractIntent/Chat 实现。"""
 
@@ -205,8 +227,7 @@ class MirrorChatServicer(_BaseServicer):
         question = request.question
         llm_config = request.llm_config
         registry = format_tool_registry(request.tools)
-        registry_names = {(t.name or "").strip() for t in request.tools}
-        registry_names.discard("")
+        registry_names = allowed_registry_names(request.tools)
 
         print(f"[PlanTools] question: {question[:80]} | tools={len(registry_names)} | "
               f"glossary={len(request.glossary)}")
@@ -266,8 +287,7 @@ class MirrorChatServicer(_BaseServicer):
         question = request.question
         llm_config = request.llm_config
         registry = format_tool_registry(request.tools)
-        registry_names = {(t.name or "").strip() for t in request.tools}
-        registry_names.discard("")
+        registry_names = allowed_registry_names(request.tools)
         step = request.step or 1
         max_steps = request.max_steps or step
 
