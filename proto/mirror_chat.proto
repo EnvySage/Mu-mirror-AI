@@ -38,6 +38,7 @@ message ChatRequest {
   LlmConfig llm_config = 4;
   repeated GlossaryTerm glossary = 5;  // 用户个人词汇表（confirmed top30），软约束注入
   repeated ToolResult tool_results = 6; // PlanTools 计划的执行结果（B 执行工具后回传）；空列表零影响
+  AssistantContext assistant_context = 7;
 }
 
 message ChatMessage {
@@ -79,6 +80,7 @@ message PlanToolsRequest {
   repeated GlossaryTerm glossary = 2; // 个人词汇表（工具参数里的"论文"等指代依赖它）
   repeated ToolSpec tools = 3;        // Java 侧注册表快照（Python 不硬编码工具清单）
   LlmConfig llm_config = 4;
+  AssistantContext assistant_context = 5;
 }
 
 message PlanToolsReply {
@@ -103,6 +105,7 @@ message PlanNextStepRequest {
   int32 step = 7;                            // 第几步（1-based）
   int32 max_steps = 8;                       // 步数预算 → prompt 里告知"还剩几步"
   bool has_retrieval = 9;                    // RAG 是否有命中（false = 检索空，规划要据此换策略）
+  AssistantContext assistant_context = 10;
 }
 
 message PlanStepChunk {

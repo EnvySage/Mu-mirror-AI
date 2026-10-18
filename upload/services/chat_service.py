@@ -31,6 +31,20 @@ MOODS = {"happy", "excited", "satisfied", "grateful", "expecting", "calm", "bore
 
 ROLE_ASSISTANT = "assistant"
 
+
+def assistant_context_text(context) -> str:
+    """Render only current server-authoritative context; old chat claims never override it."""
+    if context is None:
+        return "当前日期/时区未提供；操作卡状态以服务端本段为准。"
+    lines = [f"当前日期：{context.current_date or '未知'}；时区：{context.timezone or '未知'}",
+             f"角色口吻：{context.role_tone or '自然、直接'}",
+             "操作卡状态为服务端当前真实状态，优先级高于历史聊天中的描述；取消的卡不能重建或称为已执行。"]
+    if context.action_status_summary:
+        lines.append("当前会话操作卡：\n" + context.action_status_summary)
+    else:
+        lines.append("当前会话没有已准备的操作卡。")
+    return "\n".join(lines)
+
 # 工具结果渲染截断（config plan_tools.max_tool_chars，防 prompt 膨胀）
 _MAX_TOOL_CHARS = int(CONFIG["plan_tools"]["max_tool_chars"])
 
@@ -443,6 +457,7 @@ class MirrorChatServicer(pb2_grpc.MirrorChatServicer):
                 context=context_text,
                 glossary=format_glossary(request.glossary),
                 tool_results=tool_results_text,
+                assistant_context=assistant_context_text(request.assistant_context),
             )
             if request.glossary:
                 print(f"[Chat] glossary 注入 {len(request.glossary)} 条")

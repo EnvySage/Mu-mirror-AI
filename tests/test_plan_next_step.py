@@ -247,10 +247,10 @@ class TestPlannerThinkingBudget:
         # 0（不传 thinking 参数）或 ≥1024（Anthropic extended thinking 下限），中间值会被端点拒
         assert ps._PLAN_THINKING_BUDGET == 0 or ps._PLAN_THINKING_BUDGET >= 1024
 
-    def test_prompt_tells_model_thinking_is_user_visible(self):
+    def test_prompt_keeps_planner_thinking_internal(self):
         llm = _ScriptedLlm([("content", '{"calls": [], "done": true}')])
         _run(MirrorChatServicer(), _request(), llm)
-        assert "思考过程会原样显示给用户看" in llm.prompt
+        assert "规划过程不会显示给用户" in llm.prompt
 
 
 class TestFinalBatchPrompt:

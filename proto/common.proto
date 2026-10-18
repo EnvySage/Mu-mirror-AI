@@ -74,6 +74,13 @@ message LlmConfig {
   string model = 5;
 }
 
+message AssistantContext {
+  string role_tone = 1;
+  string current_date = 2;
+  string timezone = 3;
+  string action_status_summary = 4;
+}
+
 message EmbeddingConfig {
   string source = 1;
   string local_model = 2;

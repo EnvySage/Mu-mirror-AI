@@ -46,6 +46,7 @@ from generated import mirror_chat_pb2 as pb2
 from generated import mirror_chat_pb2_grpc as pb2_grpc
 
 from services.chat_service import MirrorChatServicer as _BaseServicer
+from services.chat_service import assistant_context_text
 from config import CONFIG
 from errors import abort_with_mapped
 from glossary_render import format_glossary
@@ -253,6 +254,7 @@ class MirrorChatServicer(_BaseServicer):
                 tools=registry if registry else "（本次无可用工具）",
                 question=question,
                 glossary=format_glossary(request.glossary),
+                assistant_context=assistant_context_text(request.assistant_context),
             )
 
             t0 = time.monotonic()
@@ -324,6 +326,7 @@ class MirrorChatServicer(_BaseServicer):
                 max_steps=max_steps,
                 max_calls=_MAX_CALLS,
                 today=today_text(),
+                assistant_context=assistant_context_text(request.assistant_context),
             )
 
             t0 = time.monotonic()
