@@ -45,7 +45,7 @@ class TestProtoContract:
         fields = rp_pb2.ClassifyRequest.DESCRIPTOR.fields_by_name
         assert {n: f.number for n, f in fields.items()} == {
             "content": 1, "llm_config": 2, "single": 3, "glossary": 4, "open_todos": 5,
-            "recent_context": 6, "reference_date": 7, "processing_authorized": 8,
+            "recent_context": 6, "reference_date": 7, "processing_authorized": 8, "growth_context": 9,
         }
 
     def test_classify_item_field_numbers(self):
@@ -53,7 +53,7 @@ class TestProtoContract:
         fields = rp_pb2.ClassifyItem.DESCRIPTOR.fields_by_name
         assert {n: f.number for n, f in fields.items()} == {
             "title": 1, "summary": 2, "content": 3, "content_type": 4, "moods": 5,
-            "status": 6, "keywords": 7, "refers_to_todo": 8, "time_substitutions": 9,
+            "status": 6, "keywords": 7, "refers_to_todo": 8, "time_substitutions": 9, "user_tags": 10,
         }
 
     def test_todo_hint_fields(self):

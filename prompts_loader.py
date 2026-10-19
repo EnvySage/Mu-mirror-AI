@@ -27,9 +27,9 @@ _FILENAME = {
 # stats_facts/records（四块输入语义）；模板另含 prev_mirror/correction_index 占位符。
 _ALIASES = {
     "classify": {"content": "content", "open_todos": "open_todos", "recent_context": "recent_context",
-                 "time_rule": "time_rule"},
+                 "time_rule": "time_rule", "growth_context": "growth_context"},
     "classify_single": {"content": "content", "open_todos": "open_todos", "recent_context": "recent_context",
-                 "time_rule": "time_rule"},
+                 "time_rule": "time_rule", "growth_context": "growth_context"},
     "intent": {"query": "query"},
     "chat": {"context": "context", "glossary": "glossary", "tool_results": "tool_results"},
     "profile": {

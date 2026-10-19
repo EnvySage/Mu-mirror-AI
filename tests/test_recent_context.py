@@ -52,7 +52,7 @@ class TestProtoContract:
         assert {n: f.number for n, f in fields.items()} == {
             "content": 1, "llm_config": 2, "single": 3, "glossary": 4,
             "open_todos": 5, "recent_context": 6, "reference_date": 7,
-            "processing_authorized": 8,
+            "processing_authorized": 8, "growth_context": 9,
         }
 
     def test_recent_hint_fields(self):

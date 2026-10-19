@@ -90,6 +90,23 @@ message EmbeddingConfig {
   string base_url = 6;
 }
 
+message GrowthAxis {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  int32 definition_version = 4;
+}
+
+message GrowthContext {
+  repeated GrowthAxis axes = 1;
+}
+
+message GrowthSuggestion {
+  string dimension_id = 1;
+  int32 points = 2;
+  string reason = 3;
+}
+
 // ── 工具规划契约（toolcalling-vault-design.md 第 2/6 节，2026-09-06）──
 
 // 工具注册表条目：Java 侧注册表快照随 PlanToolsRequest 传入，Python 不硬编码工具清单
