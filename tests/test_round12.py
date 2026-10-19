@@ -46,7 +46,8 @@ def _render(req: pb.GenerateProfileRequest) -> str:
         active_time=ps._fmt_active_time(req.active_time),
         total_records=req.total_records,
         time_range=req.time_range or "（未指定）",
-        recent_chats=ps._fmt_recent_chats(req.recent_chats),
+        recent_chats="",
+        assistant_memories=ps._fmt_assistant_memories(req.assistant_context.memories),
         glossary=ps.format_glossary(req.glossary),
     )
 
@@ -75,6 +76,7 @@ class TestProtoContract:
             "todos": 1, "learnings": 2, "mood_stats": 3, "keywords": 4, "active_time": 5,
             "total_records": 6, "time_range": 7, "llm_config": 8, "recent_chats": 9,
             "glossary": 10, "prev_mirror": 11, "correction_index": 12, "mirror_lookback": 13,
+            "stats_facts": 14, "assistant_context": 15,
         }
 
     def test_mirror_lookback_is_optional(self):
@@ -218,7 +220,7 @@ class TestPromptSemantics:
     def test_template_has_all_block_placeholders(self):
         text = ps.loader.load("profile")
         for ph in ("{prev_mirror}", "{correction_index}", "{stats_facts}", "{records}",
-                   "{glossary}", "{total_records}", "{time_range}", "{recent_chats}"):
+                   "{glossary}", "{total_records}", "{time_range}", "{assistant_memories}"):
             assert ph in text, f"缺占位符 {ph}"
 
     def test_semantic_declarations(self):

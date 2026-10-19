@@ -23,6 +23,8 @@ message GenerateProfileRequest {
   string prev_mirror = 11;               // ① 上一份镜子全文（overall_summary+五维拼接），空=首份镜子（genesis）
   string correction_index = 12;          // ③ 校正索引（上月镜子涉及记录的 title+日期清单），仅回看深度=0 时传入
   optional int32 mirror_lookback = 13;   // ② 回看深度档位 0-3（默认 1）；optional 区分"未传"与"0 档纯继承"（wire 不变）
+  string stats_facts = 14;
+  AssistantContext assistant_context = 15;
 }
 
 message TodoItem {

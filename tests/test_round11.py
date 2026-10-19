@@ -27,8 +27,8 @@ from services.chat_service import _format_tool_results  # noqa: E402
 from services.plan_service import format_tool_registry, sanitize_calls  # noqa: E402
 
 
-def _spec(name="search_records", description="检索记录", args_schema='{"query?": "string"}'):
-    return common.ToolSpec(name=name, description=description, args_schema=args_schema)
+def _spec(name="search_records", description="检索记录", args_schema='{"query?": "string"}', effect=""):
+    return common.ToolSpec(name=name, description=description, args_schema=args_schema, effect=effect)
 
 
 REGISTRY = {"search_records", "get_stats", "get_profile", "get_glossary", "get_coverage"}
@@ -130,9 +130,22 @@ class TestFormatToolRegistry:
         tools = [_spec("search_records", "四路检索记录", '{"query?": "string", "days?": "int"}'),
                  _spec("get_stats", "统计汇总", '{"days?": "int"}')]
         out = format_tool_registry(tools)
-        assert "1. search_records：四路检索记录" in out
+        assert "1. search_records [READ]：四路检索记录" in out
         assert "参数：{\"query?\": \"string\", \"days?\": \"int\"}" in out
-        assert "2. get_stats：统计汇总" in out
+        assert "2. get_stats [READ]：统计汇总" in out
+
+    def test_effect_labels_and_unsupported_effects(self):
+        out = format_tool_registry([
+            _spec("search_records", effect="READ"),
+            _spec("prepare_todo", effect="PREPARE_WRITE"),
+            _spec("submit_todo", effect="WRITE"),
+        ])
+        assert out.splitlines() == [
+            "1. search_records [READ]：检索记录",
+            "   参数：{\"query?\": \"string\"}",
+            "2. prepare_todo [PREPARE_WRITE]：检索记录",
+            "   参数：{\"query?\": \"string\"}",
+        ]
 
     def test_blank_name_skipped(self):
         out = format_tool_registry([_spec(name="  "), _spec(name="get_stats")])
@@ -448,13 +461,14 @@ class TestPromptWiring:
 class TestProtoContract:
     def test_common_tool_messages(self):
         spec = {n: f.number for n, f in common.ToolSpec.DESCRIPTOR.fields_by_name.items()}
-        assert spec == {"name": 1, "description": 2, "args_schema": 3}
+        assert spec == {"name": 1, "description": 2, "args_schema": 3, "effect": 4}
         tr = {n: f.number for n, f in common.ToolResult.DESCRIPTOR.fields_by_name.items()}
         assert tr == {"tool": 1, "summary": 2, "payload_json": 3, "success": 4}
 
     def test_plantools_messages(self):
         req = {n: f.number for n, f in chat_pb2.PlanToolsRequest.DESCRIPTOR.fields_by_name.items()}
-        assert req == {"question": 1, "glossary": 2, "tools": 3, "llm_config": 4}
+        assert req == {"question": 1, "glossary": 2, "tools": 3, "llm_config": 4,
+                       "assistant_context": 5}
         reply = {n: f.number for n, f in chat_pb2.PlanToolsReply.DESCRIPTOR.fields_by_name.items()}
         assert reply == {"calls": 1}
         call = {n: f.number for n, f in chat_pb2.PlannedCall.DESCRIPTOR.fields_by_name.items()}
@@ -464,12 +478,12 @@ class TestProtoContract:
         """ChatRequest.tool_results=6（核对现有注释防撞号：question1/history2/chunks3/llm4/glossary5）"""
         fields = {n: f.number for n, f in chat_pb2.ChatRequest.DESCRIPTOR.fields_by_name.items()}
         assert fields == {"question": 1, "history": 2, "chunks": 3, "llm_config": 4,
-                          "glossary": 5, "tool_results": 6}
+                          "glossary": 5, "tool_results": 6, "assistant_context": 7}
 
     def test_plantools_rpc_in_service(self):
         """PlanTools 仍在（回滚路径不删）；PlanNextStep 为 chat-loop-design.md §3 新增"""
         methods = set(chat_pb2.DESCRIPTOR.services_by_name["MirrorChat"].methods_by_name)
-        assert methods == {"ExtractIntent", "Chat", "PlanTools", "PlanNextStep"}
+        assert methods == {"ExtractIntent", "Chat", "PlanTools", "PlanNextStep", "SummarizeDay"}
 
     def test_wire_first_bytes(self):
         """wire 冒烟：tool_results=6 → 首字节 0x32；tools=3 → 0x1a；calls=1 → 0x0a"""

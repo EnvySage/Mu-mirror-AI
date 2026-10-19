@@ -20,6 +20,7 @@ _FILENAME = {
     "extract_terms": "extract_terms",
     "plan_tools": "plan_tools",
     "plan_tools_single": "plan_tools_single",  # 旧 PlanTools 回滚路径专用（HEAD 原文快照）
+    "chat_day_summary": "chat_day_summary",
 }
 
 # 代码内占位符 → 模板中的占位符（保持向后兼容：模板 {content}/{query} 不变）
@@ -39,6 +40,7 @@ _ALIASES = {
         "recent_chats": "recent_chats",
         "prev_mirror": "prev_mirror", "correction_index": "correction_index",
         "stats_facts": "stats_facts", "records": "records",
+        "assistant_memories": "assistant_memories",
     },
     "inspiration": {"current_input": "current_input", "context": "context"},
     "extract_terms": {"chunks": "chunks", "existing_terms": "existing_terms"},
@@ -53,6 +55,10 @@ _ALIASES = {
         "tools": "tools", "question": "question", "glossary": "glossary",
         "history": "history", "previous_results": "previous_results",
         "step": "step", "max_steps": "max_steps", "max_calls": "max_calls", "today": "today",
+    },
+    "chat_day_summary": {
+        "messages": "messages", "source_date": "source_date", "timezone": "timezone",
+        "source_hash": "source_hash",
     },
 }
 

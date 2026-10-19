@@ -66,8 +66,8 @@
 **本月记录数：** {total_records}
 **数据时间范围：** {time_range}
 
-**最近对话记录（可能为空）：**
-{recent_chats}
+**用户已授权的聊天记忆（可能为空）：**
+{assistant_memories}
 
 **用户个人词汇表（软约束，可能为空）：**
 {glossary}

@@ -25,37 +25,45 @@ _sym_db = _symbol_database.Default()
 from generated import common_pb2 as common__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x11mirror_chat.proto\x12\x06mirror\x1a\x0c\x63ommon.proto\"t\n\x14\x45xtractIntentRequest\x12\r\n\x05query\x18\x01 \x01(\t\x12%\n\nllm_config\x18\x02 \x01(\x0b\x32\x11.mirror.LlmConfig\x12&\n\x08glossary\x18\x03 \x03(\x0b\x32\x14.mirror.GlossaryTerm\"\x93\x01\n\x15\x45xtractIntentResponse\x12\x12\n\nquery_type\x18\x01 \x01(\t\x12\x19\n\x0c\x63ontent_type\x18\x02 \x01(\tH\x00\x88\x01\x01\x12\r\n\x05moods\x18\x03 \x03(\t\x12\x12\n\ntime_range\x18\x04 \x01(\t\x12\x17\n\x0frewritten_query\x18\x05 \x01(\tB\x0f\n\r_content_type\"\x9b\x02\n\x0b\x43hatRequest\x12\x10\n\x08question\x18\x01 \x01(\t\x12$\n\x07history\x18\x02 \x03(\x0b\x32\x13.mirror.ChatMessage\x12&\n\x06\x63hunks\x18\x03 \x03(\x0b\x32\x16.mirror.RetrievedChunk\x12%\n\nllm_config\x18\x04 \x01(\x0b\x32\x11.mirror.LlmConfig\x12&\n\x08glossary\x18\x05 \x03(\x0b\x32\x14.mirror.GlossaryTerm\x12(\n\x0ctool_results\x18\x06 \x03(\x0b\x32\x12.mirror.ToolResult\x12\x33\n\x11\x61ssistant_context\x18\x07 \x01(\x0b\x32\x18.mirror.AssistantContext\",\n\x0b\x43hatMessage\x12\x0c\n\x04role\x18\x01 \x01(\t\x12\x0f\n\x07\x63ontent\x18\x02 \x01(\t\"\x8b\x01\n\x0eRetrievedChunk\x12\x11\n\trecord_id\x18\x01 \x01(\x03\x12\x0f\n\x07\x63ontent\x18\x02 \x01(\t\x12\r\n\x05title\x18\x03 \x01(\t\x12\x12\n\ncreated_at\x18\x04 \x01(\t\x12\x14\n\x0c\x63ontent_type\x18\x05 \x01(\t\x12\r\n\x05moods\x18\x06 \x03(\t\x12\r\n\x05score\x18\x07 \x01(\x02\"o\n\tChatChunk\x12\x0f\n\x07\x63ontent\x18\x01 \x01(\t\x12\x0c\n\x04\x64one\x18\x02 \x01(\x08\x12\x1f\n\x07sources\x18\x03 \x03(\x0b\x32\x0e.mirror.Source\x12\x15\n\x08thinking\x18\x04 \x01(\tH\x00\x88\x01\x01\x42\x0b\n\t_thinking\"C\n\x06Source\x12\x11\n\trecord_id\x18\x01 \x01(\x03\x12\r\n\x05quote\x18\x02 \x01(\t\x12\x0c\n\x04\x64\x61te\x18\x03 \x01(\t\x12\t\n\x01n\x18\x04 \x01(\x05\"\xc9\x01\n\x10PlanToolsRequest\x12\x10\n\x08question\x18\x01 \x01(\t\x12&\n\x08glossary\x18\x02 \x03(\x0b\x32\x14.mirror.GlossaryTerm\x12\x1f\n\x05tools\x18\x03 \x03(\x0b\x32\x10.mirror.ToolSpec\x12%\n\nllm_config\x18\x04 \x01(\x0b\x32\x11.mirror.LlmConfig\x12\x33\n\x11\x61ssistant_context\x18\x05 \x01(\x0b\x32\x18.mirror.AssistantContext\"4\n\x0ePlanToolsReply\x12\"\n\x05\x63\x61lls\x18\x01 \x03(\x0b\x32\x13.mirror.PlannedCall\".\n\x0bPlannedCall\x12\x0c\n\x04tool\x18\x01 \x01(\t\x12\x11\n\targs_json\x18\x02 \x01(\t\"\xd8\x02\n\x13PlanNextStepRequest\x12\x10\n\x08question\x18\x01 \x01(\t\x12&\n\x08glossary\x18\x02 \x03(\x0b\x32\x14.mirror.GlossaryTerm\x12\x1f\n\x05tools\x18\x03 \x03(\x0b\x32\x10.mirror.ToolSpec\x12%\n\nllm_config\x18\x04 \x01(\x0b\x32\x11.mirror.LlmConfig\x12$\n\x07history\x18\x05 \x03(\x0b\x32\x13.mirror.ChatMessage\x12,\n\x10previous_results\x18\x06 \x03(\x0b\x32\x12.mirror.ToolResult\x12\x0c\n\x04step\x18\x07 \x01(\x05\x12\x11\n\tmax_steps\x18\x08 \x01(\x05\x12\x15\n\rhas_retrieval\x18\t \x01(\x08\x12\x33\n\x11\x61ssistant_context\x18\n \x01(\x0b\x32\x18.mirror.AssistantContext\"t\n\rPlanStepChunk\x12\x15\n\x08thinking\x18\x01 \x01(\tH\x00\x88\x01\x01\x12\"\n\x05\x63\x61lls\x18\x02 \x03(\x0b\x32\x13.mirror.PlannedCall\x12\x0c\n\x04\x64one\x18\x03 \x01(\x08\x12\r\n\x05\x66inal\x18\x04 \x01(\x08\x42\x0b\n\t_thinking2\x91\x02\n\nMirrorChat\x12L\n\rExtractIntent\x12\x1c.mirror.ExtractIntentRequest\x1a\x1d.mirror.ExtractIntentResponse\x12\x30\n\x04\x43hat\x12\x13.mirror.ChatRequest\x1a\x11.mirror.ChatChunk0\x01\x12=\n\tPlanTools\x12\x18.mirror.PlanToolsRequest\x1a\x16.mirror.PlanToolsReply\x12\x44\n\x0cPlanNextStep\x12\x1b.mirror.PlanNextStepRequest\x1a\x15.mirror.PlanStepChunk0\x01\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x11mirror_chat.proto\x12\x06mirror\x1a\x0c\x63ommon.proto\"I\n\x0e\x43hatDayMessage\x12\x12\n\nmessage_id\x18\x01 \x01(\x03\x12\x0f\n\x07\x63ontent\x18\x02 \x01(\t\x12\x12\n\ncreated_at\x18\x03 \x01(\t\"\xa2\x01\n\x13SummarizeDayRequest\x12(\n\x08messages\x18\x01 \x03(\x0b\x32\x16.mirror.ChatDayMessage\x12\x13\n\x0bsource_hash\x18\x02 \x01(\t\x12\x13\n\x0bsource_date\x18\x03 \x01(\t\x12\x10\n\x08timezone\x18\x04 \x01(\t\x12%\n\nllm_config\x18\x05 \x01(\x0b\x32\x11.mirror.LlmConfig\"\x9c\x01\n\x0fMemoryCandidate\x12\x0f\n\x07\x63ontent\x18\x01 \x01(\t\x12\x0c\n\x04kind\x18\x02 \x01(\t\x12\x1a\n\x12source_message_ids\x18\x03 \x03(\x03\x12\x17\n\nevent_date\x18\x04 \x01(\tH\x00\x88\x01\x01\x12\x17\n\nexpires_at\x18\x05 \x01(\tH\x01\x88\x01\x01\x42\r\n\x0b_event_dateB\r\n\x0b_expires_at\"p\n\x14SummarizeDayResponse\x12\x0f\n\x07summary\x18\x01 \x01(\t\x12\x32\n\x11memory_candidates\x18\x02 \x03(\x0b\x32\x17.mirror.MemoryCandidate\x12\x13\n\x0bsource_hash\x18\x03 \x01(\t\"t\n\x14\x45xtractIntentRequest\x12\r\n\x05query\x18\x01 \x01(\t\x12%\n\nllm_config\x18\x02 \x01(\x0b\x32\x11.mirror.LlmConfig\x12&\n\x08glossary\x18\x03 \x03(\x0b\x32\x14.mirror.GlossaryTerm\"\x93\x01\n\x15\x45xtractIntentResponse\x12\x12\n\nquery_type\x18\x01 \x01(\t\x12\x19\n\x0c\x63ontent_type\x18\x02 \x01(\tH\x00\x88\x01\x01\x12\r\n\x05moods\x18\x03 \x03(\t\x12\x12\n\ntime_range\x18\x04 \x01(\t\x12\x17\n\x0frewritten_query\x18\x05 \x01(\tB\x0f\n\r_content_type\"\x9b\x02\n\x0b\x43hatRequest\x12\x10\n\x08question\x18\x01 \x01(\t\x12$\n\x07history\x18\x02 \x03(\x0b\x32\x13.mirror.ChatMessage\x12&\n\x06\x63hunks\x18\x03 \x03(\x0b\x32\x16.mirror.RetrievedChunk\x12%\n\nllm_config\x18\x04 \x01(\x0b\x32\x11.mirror.LlmConfig\x12&\n\x08glossary\x18\x05 \x03(\x0b\x32\x14.mirror.GlossaryTerm\x12(\n\x0ctool_results\x18\x06 \x03(\x0b\x32\x12.mirror.ToolResult\x12\x33\n\x11\x61ssistant_context\x18\x07 \x01(\x0b\x32\x18.mirror.AssistantContext\",\n\x0b\x43hatMessage\x12\x0c\n\x04role\x18\x01 \x01(\t\x12\x0f\n\x07\x63ontent\x18\x02 \x01(\t\"\x8b\x01\n\x0eRetrievedChunk\x12\x11\n\trecord_id\x18\x01 \x01(\x03\x12\x0f\n\x07\x63ontent\x18\x02 \x01(\t\x12\r\n\x05title\x18\x03 \x01(\t\x12\x12\n\ncreated_at\x18\x04 \x01(\t\x12\x14\n\x0c\x63ontent_type\x18\x05 \x01(\t\x12\r\n\x05moods\x18\x06 \x03(\t\x12\r\n\x05score\x18\x07 \x01(\x02\"o\n\tChatChunk\x12\x0f\n\x07\x63ontent\x18\x01 \x01(\t\x12\x0c\n\x04\x64one\x18\x02 \x01(\x08\x12\x1f\n\x07sources\x18\x03 \x03(\x0b\x32\x0e.mirror.Source\x12\x15\n\x08thinking\x18\x04 \x01(\tH\x00\x88\x01\x01\x42\x0b\n\t_thinking\"C\n\x06Source\x12\x11\n\trecord_id\x18\x01 \x01(\x03\x12\r\n\x05quote\x18\x02 \x01(\t\x12\x0c\n\x04\x64\x61te\x18\x03 \x01(\t\x12\t\n\x01n\x18\x04 \x01(\x05\"\xc9\x01\n\x10PlanToolsRequest\x12\x10\n\x08question\x18\x01 \x01(\t\x12&\n\x08glossary\x18\x02 \x03(\x0b\x32\x14.mirror.GlossaryTerm\x12\x1f\n\x05tools\x18\x03 \x03(\x0b\x32\x10.mirror.ToolSpec\x12%\n\nllm_config\x18\x04 \x01(\x0b\x32\x11.mirror.LlmConfig\x12\x33\n\x11\x61ssistant_context\x18\x05 \x01(\x0b\x32\x18.mirror.AssistantContext\"4\n\x0ePlanToolsReply\x12\"\n\x05\x63\x61lls\x18\x01 \x03(\x0b\x32\x13.mirror.PlannedCall\".\n\x0bPlannedCall\x12\x0c\n\x04tool\x18\x01 \x01(\t\x12\x11\n\targs_json\x18\x02 \x01(\t\"\xd8\x02\n\x13PlanNextStepRequest\x12\x10\n\x08question\x18\x01 \x01(\t\x12&\n\x08glossary\x18\x02 \x03(\x0b\x32\x14.mirror.GlossaryTerm\x12\x1f\n\x05tools\x18\x03 \x03(\x0b\x32\x10.mirror.ToolSpec\x12%\n\nllm_config\x18\x04 \x01(\x0b\x32\x11.mirror.LlmConfig\x12$\n\x07history\x18\x05 \x03(\x0b\x32\x13.mirror.ChatMessage\x12,\n\x10previous_results\x18\x06 \x03(\x0b\x32\x12.mirror.ToolResult\x12\x0c\n\x04step\x18\x07 \x01(\x05\x12\x11\n\tmax_steps\x18\x08 \x01(\x05\x12\x15\n\rhas_retrieval\x18\t \x01(\x08\x12\x33\n\x11\x61ssistant_context\x18\n \x01(\x0b\x32\x18.mirror.AssistantContext\"t\n\rPlanStepChunk\x12\x15\n\x08thinking\x18\x01 \x01(\tH\x00\x88\x01\x01\x12\"\n\x05\x63\x61lls\x18\x02 \x03(\x0b\x32\x13.mirror.PlannedCall\x12\x0c\n\x04\x64one\x18\x03 \x01(\x08\x12\r\n\x05\x66inal\x18\x04 \x01(\x08\x42\x0b\n\t_thinking2\xdc\x02\n\nMirrorChat\x12L\n\rExtractIntent\x12\x1c.mirror.ExtractIntentRequest\x1a\x1d.mirror.ExtractIntentResponse\x12\x30\n\x04\x43hat\x12\x13.mirror.ChatRequest\x1a\x11.mirror.ChatChunk0\x01\x12=\n\tPlanTools\x12\x18.mirror.PlanToolsRequest\x1a\x16.mirror.PlanToolsReply\x12\x44\n\x0cPlanNextStep\x12\x1b.mirror.PlanNextStepRequest\x1a\x15.mirror.PlanStepChunk0\x01\x12I\n\x0cSummarizeDay\x12\x1b.mirror.SummarizeDayRequest\x1a\x1c.mirror.SummarizeDayResponseb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'mirror_chat_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
-  _globals['_EXTRACTINTENTREQUEST']._serialized_start=43
-  _globals['_EXTRACTINTENTREQUEST']._serialized_end=159
-  _globals['_EXTRACTINTENTRESPONSE']._serialized_start=162
-  _globals['_EXTRACTINTENTRESPONSE']._serialized_end=309
-  _globals['_CHATREQUEST']._serialized_start=312
-  _globals['_CHATREQUEST']._serialized_end=595
-  _globals['_CHATMESSAGE']._serialized_start=597
-  _globals['_CHATMESSAGE']._serialized_end=641
-  _globals['_RETRIEVEDCHUNK']._serialized_start=644
-  _globals['_RETRIEVEDCHUNK']._serialized_end=783
-  _globals['_CHATCHUNK']._serialized_start=785
-  _globals['_CHATCHUNK']._serialized_end=896
-  _globals['_SOURCE']._serialized_start=898
-  _globals['_SOURCE']._serialized_end=965
-  _globals['_PLANTOOLSREQUEST']._serialized_start=968
-  _globals['_PLANTOOLSREQUEST']._serialized_end=1169
-  _globals['_PLANTOOLSREPLY']._serialized_start=1171
-  _globals['_PLANTOOLSREPLY']._serialized_end=1223
-  _globals['_PLANNEDCALL']._serialized_start=1225
-  _globals['_PLANNEDCALL']._serialized_end=1271
-  _globals['_PLANNEXTSTEPREQUEST']._serialized_start=1274
-  _globals['_PLANNEXTSTEPREQUEST']._serialized_end=1618
-  _globals['_PLANSTEPCHUNK']._serialized_start=1620
-  _globals['_PLANSTEPCHUNK']._serialized_end=1736
-  _globals['_MIRRORCHAT']._serialized_start=1739
-  _globals['_MIRRORCHAT']._serialized_end=2012
+  _globals['_CHATDAYMESSAGE']._serialized_start=43
+  _globals['_CHATDAYMESSAGE']._serialized_end=116
+  _globals['_SUMMARIZEDAYREQUEST']._serialized_start=119
+  _globals['_SUMMARIZEDAYREQUEST']._serialized_end=281
+  _globals['_MEMORYCANDIDATE']._serialized_start=284
+  _globals['_MEMORYCANDIDATE']._serialized_end=440
+  _globals['_SUMMARIZEDAYRESPONSE']._serialized_start=442
+  _globals['_SUMMARIZEDAYRESPONSE']._serialized_end=554
+  _globals['_EXTRACTINTENTREQUEST']._serialized_start=556
+  _globals['_EXTRACTINTENTREQUEST']._serialized_end=672
+  _globals['_EXTRACTINTENTRESPONSE']._serialized_start=675
+  _globals['_EXTRACTINTENTRESPONSE']._serialized_end=822
+  _globals['_CHATREQUEST']._serialized_start=825
+  _globals['_CHATREQUEST']._serialized_end=1108
+  _globals['_CHATMESSAGE']._serialized_start=1110
+  _globals['_CHATMESSAGE']._serialized_end=1154
+  _globals['_RETRIEVEDCHUNK']._serialized_start=1157
+  _globals['_RETRIEVEDCHUNK']._serialized_end=1296
+  _globals['_CHATCHUNK']._serialized_start=1298
+  _globals['_CHATCHUNK']._serialized_end=1409
+  _globals['_SOURCE']._serialized_start=1411
+  _globals['_SOURCE']._serialized_end=1478
+  _globals['_PLANTOOLSREQUEST']._serialized_start=1481
+  _globals['_PLANTOOLSREQUEST']._serialized_end=1682
+  _globals['_PLANTOOLSREPLY']._serialized_start=1684
+  _globals['_PLANTOOLSREPLY']._serialized_end=1736
+  _globals['_PLANNEDCALL']._serialized_start=1738
+  _globals['_PLANNEDCALL']._serialized_end=1784
+  _globals['_PLANNEXTSTEPREQUEST']._serialized_start=1787
+  _globals['_PLANNEXTSTEPREQUEST']._serialized_end=2131
+  _globals['_PLANSTEPCHUNK']._serialized_start=2133
+  _globals['_PLANSTEPCHUNK']._serialized_end=2249
+  _globals['_MIRRORCHAT']._serialized_start=2252
+  _globals['_MIRRORCHAT']._serialized_end=2600
 # @@protoc_insertion_point(module_scope)

@@ -41,6 +41,7 @@ def serve():
     print("  - RecordProcessor  (Classify 含 single 单段模式, ExtractTerms 词条抽取)")
     print("  - EmbeddingService (Embed, EmbedBatch, GetModelInfo[健康检查])")
     print("  - MirrorChat       (ExtractIntent, Chat 流式, PlanTools 工具规划)")
+    print("                    (PlanNextStep 循环规划, SummarizeDay 每日总结/记忆候选)")
     print("  - MirrorProfile    (GenerateProfile)")
     print("=" * 50)
 

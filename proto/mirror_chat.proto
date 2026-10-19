@@ -13,6 +13,36 @@ service MirrorChat {
   // 对话 Agent 循环（chat-loop-design.md §3）：Java 驱动，每步调一次，带上已执行结果；
   // 服务端流式，先吐 thinking 增量（B 透传 SSE thinking，等待可感知），终帧给 calls/done
   rpc PlanNextStep(PlanNextStepRequest) returns (stream PlanStepChunk);
+  // Summarize one ended chat day and propose (never activate) user memories.
+  rpc SummarizeDay(SummarizeDayRequest) returns (SummarizeDayResponse);
+}
+
+message ChatDayMessage {
+  int64 message_id = 1;
+  string content = 2;
+  string created_at = 3;
+}
+
+message SummarizeDayRequest {
+  repeated ChatDayMessage messages = 1;
+  string source_hash = 2;
+  string source_date = 3;
+  string timezone = 4;
+  LlmConfig llm_config = 5;
+}
+
+message MemoryCandidate {
+  string content = 1;
+  string kind = 2;
+  repeated int64 source_message_ids = 3;
+  optional string event_date = 4;
+  optional string expires_at = 5;
+}
+
+message SummarizeDayResponse {
+  string summary = 1;
+  repeated MemoryCandidate memory_candidates = 2;
+  string source_hash = 3;
 }
 
 message ExtractIntentRequest {

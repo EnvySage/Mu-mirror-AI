@@ -61,6 +61,7 @@ def test_protocol_field_numbers_are_append_only():
     assert {name: field.number for name, field in common.GrowthAxis.DESCRIPTOR.fields_by_name.items()} == {
         "id": 1, "name": 2, "description": 3, "definition_version": 4,
     }
+    assert common.GrowthAxis.DESCRIPTOR.fields_by_name["definition_version"].type == 3  # TYPE_INT64, matching B's long.
     assert {name: field.number for name, field in common.GrowthContext.DESCRIPTOR.fields_by_name.items()} == {
         "axes": 1,
     }

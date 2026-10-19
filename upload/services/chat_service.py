@@ -43,6 +43,13 @@ def assistant_context_text(context) -> str:
         lines.append("当前会话操作卡：\n" + context.action_status_summary)
     else:
         lines.append("当前会话没有已准备的操作卡。")
+    for memory in context.memories[:5]:
+        date_label = f"（来源：{memory.source_date or '日期未知'}）"
+        lines.append(f"授权记忆{date_label} [{memory.kind or 'fact'}]：{memory.content}")
+    draw = context.divination if context.HasField("divination") else None
+    if draw and (draw.draw_id or draw.drawn_at or draw.question or draw.cards):
+        cards = "；".join(f"{card.card_name}（{card.orientation}）：{card.interpretation}" for card in draw.cards)
+        lines.append(f"占卜上下文（仅供娱乐，不是事实或行动依据）：时间 {draw.drawn_at or '未知'}；问题 {draw.question or '未提供'}；{cards}")
     return "\n".join(lines)
 
 # 工具结果渲染截断（config plan_tools.max_tool_chars，防 prompt 膨胀）

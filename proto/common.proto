@@ -79,6 +79,32 @@ message AssistantContext {
   string current_date = 2;
   string timezone = 3;
   string action_status_summary = 4;
+  repeated ChatMemoryContext memories = 5;
+  DivinationContext divination = 6;
+}
+
+message ChatMemoryContext {
+  string memory_id = 1;
+  string content = 2;
+  string kind = 3;
+  string source_date = 4;
+  repeated int64 source_message_ids = 5;
+  optional string event_date = 6;
+  optional string expires_at = 7;
+}
+
+message DivinationCard {
+  string card_name = 1;
+  string orientation = 2;
+  string interpretation = 3;
+}
+
+message DivinationContext {
+  string draw_id = 1;
+  string drawn_at = 2;
+  string question = 3;
+  repeated DivinationCard cards = 4;
+  bool entertainment_only = 5;
 }
 
 message EmbeddingConfig {
@@ -94,7 +120,7 @@ message GrowthAxis {
   string id = 1;
   string name = 2;
   string description = 3;
-  int32 definition_version = 4;
+  int64 definition_version = 4;
 }
 
 message GrowthContext {

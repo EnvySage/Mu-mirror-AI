@@ -53,6 +53,7 @@ from glossary_render import format_glossary
 from llm.factory import create_llm
 from llm_json import parse_json
 from prompts_loader import loader
+from services.chat_memory_service import ChatMemoryService
 
 # 今天的日期（东八区，与 B 侧 Asia/Shanghai 一致）。不用 zoneinfo：Windows 没有系统时区库，
 # 要额外装 tzdata；固定 +8 足够（中国大陆无夏令时）。
@@ -223,6 +224,14 @@ def allowed_registry_names(tools) -> set[str]:
 
 class MirrorChatServicer(_BaseServicer):
     """PlanTools / PlanNextStep servicer——继承 chat_service 的 ExtractIntent/Chat 实现。"""
+
+    def SummarizeDay(self, request, context):
+        """Summarize supplied user-only messages and return unactivated memory candidates."""
+        try:
+            return ChatMemoryService().summarize_day(request, context)
+        except Exception as e:
+            print(f"[SummarizeDay] 错误: {e}")
+            abort_with_mapped(context, e)
 
     def PlanTools(self, request, context):
         question = request.question
