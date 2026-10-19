@@ -38,7 +38,9 @@ enum TaskStatus {
 }
 
 enum AiProtocol {
+  option allow_alias = true;
   AI_PROTOCOL_UNKNOWN = 0;
+  PROTOCOL_UNKNOWN = 0;
   OPENAI = 1;
   ANTHROPIC = 2;
 }

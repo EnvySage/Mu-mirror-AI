@@ -134,7 +134,7 @@ message PlanNextStepRequest {
   repeated ToolResult previous_results = 6;  // 已执行步骤的结果（首步为空）→ prompt 渲染成"已知材料"
   int32 step = 7;                            // 第几步（1-based）
   int32 max_steps = 8;                       // 步数预算 → prompt 里告知"还剩几步"
-  bool has_retrieval = 9;                    // RAG 是否有命中（false = 检索空，规划要据此换策略）
+  bool has_retrieval = 9;                    // Deprecated：保留 wire 兼容，当前 planner 忽略；根据工具结果判断检索状态
   AssistantContext assistant_context = 10;
 }
 
