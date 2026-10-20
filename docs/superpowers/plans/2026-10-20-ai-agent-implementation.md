@@ -274,9 +274,10 @@ Task8浏览器验收记录（2026-10-20）：
 
 Task10实施记录（2026-10-20）：
 
-- AI：52条合成评测案例、可注入adapter的paired replay/report；报告的本地结果标记为`SIMULATED_HARNESS_ONLY`，52对/104行，没有模型调用、质量评分、真实token或业务写成功。`tests/agent_v2`在临时Task10数据库上114 passed、0 skipped；读视图/权限集成9项包含在内。临时数据库及临时reader role已删除。`scripts/sync_upload.py`和`--check`均通过。
+- AI：52条合成评测案例、可注入adapter的paired replay/report；桩报告仍标记为`SIMULATED_HARNESS_ONLY`。另完成真实离线配对报告`eval/agent_v2/reports/task10-real-model-paired-20261020.json`：52对/104条最新结果，使用本地OpenAI兼容代理和`cn:deepseek-v4.1-flash`；修正glossary别名和空片段夹具后重跑对应配对。单人评分覆盖33个案例/引擎；9个故障案例未注入、10个写场景未启用Java命令接口，均不作为质量/写入验收。观察p95为legacy 9,973 ms、graph_v2 26,061 ms；graph_v2约2.61倍，延迟门槛未通过。另发现graph_v2待办统计把1条已授权待办报为0，且未解析已确认的`小章鱼项目`别名。meter总差额344与逐轮计数326相差18，尚未解释；token及费用未知。无真实业务写入，隔离库source=user记录仍为25条、receipt为0。
+- AI既有验证：`tests/agent_v2`在临时Task10数据库上114 passed、0 skipped；读视图/权限集成9项包含在内。临时数据库及临时reader role已删除。`scripts/sync_upload.py`和`--check`均通过。
 - B：shadow采样默认关闭，decision存在正式run metrics；shadow单并发不排队，显式写请求不采样、前台graph优先取消；shadow只保存run状态/metrics，不落正式消息、工具审计或词典命中。`AgentRunServiceTest,AgentEventAdapterTest,AgentShadowRequestTest,AgentCommandAuthTest`共27项通过。
-- 发布：`deploy/ai-release.sh`语法检查通过；未执行部署、未启用在线shadow或graph_v2。p95、人工评分、小流量和稳定发布周期尚无证据，因此保持`legacy`默认并保留旧引擎。此门槛须在后续获批的测试/灰度发布中完成。
+- 发布：`deploy/ai-release.sh`语法检查通过；未执行部署、未启用在线shadow或graph_v2。真实离线p95已测，但graph_v2延迟门槛未通过；人工评分只覆盖33个非故障、非写入案例，且存在待办统计和glossary别名回归。没有故障注入、真实具名写接口验证、小流量或稳定发布周期证据，因此Task10 Step 5保持未完成，`legacy`继续作为默认并保留旧引擎。后续需先修复并重评，再由用户另行批准测试/灰度环境。
 
 ## 交付自检
 

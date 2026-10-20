@@ -95,7 +95,10 @@ def build_report(cases: list[dict[str, Any]], runs: list[dict[str, Any]]) -> dic
         pair = {engine: next((row for row in runs
                               if row.get("case_id") == case["case_id"] and row.get("engine") == engine), None)
                 for engine in ENGINES}
-        complete = all(pair[engine] is not None for engine in ENGINES)
+        complete = all(
+            pair[engine] is not None and pair[engine].get("executed") is not False
+            for engine in ENGINES
+        )
         pairs.append({
             "case_id": case["case_id"],
             "fixture_id": case["fixture_id"],
@@ -134,13 +137,42 @@ def build_report(cases: list[dict[str, Any]], runs: list[dict[str, Any]]) -> dic
         }
 
     simulated = bool(runs) and all(bool(row.get("simulated")) for row in runs)
+    live_model_runs = sum(row.get("live_model") is True for row in runs)
+    live_model_calls = sum(
+        int(row.get("model_call_count", 0))
+        for row in runs
+        if isinstance(row.get("model_call_count"), int) and not isinstance(row.get("model_call_count"), bool)
+    )
+    complete_pair_count = sum(bool(pair["paired"]) for pair in pairs)
+    fully_live_paired = bool(runs) and live_model_runs == len(runs) and complete_pair_count == len(cases)
+    execution_label = (
+        "SIMULATED_HARNESS_ONLY" if simulated else
+        "REAL_MODEL_PAIRED_OFFLINE" if fully_live_paired else
+        "MIXED_MODEL_ADAPTER_REPLAY" if live_model_runs else
+        "ADAPTER_REPLAY"
+    )
+    call_budgets = {
+        int(row["model_call_budget"])
+        for row in runs
+        if isinstance(row.get("model_call_budget"), int) and not isinstance(row.get("model_call_budget"), bool)
+    }
+    fault_cases_not_injected = sum(row.get("fault_injection") == "not_injected" for row in runs)
+    write_case_rows = [row for row in runs if row.get("write_case_note")]
     return {
         "schema_version": 1,
-        "execution_label": "SIMULATED_HARNESS_ONLY" if simulated else "ADAPTER_REPLAY",
+        "execution_label": execution_label,
         "simulated": simulated,
         "case_count": len(cases),
         "run_count": len(runs),
-        "complete_pair_count": sum(bool(pair["paired"]) for pair in pairs),
+        "complete_pair_count": complete_pair_count,
+        "not_executed_run_count": sum(row.get("executed") is False for row in runs),
+        "live_model_run_count": live_model_runs,
+        "live_model_call_count": live_model_calls,
+        "model_call_budget": min(call_budgets) if call_budgets else None,
+        "fault_injection_not_run_count": fault_cases_not_injected,
+        "write_case_run_count": len(write_case_rows),
+        "write_case_command_policy": "disabled; no business command endpoint configured",
+        "business_write_success_count": sum(bool(row.get("business_write_success")) for row in runs),
         "pairing_basis": list(PAIRING_FIELDS),
         "quality_claim": "none_simulated" if simulated else "manual_scoring_required",
         "engines": {engine: _engine_summary(grouped[engine]) for engine in ENGINES},

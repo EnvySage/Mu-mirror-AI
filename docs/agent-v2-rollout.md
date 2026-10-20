@@ -25,6 +25,18 @@ This validates only JSONL loading, pair construction, and report labels. It is n
 
 Score paired answers manually with the same rubric. Report date parsing, observation handling, and citation changes in their semantic groups. Permission failures and write/idempotency cases are hard gates. With fewer than 30 measured requests for an engine, label p95 as an observation; do not claim statistical significance or a latency pass. The harness does not invent default scores, citations, or token counts.
 
+### Offline paired run (2026-10-20)
+
+The real-model run is recorded in [`eval/agent_v2/reports/task10-real-model-paired-20261020.json`](eval/agent_v2/reports/task10-real-model-paired-20261020.json). It contains 52 complete pairs (104 latest rows) using the same synthetic fixtures and `cn:deepseek-v4.1-flash` through a local OpenAI-compatible proxy. Two case pairs were replayed after correcting fixture mismatches; their superseded rows are excluded. No provider key, user token, or database DSN is in the report.
+
+- One reviewer scored 33 cases per engine. The nine failure cases were not fault-injected, and the ten write cases ran with the Java command client disabled, so those 19 cases are not quality-scored and do not pass the failure or write gates. All token usage is unknown; the proxy does not expose cost.
+- The observed local p95 was 9,973 ms for legacy and 26,061 ms for graph_v2 (52 samples each). This includes model-proxy time and is not a production latency claim. The graph_v2 observation is about 2.61 times legacy, so the latency gate fails.
+- The one-reviewer mean scores were 1.4848 for legacy and 1.6364 for graph_v2 on the 33 scored cases. This partial score is not a quality pass. The review found graph_v2 returned zero todos where the synthetic fixture has one `todo_approved` pending item, and it did not resolve the confirmed `小章鱼项目` glossary alias.
+- No business write succeeded: the command endpoint was not configured, source-user record count remained 25, and receipt count was 0. This confirms isolation for this replay only; it does not validate create-record behavior or idempotency.
+- The proxy cap was 500. Its counter increased from 33 (discarded earlier attempts) to 377; the aggregate delta was 344, while per-run deltas sum to 326. The 18-request mismatch is unresolved, so per-case call counts must not be used as exact provider usage. The cap was not exhausted.
+
+The offline replay is complete, but Task 10 rollout gates are not. Keep `legacy` as the default. Resolve the observed todo and glossary regressions, perform fault-injected cases, validate writes through the named Java interface in an approved test environment, reconcile metering, and repeat the quality review before considering any staged traffic.
+
 ## 3. Test rollout order
 
 1. Keep Java `MIRROR_CHAT_ENGINE=legacy`, Python Agent disabled, and frontend unchanged while applying and verifying the test database views and role.
