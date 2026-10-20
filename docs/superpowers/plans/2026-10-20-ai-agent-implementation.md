@@ -154,13 +154,15 @@
 - Produces `ChatFinalResult`与`onEvent(run, event)`、`completeRun(...)`、`cancelRun(...)`；两个引擎最终落库只经过completeRun。legacy streamAnswer/finishWithFallback返回结果，不再自行插assistant/发done；SSE done在公共持久化之后。Task 7启用写工具后在此核对回执。
 - Produces GET `/mirror/runs/{run_id}`；归属严格校验；私密字段不出边界。
 
-- [ ] Step 1：run测试先锁定user_id+requestId唯一、question/session冲突409、首轮null session重放不生成新session/user消息、同会话并发409。设计迁移包含索引与nullable旧字段，无历史回填。
-- [ ] Step 2：实现短事务接纳与engine选择；旧逻辑抽成接收ChatInvocation的legacy入口，移除重复的消息接纳但保留后续语义；graph_v2不能执行旧retrieve/loop。run写入后不修改engine。
-- [ ] Step 3：实现run锁接口，Java发run input包含可信作用域、user_message_id、reference_date；本任务allowed_write_tools为空、command_grant为空，写授权接入留给Task 7。
-- [ ] Step 4：事件测试覆盖run_id错、seq重复/倒序、无terminal、两个terminal、final text不一致、sources跳号、工具审计重复。读审计按run/call唯一，Java已审计写操作不重复插入。
-- [ ] Step 5：实现消息唯一落库、created_records、词典命中计数一次且只更新本人的confirmed词条，调用旧GlossaryService缓存失效；shadow禁止更新。
-- [ ] Step 6：取消/重启测试：断线触发ClientCall.cancel；续租停止后run abandoned；已创建回执仍可查；已完成后onCompletion不改成cancelled。任务清理30天记录，删除会话后同requestId返回410，不重建。
-- [ ] Step 7：运行B本任务单测及现有ChatLoopTest、ChatRetrievalTest、ToolOrchestratorTest、VaultRefsParseTest；PG并发集成单独运行。预期legacy行为仍通过，graph_v2一轮仅一份消息；无任何“失败后自动legacy重跑”。
+- [x] Step 1：run测试先锁定user_id+requestId唯一、question/session冲突409、首轮null session重放不生成新session/user消息、同会话并发409。设计迁移包含索引与nullable旧字段，无历史回填。
+- [x] Step 2：实现短事务接纳与engine选择；旧逻辑抽成接收ChatInvocation的legacy入口，移除重复的消息接纳但保留后续语义；graph_v2不能执行旧retrieve/loop。run写入后不修改engine。
+- [x] Step 3：实现run锁接口，Java发run input包含可信作用域、user_message_id、reference_date；本任务allowed_write_tools为空、command_grant为空，写授权接入留给Task 7。
+- [x] Step 4：事件测试覆盖run_id错、seq重复/倒序、无terminal、两个terminal、final text不一致、sources跳号、工具审计重复。读审计按run/call唯一，Java已审计写操作不重复插入。
+- [x] Step 5：实现消息唯一落库、created_records、词典命中计数一次且只更新本人的confirmed词条，调用旧GlossaryService缓存失效；shadow禁止更新。
+- [x] Step 6：断线触发ClientCall.cancel；续租停止后run abandoned；已完成后onCompletion不改成cancelled；30天清理及删会话后同requestId返回410不重建均有测试。已创建回执的查询验证留到Task 7，届时接入真实回执后补验。
+- [x] Step 7：运行B本任务单测及现有ChatLoopTest、ChatRetrievalTest、ToolOrchestratorTest、VaultRefsParseTest；PG并发集成单独运行。legacy回归及 graph_v2 单轮一份消息通过；无失败后自动切回legacy。
+
+Task 6 验证记录：指定单测78项通过；真实隔离PostgreSQL集成2项通过（唯一约束并发、30天清理）。全量 `mvnw test` 共267项，另有3个未修改模块的既有断言未通过；应用上下文另因未修改的 `ChatSearchMapper` 注解SQL XML解析错误失败。这些不属于Task 6定向验收。
 
 ## Task 7（M4）：Java创建命令与幂等回执
 
