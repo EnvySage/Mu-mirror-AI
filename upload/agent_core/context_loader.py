@@ -74,5 +74,3 @@ def _confirmed_sort_value(term: Any) -> tuple[bool, datetime]:
     if confirmed_at.tzinfo is None:
         confirmed_at = confirmed_at.replace(tzinfo=timezone.utc)
     return True, confirmed_at
-
-\n

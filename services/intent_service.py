@@ -4,7 +4,10 @@ from dataclasses import dataclass
 from datetime import datetime
 from types import SimpleNamespace
 from typing import Any, Callable
+import time
 
+from agent_core.time_ranges import normalize_time
+from agent_core.types import Clarification
 from agent_core.types import IntentResult as AgentIntentResult
 from agent_core.types import PreparedContext, RuntimeContext, TimeExpression
 from glossary_render import format_glossary
@@ -93,12 +96,15 @@ def understand(
         if config is None:
             raise ValueError("graph_v2 intent requires an LLM client or request LLM config")
         factory = llm_factory or create_llm
+        timeout = _remaining_timeout(getattr(runtime, "deadline", None))
         llm = factory(
             provider=config.provider,
             api_key=config.api_key,
             base_url=config.base_url,
             model=config.model,
             protocol=config.protocol,
+            timeout=timeout,
+            max_retries=0,
         )
 
     history = "\n".join(
@@ -110,8 +116,41 @@ def understand(
         history=history,
         glossary=_format_agent_glossary(prepared.glossary_for_intent),
     )
-    response = parse_json(llm.json_task([{"role": "user", "content": prompt}]), ctx="新版意图")
-    return _validate_agent_intent(response, question, runtime)
+    timeout = _remaining_timeout(getattr(runtime, "deadline", None))
+    response = parse_json(
+        llm.json_task(
+            [{"role": "user", "content": prompt}], timeout=timeout, max_retries=0,
+        ),
+        ctx="新版意图",
+    )
+    result = _validate_agent_intent(response, question, runtime)
+    if result.action_kind == "clarification":
+        return result
+    normalized = normalize_time(result.time_expression, runtime.reference_date, runtime.timezone)
+    if isinstance(normalized, Clarification):
+        return AgentIntentResult(
+            action_kind="clarification", route=result.route,
+            standalone_question=result.standalone_question, content_type=result.content_type,
+            moods=result.moods, time_expression=result.time_expression,
+            file_query_mode=result.file_query_mode,
+            validation_issues=tuple(dict.fromkeys((*result.validation_issues, normalized.code))),
+        )
+    return AgentIntentResult(
+        action_kind=result.action_kind, route=result.route,
+        standalone_question=result.standalone_question, content_type=result.content_type,
+        moods=result.moods, time_expression=result.time_expression,
+        file_query_mode=result.file_query_mode, validation_issues=result.validation_issues,
+        time_window=normalized,
+    )
+
+
+def _remaining_timeout(deadline: float | None) -> float | None:
+    if deadline is None:
+        return None
+    remaining = float(deadline) - time.monotonic()
+    if remaining <= 0:
+        raise TimeoutError("graph_v2 deadline expired before the LLM request")
+    return remaining
 
 
 def _has_trusted_create_grant(runtime: RuntimeContext) -> bool:
@@ -239,5 +278,3 @@ def _parse_agent_time_expression(value: Any) -> tuple[TimeExpression, str | None
     if supplied_fields - allowed_fields:
         return TimeExpression(kind="none"), "invalid_time_expression"
     return TimeExpression(kind=kind, date=date_value, month=month_value, offset=offset, days=days), None
-
-\n

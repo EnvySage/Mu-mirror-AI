@@ -15,6 +15,8 @@ _FILENAME = {
     "classify_single": "classify-single",
     "intent": "intent",
     "agent_intent": "agent_intent",
+    "agent_plan": "agent_plan",
+    "agent_chat": "agent_chat",
     "chat": "chat",
     "profile": "profile",
     "inspiration": "inspiration",
@@ -33,6 +35,13 @@ _ALIASES = {
                  "time_rule": "time_rule"},
     "intent": {"query": "query"},
     "agent_intent": {"question": "question", "history": "history", "glossary": "glossary"},
+    "agent_plan": {
+        "question": "question", "history": "history", "glossary": "glossary",
+        "tools": "tools", "retrieval_summary": "retrieval_summary", "file_candidates": "file_candidates",
+        "mood_distribution": "mood_distribution", "observations": "observations", "step": "step",
+        "max_steps": "max_steps", "today": "today",
+    },
+    "agent_chat": {"evidence": "evidence", "observations": "observations"},
     "chat": {"question": "question", "history": "history", "context": "context"},
     "profile": {
         "todos": "stats_facts", "learnings": "records", "mood_stats": "mood_stats",

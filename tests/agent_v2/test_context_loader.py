@@ -118,5 +118,3 @@ def test_load_context_filters_cross_scope_current_future_and_fallback_history():
     assert all(message.user_id == USER and message.session_id == SESSION for message in prepared.history_plan)
     assert not any(message.is_fallback for message in prepared.history_plan)
     assert history_repo.calls == [(scope, 12)]
-
-\n

@@ -152,9 +152,9 @@ SELECT 1100 + n,
 FROM generate_series(0, 20) AS n;
 
 INSERT INTO chunks (id, user_id, record_id, content, segment, metadata, ai_memory_approved, todo_approved, vault_item_id, embedding, created_at) VALUES
-    (1001, '00000000-0000-0000-0000-000000000001', 101, 'FULL RECORD RAW TEXT MUST NEVER APPEAR IN record_chunks', 'approved coverage phrase one', '{"contentType":"learning","mood":["calm"]}', TRUE, FALSE, NULL, NULL, '2026-10-01T10:00:00+08:00'),
+    (1001, '00000000-0000-0000-0000-000000000001', 101, 'FULL RECORD RAW TEXT MUST NEVER APPEAR IN record_chunks', 'approved coverage phrase one', '{"contentType":"learning","mood":["calm"]}', TRUE, FALSE, NULL, (ARRAY[1::real, 1::real] || array_fill(0::real, ARRAY[1022]))::vector, '2026-10-01T10:00:00+08:00'),
     (1002, '00000000-0000-0000-0000-000000000001', 101, 'FULL RECORD RAW TEXT MUST NEVER APPEAR IN record_chunks', 'secret unauthorized segment', '{"contentType":"learning","mood":["anxious"]}', FALSE, FALSE, NULL, NULL, '2026-10-01T10:01:00+08:00'),
-    (1010, '00000000-0000-0000-0000-000000000001', 101, 'FULL RECORD RAW TEXT MUST NEVER APPEAR IN record_chunks', 'approved coverage phrase two', '{"contentType":"learning","mood":["calm"]}', TRUE, FALSE, NULL, NULL, '2026-10-01T10:02:00+08:00'),
+    (1010, '00000000-0000-0000-0000-000000000001', 101, 'FULL RECORD RAW TEXT MUST NEVER APPEAR IN record_chunks', 'approved coverage phrase two', '{"contentType":"learning","mood":["calm"]}', TRUE, FALSE, NULL, (ARRAY[1::real] || array_fill(0::real, ARRAY[1023]))::vector, '2026-10-01T10:02:00+08:00'),
     (1003, '00000000-0000-0000-0000-000000000001', 102, 'processing source', 'processing segment', '{"contentType":"note","mood":["sad"]}', TRUE, FALSE, NULL, NULL, '2026-10-02T10:00:00+08:00'),
     (1004, '00000000-0000-0000-0000-000000000001', 103, 'reviewing source', 'reviewing segment', '{"contentType":"note","mood":["sad"]}', TRUE, FALSE, NULL, NULL, '2026-10-03T10:00:00+08:00'),
     (1005, '00000000-0000-0000-0000-000000000001', 104, 'deleted source', 'deleted segment', '{"contentType":"note","mood":["sad"]}', TRUE, FALSE, NULL, NULL, '2026-10-04T10:00:00+08:00'),

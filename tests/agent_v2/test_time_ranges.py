@@ -75,5 +75,3 @@ def test_none_means_unbounded_window_and_timewindow_rejects_reversed_bounds():
     assert normalize_time(TimeExpression(kind="none"), REFERENCE_DATE, TIMEZONE) == TimeWindow(None, None)
     with pytest.raises(ValueError, match="start must be before end"):
         TimeWindow(datetime(2026, 10, 21, tzinfo=ZONE), datetime(2026, 10, 20, tzinfo=ZONE))
-
-\n

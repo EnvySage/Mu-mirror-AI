@@ -110,12 +110,12 @@
 - Produces `merge_evidence(existing, incoming) -> list[Evidence]`、`assign_citations(evidence) -> CitationIndex`、`render_observations(observations, max_chars=2000) -> str`。
 - 客户端新增keyword-only可选timeout/max_retries参数，旧调用默认不变；新版使用remaining deadline且max_retries=0。Embedding直接调用对象方法，不调用gRPC。
 
-- [ ] Step 1：失败测试覆盖四路及回退、1024维校验、纯距离与排序分分离、0.35/0.50阈值、明确时间关闭衰减、keyword先过滤后LIMIT。Embedding不可用保留硬过滤，返回degraded，不换模型。
-- [ ] Step 2：工具断言：find返回文件ID/候选层级，recall正文仅confirmed；get_stats的0是有效数据；get_coverage不同日期数正确；save_item无写副作用；get_glossary与top30一致；参数中的user_id被拒绝。
-- [ ] Step 3：实现retrieve和9工具；文件查找按设计三层顺序；recall缺ID兼容补接由runner负责，repository不随意选别人的/其他文件。
-- [ ] Step 4：证据测试断言find+recall同文件只占一个Fn；同记录不同chunk都有可定位n；重复chunk去重；profile不生成record_id=0可点击来源；跳号sources与正文一致。
-- [ ] Step 5：实现证据和新版模板；planner同时看到检索摘要、文件ID、统计分布；回答历史仅作为messages一次。保留FakeCiteFilter逐块运行，不在全文生成后才过滤。
-- [ ] Step 6：新增客户端测试：新timeout向下传，重试为0，取消关闭流，旧默认参数和Anthropic/OpenAI协议仍通过。运行本任务四个测试文件与旧LLM/引用测试，预期全部通过。
+- [x] Step 1：失败测试覆盖四路及回退、1024维校验、纯距离与排序分分离、0.35/0.50阈值、明确时间关闭衰减、keyword先过滤后LIMIT。Embedding不可用保留硬过滤，返回degraded，不换模型。
+- [x] Step 2：工具断言：find返回文件ID/候选层级，recall正文仅confirmed；get_stats的0是有效数据；get_coverage不同日期数正确；save_item无写副作用；get_glossary与top30一致；参数中的user_id被拒绝。
+- [x] Step 3：实现retrieve和9工具；文件查找按设计三层顺序；recall缺ID兼容补接由runner负责，repository不随意选别人的/其他文件。
+- [x] Step 4：证据测试断言find+recall同文件只占一个Fn；同记录不同chunk都有可定位n；重复chunk去重；profile不生成record_id=0可点击来源；跳号sources与正文一致。
+- [x] Step 5：实现证据和新版模板；planner同时看到检索摘要、文件ID、统计分布；回答历史仅作为messages一次。保留FakeCiteFilter逐块运行，不在全文生成后才过滤。
+- [x] Step 6：新增客户端测试：新timeout向下传，重试为0，取消关闭流，旧默认参数和Anthropic/OpenAI协议仍通过。运行本任务四个测试文件与旧LLM/引用测试，预期全部通过。
 
 ## Task 5（M2）：完整只读图与独立Agent gRPC
 

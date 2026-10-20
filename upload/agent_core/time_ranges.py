@@ -216,5 +216,3 @@ def _make_window(start: date, end: date, zone: ZoneInfo) -> TimeWindow | Clarifi
         )
     except (OverflowError, ValueError):
         return Clarification("invalid_interval", "时间范围超出可计算日期，请重新说明。")
-
-\n

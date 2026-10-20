@@ -32,10 +32,12 @@ class LocalEmbedder(BaseEmbedder):
     def _model(self):
         return self._models[self.model_name]
 
-    def embed(self, text: str) -> list[float]:
+    def embed(self, text: str, *, timeout: float | None = None, max_retries: int | None = None) -> list[float]:
         return self._model.encode(text).tolist()
 
-    def embed_batch(self, texts: list[str]) -> list[list[float]]:
+    def embed_batch(
+        self, texts: list[str], *, timeout: float | None = None, max_retries: int | None = None
+    ) -> list[list[float]]:
         return self._model.encode(texts).tolist()
 
     def get_model_info(self) -> dict:

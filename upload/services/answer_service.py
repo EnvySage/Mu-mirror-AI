@@ -8,6 +8,12 @@ from generated import mirror_chat_pb2 as pb2
 from config import CONFIG
 from glossary_render import format_glossary
 from prompts_loader import loader
+from agent_core.evidence import (
+    CitationIndex,
+    assign_citations,
+    render_evidence,
+    render_observations,
+)
 # 工具结果渲染截断（config plan_tools.max_tool_chars，防 prompt 膨胀）
 _MAX_TOOL_CHARS = int(CONFIG["plan_tools"]["max_tool_chars"])
 
@@ -325,6 +331,7 @@ class AnswerEvent:
     kind: str
     content: str = ""
     sources: list = field(default_factory=list)
+    vault_refs: list = field(default_factory=list)
 
 
 def build_answer_messages(question, history, chunks, glossary, tool_results, *, prompt_name="chat") -> list[dict]:
@@ -370,3 +377,118 @@ def stream_answer(messages, chunks, tool_results, llm, *, cancel: Callable[[], b
 
     sources = _extract_sources("".join(buffer), chunks) if len(chunks) > 0 else []
     yield AnswerEvent(kind="done", sources=sources)
+
+
+def build_agent_plan_messages(
+    question,
+    history,
+    glossary,
+    tools,
+    observations,
+    *,
+    retrieval_summary="",
+    evidence=(),
+    step=1,
+    max_steps=4,
+    today="",
+):
+    """Build a planner prompt with retrieval facts, file IDs, moods, and prior observations."""
+    import json
+
+    rendered_observations = render_observations(observations)
+    file_ids = []
+    moods = {}
+    for observation in observations:
+        if not observation.success or not isinstance(observation.data, dict):
+            continue
+        for item in observation.data.get("items", ()) or ():
+            if isinstance(item, dict) and item.get("vault_item_id") is not None:
+                file_ids.append(item["vault_item_id"])
+        records = observation.data.get("records")
+        if isinstance(records, dict) and isinstance(records.get("moods"), dict):
+            moods.update(records["moods"])
+    if evidence:
+        rendered_observations += "\n\n初始检索证据：\n" + render_evidence(evidence)
+    prompt = loader.render(
+        "agent_plan",
+        question=question,
+        history=_format_history(history),
+        glossary=format_glossary(glossary),
+        tools=json.dumps(tools, ensure_ascii=False),
+        retrieval_summary=retrieval_summary,
+        file_candidates=json.dumps(list(dict.fromkeys(file_ids)), ensure_ascii=False),
+        mood_distribution=json.dumps(moods, ensure_ascii=False),
+        observations=rendered_observations,
+        step=step,
+        max_steps=max_steps,
+        today=today,
+    )
+    return [{"role": "system", "content": prompt}, {"role": "user", "content": question}]
+
+
+def build_agent_answer_messages(
+    question,
+    history,
+    evidence,
+    observations,
+    *,
+    citation_index: CitationIndex | None = None,
+    prompt_name="agent_chat",
+):
+    """Build graph_v2 answer messages; history appears only once in the message list."""
+    index = citation_index or assign_citations(evidence)
+    prompt = loader.render(
+        prompt_name,
+        evidence=render_evidence(evidence, index),
+        observations=render_observations(observations),
+    )
+    messages = [{"role": "system", "content": prompt}]
+    messages.extend({"role": message.role, "content": message.content} for message in history)
+    messages.append({"role": "user", "content": question})
+    return messages
+
+
+def stream_agent_answer(
+    messages,
+    evidence,
+    observations,
+    llm,
+    *,
+    citation_index: CitationIndex | None = None,
+    cancel: Callable[[], bool] | None = None,
+    timeout: float | None = None,
+):
+    """Stream graph_v2 output with per-chunk fake-citation filtering and frozen sources."""
+    evidence = tuple(evidence)
+    index = citation_index or assign_citations(evidence)
+    tool_names = [observation.tool for observation in observations]
+    fake_cites = _FakeCiteFilter(
+        tool_names, max_cite=len(index.diary), max_file_cite=len(index.vault_items),
+    )
+    buffer = []
+    stream = llm.chat_stream(messages, timeout=timeout, max_retries=0)
+    try:
+        for kind, text in stream:
+            if cancel is not None and cancel():
+                return
+            if kind == "thinking":
+                yield AnswerEvent(kind="thinking", content=text)
+                continue
+            filtered = fake_cites.feed(text)
+            if filtered:
+                buffer.append(filtered)
+                yield AnswerEvent(kind="delta", content=filtered)
+    finally:
+        close = getattr(stream, "close", None)
+        if callable(close):
+            close()
+    tail = fake_cites.flush()
+    if tail:
+        buffer.append(tail)
+        yield AnswerEvent(kind="delta", content=tail)
+    answer = "".join(buffer)
+    yield AnswerEvent(
+        kind="done",
+        sources=index.sources_for(answer),
+        vault_refs=index.vault_refs_for(answer),
+    )

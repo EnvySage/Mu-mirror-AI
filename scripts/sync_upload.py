@@ -29,6 +29,7 @@ RUNTIME_ROOT_FILES = (
 RUNTIME_GROUPS = {
     "agent_core": {".py"},
     "agent_data": {".py"},
+    "agent_tools": {".py"},
     "embedding": {".py"},
     "generated": {".py"},
     "llm": {".py"},
@@ -106,5 +107,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
-\n

@@ -51,6 +51,7 @@ class Evidence:
     date: str | None = None
     distance: float | None = None
     origin: str | None = None
+    ranking_score: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,6 +91,7 @@ class IntentResult:
     time_expression: TimeExpression
     file_query_mode: str
     validation_issues: tuple[str, ...] = ()
+    time_window: TimeWindow | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -149,5 +151,4 @@ class RuntimeContext:
     deadline: float | None = None
     cancelled: Callable[[], bool] | Any | None = None
     event_writer: Any = None
-
-\n
+    repositories: Any = None

@@ -118,11 +118,22 @@ def _query_text(query: str | None) -> str | None:
     return normalized or None
 
 
-def _embedding_literal(embedder: Callable[[str], Sequence[float]] | object, query: str) -> str:
+def _embedding_literal(
+    embedder: Callable[[str], Sequence[float]] | object,
+    query: str,
+    *,
+    timeout: float | None = None,
+    max_retries: int | None = None,
+) -> str:
     method = getattr(embedder, "embed", None)
     if not callable(method):
         raise TypeError("embedder must provide embed(text)")
-    vector = method(query)
+    options = {}
+    if timeout is not None:
+        options["timeout"] = timeout
+    if max_retries is not None:
+        options["max_retries"] = max_retries
+    vector = method(query, **options)
     if not isinstance(vector, Sequence) or isinstance(vector, (str, bytes)):
         raise TypeError("embedder result must be a numeric sequence")
     if len(vector) != VECTOR_DIMENSION:
@@ -166,6 +177,9 @@ class VaultRepository:
         filters: VaultFilters | Mapping[str, object] | None,
         embedder: Callable[[str], Sequence[float]] | object | None,
         limit: int = 10,
+        *,
+        timeout: float | None = None,
+        max_retries: int | None = None,
     ) -> list[VaultItem]:
         scope = require_scope(scope)
         limit = bounded_limit(limit, maximum=MAX_FIND_LIMIT, default=10)
@@ -234,7 +248,7 @@ class VaultRepository:
         if can_vector_search:
             # Embedding calls can reach a model API. Perform them before borrowing
             # a database connection so no read transaction spans model latency.
-            vector_literal = _embedding_literal(embedder, query)
+            vector_literal = _embedding_literal(embedder, query, timeout=timeout, max_retries=max_retries)
             with read_transaction(self._pool, scope) as connection:
                 key_hits = self._vector_hits(
                     connection,
@@ -333,6 +347,9 @@ class VaultRepository:
         item_id: int,
         query: str | None,
         embedder: Callable[[str], Sequence[float]] | object | None,
+        *,
+        timeout: float | None = None,
+        max_retries: int | None = None,
     ) -> VaultRecall | None:
         scope = require_scope(scope)
         if isinstance(item_id, bool) or not isinstance(item_id, int):
@@ -375,7 +392,7 @@ class VaultRepository:
 
         if embedder is None:
             raise ValueError("an embedder is required for query-based vault recall")
-        vector_literal = _embedding_literal(embedder, query)
+        vector_literal = _embedding_literal(embedder, query, timeout=timeout, max_retries=max_retries)
         with read_transaction(self._pool, scope) as connection:
             rows = connection.execute(
                 "SELECT chunk_id, record_id, segment, created_at, "
@@ -396,3 +413,19 @@ class VaultRepository:
             for result in rows
         )
         return VaultRecall(item=item, snippets=snippets)
+
+    def metadata(self, scope: ReadScope, item_id: int) -> VaultItem | None:
+        """Return scoped file metadata without reading extracted body content."""
+        scope = require_scope(scope)
+        if isinstance(item_id, bool) or not isinstance(item_id, int):
+            raise TypeError("item_id must be an integer")
+        if item_id < 1:
+            raise ValueError("item_id must be positive")
+        with read_transaction(self._pool, scope) as connection:
+            row = connection.execute(
+                "SELECT id, user_id, original_name, mime, size_bytes, category, description, "
+                "digest_status, created_at FROM mirror_ai.vault_metadata "
+                "WHERE user_id = %s AND id = %s",
+                (scope.user_id, item_id),
+            ).fetchone()
+        return _item(row, "explicit_item") if row is not None else None

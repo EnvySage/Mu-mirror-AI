@@ -207,5 +207,3 @@ def test_plan_tools_uses_legacy_single_prompt_and_non_streaming_sdk_call(monkeyp
     assert events[0].done is True
     assert [call.tool for call in events[0].calls] == ["search_records"]
     assert rendered["name"] == "plan_tools_single"
-
-\n

@@ -8,14 +8,19 @@ class BaseLlm(ABC):
     """LLM 基类，所有厂商实现需继承此类"""
 
     @abstractmethod
-    def chat(self, messages: list[dict], temperature: float = 0.7) -> str:
+    def chat(
+        self, messages: list[dict], temperature: float = 0.7, *,
+        timeout: float | None = None, max_retries: int | None = None,
+    ) -> str:
         """同步对话，返回完整回复"""
         ...
 
     @abstractmethod
     def chat_stream(self, messages: list[dict],
                     temperature: float = 0.7,
-                    thinking_budget: int | None = None) -> Generator[tuple[str, str], None, None]:
+                    thinking_budget: int | None = None, *,
+                    timeout: float | None = None,
+                    max_retries: int | None = None) -> Generator[tuple[str, str], None, None]:
         """流式对话，逐块返回 (kind, text)：kind ∈ {"thinking", "content"}
 
         thinking_budget：本次调用的思考预算（token）；None = 用全局 llm.thinking_budget_tokens。
@@ -23,7 +28,10 @@ class BaseLlm(ABC):
         """
         ...
 
-    def json_task(self, messages: list[dict], temperature: float = 0.7) -> str:
+    def json_task(
+        self, messages: list[dict], temperature: float = 0.7, *,
+        timeout: float | None = None, max_retries: int | None = None,
+    ) -> str:
         """轻量 JSON 任务（意图路由 / 工具规划）：**关闭思考**，只要结论。
 
         推理型模型（mimo-v2.5 等）默认开思考，一个四选一的路由任务会生成
@@ -33,4 +41,9 @@ class BaseLlm(ABC):
 
         默认实现退回 chat()（不支持的厂商零影响）；能关思考的实现在子类覆写。
         """
-        return self.chat(messages, temperature=temperature)
+        options = {}
+        if timeout is not None:
+            options["timeout"] = timeout
+        if max_retries is not None:
+            options["max_retries"] = max_retries
+        return self.chat(messages, temperature=temperature, **options)

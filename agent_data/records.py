@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Mapping, Sequence
 from uuid import UUID
 
@@ -52,6 +53,8 @@ class RecordChunk:
     metadata: dict
     embedding: object | None
     created_at: datetime
+    distance: float | None = None
+    ranking_score: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -202,6 +205,89 @@ class RecordRepository:
                 metadata=row["metadata"] or {},
                 embedding=row["embedding"],
                 created_at=row["created_at"],
+            )
+            for row in rows
+        ]
+
+    def search_vector(
+        self,
+        scope: ReadScope,
+        vector: Sequence[float],
+        filters: RecordFilters | Mapping[str, object] | None = None,
+        *,
+        limit: int = 5,
+        threshold: float = 0.35,
+        half_life_days: float = 30,
+        reference_time: datetime | None = None,
+        apply_decay: bool = True,
+    ) -> list[RecordChunk]:
+        """Search approved diary chunks by cosine distance in the read view."""
+        scope = require_scope(scope)
+        limit = bounded_limit(limit, maximum=MAX_SEARCH_LIMIT, default=5)
+        normalized = _normalize_filters(filters)
+        if isinstance(vector, (str, bytes)) or not isinstance(vector, Sequence):
+            raise TypeError("embedding must be a numeric sequence")
+        if len(vector) != 1024:
+            raise ValueError("embedding must contain exactly 1024 values")
+        values = []
+        for value in vector:
+            try:
+                number = float(value)
+            except (TypeError, ValueError) as exc:
+                raise ValueError("embedding values must be finite numbers") from exc
+            if not math.isfinite(number):
+                raise ValueError("embedding values must be finite numbers")
+            values.append(repr(number))
+        if isinstance(threshold, bool) or not isinstance(threshold, (int, float)) or not math.isfinite(threshold) or threshold < 0:
+            raise ValueError("threshold must be a finite non-negative number")
+        if isinstance(half_life_days, bool) or not isinstance(half_life_days, (int, float)) or not math.isfinite(half_life_days) or half_life_days <= 0:
+            raise ValueError("half_life_days must be a finite positive number")
+        reference_time = reference_time or datetime.now(timezone.utc)
+        if reference_time.tzinfo is None or reference_time.utcoffset() is None:
+            raise ValueError("reference_time must be timezone-aware")
+
+        vector_literal = "[" + ",".join(values) + "]"
+        vector_distance = "embedding OPERATOR(public.<=>) %s::public.vector"
+        conditions = ["user_id = %s", "embedding IS NOT NULL", f"({vector_distance}) <= %s"]
+        params: list[object] = [scope.user_id, vector_literal, float(threshold)]
+        if normalized.keyword:
+            conditions.append("strpos(lower(segment), lower(%s)) > 0")
+            params.append(normalized.keyword)
+        if normalized.content_type:
+            conditions.append("metadata->>'contentType' = %s")
+            params.append(normalized.content_type)
+        if normalized.moods:
+            conditions.append(
+                "jsonb_exists_any(CASE WHEN jsonb_typeof(metadata->'mood') = 'array' "
+                "THEN metadata->'mood' ELSE '[]'::jsonb END, %s::text[])"
+            )
+            params.append(list(normalized.moods))
+        _append_range(conditions, params, normalized.start_at, normalized.end_at)
+
+        if apply_decay:
+            age_days = "GREATEST(0.0, EXTRACT(EPOCH FROM (%s::timestamptz - created_at)) / 86400.0)"
+            score = f"({vector_distance}) * (1.0 + {age_days} / %s)"
+            ranking_params: list[object] = [vector_literal, reference_time, float(half_life_days)]
+        else:
+            score = f"({vector_distance})"
+            ranking_params = [vector_literal]
+
+        sql = (
+            "SELECT chunk_id, record_id, user_id, segment, metadata, created_at, distance, ranking_score "
+            "FROM (SELECT chunk_id, record_id, user_id, segment, metadata, created_at, "
+            f"({vector_distance}) AS distance, {score} AS ranking_score "
+            "FROM mirror_ai.record_chunks WHERE " + " AND ".join(conditions) + ") AS ranked "
+            "ORDER BY ranking_score ASC, distance ASC, created_at DESC, chunk_id ASC LIMIT %s"
+        )
+        query_params = [vector_literal, *ranking_params, *params, limit]
+        with read_transaction(self._pool, scope) as connection:
+            rows = connection.execute(sql, query_params).fetchall()
+        return [
+            RecordChunk(
+                chunk_id=row["chunk_id"], record_id=row["record_id"], user_id=row["user_id"],
+                segment=row["segment"], metadata=row["metadata"] or {}, embedding=None,
+                created_at=row["created_at"], distance=float(row["distance"]),
+                ranking_score=float(row["ranking_score"]),
             )
             for row in rows
         ]

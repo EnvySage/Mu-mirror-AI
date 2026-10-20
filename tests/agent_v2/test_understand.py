@@ -12,8 +12,9 @@ class FakeLlm:
         self.response = response
         self.calls = []
 
-    def json_task(self, messages):
+    def json_task(self, messages, **kwargs):
         self.calls.append(messages)
+        self.options = kwargs
         return json.dumps(self.response, ensure_ascii=False)
 
 
@@ -78,6 +79,7 @@ def test_understand_rewrites_followup_with_context_history_once(monkeypatch):
     assert result.standalone_question == "继续分析刚才讨论的方案"
     assert result.time_expression == TimeExpression(kind="none")
     assert llm.calls == [[{"role": "user", "content": "agent intent prompt"}]]
+    assert llm.options == {"timeout": None, "max_retries": 0}
     assert rendered["name"] == "agent_intent"
     assert rendered["question"] == "继续分析"
     assert rendered["history"] == "assistant: 之前讨论的方案是先做小范围验证"
@@ -120,9 +122,37 @@ def test_understand_builds_existing_llm_client_from_runtime_config(monkeypatch):
 
     assert seen == {
         "provider": "openai", "api_key": "request-key", "base_url": "https://api.test",
-        "model": "test-model", "protocol": 1,
+        "model": "test-model", "protocol": 1, "timeout": None, "max_retries": 0,
     }
     assert len(llm.calls) == 1
+
+
+def test_understand_normalizes_explicit_date_with_runtime_reference_and_timezone(monkeypatch):
+    llm = FakeLlm({
+        "action_kind": "read", "route": "hybrid", "standalone_question": "昨天发生了什么",
+        "content_type": None, "moods": [],
+        "time_expression": {"kind": "day", "offset": -1}, "file_query_mode": "none",
+    })
+    monkeypatch.setattr(intent_service.loader, "render", lambda name, **kwargs: "prompt")
+
+    result = intent_service.understand("昨天发生了什么", _prepared(), _runtime(llm))
+
+    assert result.time_window.start.isoformat() == "2026-10-19T00:00:00+08:00"
+    assert result.time_window.end.isoformat() == "2026-10-20T00:00:00+08:00"
+
+
+def test_understand_requests_clarification_for_month_without_year(monkeypatch):
+    llm = FakeLlm({
+        "action_kind": "read", "route": "structured", "standalone_question": "看8月",
+        "content_type": None, "moods": [],
+        "time_expression": {"kind": "month", "month": "08"}, "file_query_mode": "none",
+    })
+    monkeypatch.setattr(intent_service.loader, "render", lambda name, **kwargs: "prompt")
+
+    result = intent_service.understand("看8月", _prepared(), _runtime(llm))
+
+    assert result.action_kind == "clarification"
+    assert "ambiguous_year" in result.validation_issues
 
 
 def test_understand_validates_dirty_model_fields(monkeypatch):
@@ -231,5 +261,3 @@ def test_model_create_suggestion_without_java_grant_is_downgraded(monkeypatch):
     assert result.file_query_mode == "none"
     assert "unauthorized_create_record" in result.validation_issues
     assert len(llm.calls) == 1
-
-\n
