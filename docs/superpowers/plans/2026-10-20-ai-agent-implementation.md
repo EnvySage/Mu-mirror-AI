@@ -102,6 +102,8 @@ Task 1–3验收复核（2026-10-20）：
 - Task 1原始venv全套历史测试为373 passed；本轮不含`tests/agent_v2`的原venv回归为373 passed，`scripts/sync_upload.py --check`通过。Task 1基线、SHA256、旧prompt blob、独立依赖验证和未执行项见`docs/agent-v2-baseline.md`。Docker镜像本身未构建，基线记录了Docker代理DNS失败。
 - Task 2–3在隔离Python 3.14环境复核完整`tests/`：487 passed、0 skipped；使用一次性PostgreSQL 16.15合成库，应用v3/v4和只读角色，验证8个视图授权、私有基础表拒绝、范围隔离及连接池行为。临时库和监听端口已清理。原venv未安装新依赖`psycopg-pool`，因此未向原venv加包；隔离环境使用锁定的`psycopg-pool==3.3.3`。
 
+- Task 2 fresh-schema follow-up（2026-10-20）：重新从空 PostgreSQL 库执行时确认 `schema.sql` 的 `chunks.vault_item_id` 与后续 `vault_items.source_chunk_id` 形成循环外键依赖，原执行顺序无法创建 `chunks`。将 `chunks.vault_item_id` 外键延迟到 `vault_items` 创建后添加，保留 `ON DELETE CASCADE`；不改字段或业务数据。修正后空库顺序执行 `schema.sql`、v2、v3、v4 migration 并重跑一次均成功；Java 仓库的初始化脚本通过 9 项 PostgreSQL 只读集成测试；本仓库 `tests/agent_v2` 在隔离库上为 125 passed、0 skipped。
+
 ## Task 4（M2）：检索、9个只读工具与证据
 
 **Files:**
