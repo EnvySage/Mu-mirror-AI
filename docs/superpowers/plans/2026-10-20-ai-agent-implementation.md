@@ -47,14 +47,14 @@
 - Produces `plan_next_step(request, llm, *, prompt_name="plan_tools", cancel=None) -> Iterator[PlanEvent]`；旧servicer负责protobuf转换与gRPC错误。
 - Produces `sync_upload(repo_root: Path, *, check: bool=False) -> list[Path]`，确定性runtime文件集合，忽略真实配置覆盖；check模式只报告漂移。
 
-- [ ] Step 1：分别记录三个仓库git status与diff；对原建议文档计算SHA256。使用临时目录保存需保留的preimage，不覆盖旧建议、不自动commit。
-- [ ] Step 2：在现有venv运行 `venv/Scripts/python.exe -B -m pytest tests/ -q -p no:cacheprovider`。预期先复核本次已知358通过/7个httpx2导入失败；若不同，按实况记录，不能套用旧数字。
-- [ ] Step 3：检查真实SDK依赖；修复错误测试夹具对不存在httpx2的依赖，使用与锁定SDK兼容的HTTP request/response对象。断言401/403/404/429/5xx映射仍相同，不用skip掩盖失败。
-- [ ] Step 4：先增加共享函数输出与旧servicer一致的测试，覆盖thinking/content顺序、final/done、假引用跨块、sources跳号、词典为空。运行新测试确认尚缺共享函数导致FAIL。
-- [ ] Step 5：抽取上述业务函数，让旧servicer委托调用；默认prompt、历史重复等旧行为暂时不在此任务改变；单独调用这些函数不应依赖gRPC context。
-- [ ] Step 6：新增upload同步测试并实现脚本；配置只同步无密钥的模板/约定服务配置，禁止将环境DSN/token写入镜像。运行全套单测及 `scripts/sync_upload.py --check`，预期全部通过、无漂移。
-- [ ] Step 7：用现有可用Python3.12运行时或隔离容器验证原minimal依赖，再加入三个候选依赖；做pip check、proto导入、StateGraph/custom stream与psycopg pool导入冒烟。此步骤可以联网下载依赖，但不修改现有venv；失败则先处理兼容性并更新设计的锁定值，不继续M1。对齐Dockerfile使用minimal依赖；实际升级SDK作为单独变更记录。
-- [ ] Step 8：审阅diff，确认旧模板、原建议文档hash未变，记录实际通过数量和未执行E2E。此任务完成后才启动后续改造。
+- [x] Step 1：分别记录三个仓库git status与diff；对原建议文档计算SHA256。使用临时目录保存需保留的preimage，不覆盖旧建议、不自动commit。
+- [x] Step 2：在现有venv运行 `venv/Scripts/python.exe -B -m pytest tests/ -q -p no:cacheprovider`。预期先复核本次已知358通过/7个httpx2导入失败；若不同，按实况记录，不能套用旧数字。
+- [x] Step 3：检查真实SDK依赖；修复错误测试夹具对不存在httpx2的依赖，使用与锁定SDK兼容的HTTP request/response对象。断言401/403/404/429/5xx映射仍相同，不用skip掩盖失败。
+- [x] Step 4：先增加共享函数输出与旧servicer一致的测试，覆盖thinking/content顺序、final/done、假引用跨块、sources跳号、词典为空。运行新测试确认尚缺共享函数导致FAIL。
+- [x] Step 5：抽取上述业务函数，让旧servicer委托调用；默认prompt、历史重复等旧行为暂时不在此任务改变；单独调用这些函数不应依赖gRPC context。
+- [x] Step 6：新增upload同步测试并实现脚本；配置只同步无密钥的模板/约定服务配置，禁止将环境DSN/token写入镜像。运行全套单测及 `scripts/sync_upload.py --check`，预期全部通过、无漂移。
+- [x] Step 7：用现有可用Python3.12运行时或隔离容器验证原minimal依赖，再加入三个候选依赖；做pip check、proto导入、StateGraph/custom stream与psycopg pool导入冒烟。此步骤可以联网下载依赖，但不修改现有venv；失败则先处理兼容性并更新设计的锁定值，不继续M1。对齐Dockerfile使用minimal依赖；实际升级SDK作为单独变更记录。
+- [x] Step 8：审阅diff，确认旧模板、原建议文档hash未变，记录实际通过数量和未执行E2E。此任务完成后才启动后续改造。
 
 ## Task 2（M1）：数据库只读边界与作用域
 
@@ -71,12 +71,12 @@
 - Produces `VaultRepository.find(scope, query, filters, embedder, limit=10)`、`recall(scope, item_id, query, embedder)`；`TodoRepository.stats(scope)`。
 - Consumes PostgreSQL现有schema+migration-v3；测试连接仅指向显式设置的隔离测试库。
 
-- [ ] Step 1：构造A/B用户，同名文件、相同正文、混合授权片段、processing/reviewing、已删除、失效画像、未确认文件、todo仅独立授权等fixture。fixture只能在隔离测试库运行。
-- [ ] Step 2：编写失败集成断言：A看不到B；混合授权记录不返回未授权segment/整条content；invalidated画像不可见；pending词典不可见；未确认文件只能见元数据；SQL注入式query仅当字符串处理；limit<1拒绝、超限截断。
-- [ ] Step 3：实现设计的8个视图与只读角色脚本；role脚本由管理员运行，仅收账号参数，不写密码。视图投影字段固定，不用SELECT *；新增views不修改旧业务SQL。
-- [ ] Step 4：实现repositories，所有读取都接收ReadScope，模型参数不能覆盖scope。计数DISTINCT record_id；coverage去重日期；关键词过滤在LIMIT前。读取后立即归还连接，模型调用不得持有连接。
-- [ ] Step 5：使用 `MIRROR_TEST_READ_DSN` 运行 `venv/Scripts/python.exe -m pytest tests/agent_v2/test_data_access_integration.py -q`。必须用真实只读角色证明UPDATE/INSERT/SELECT user_settings/SELECT vault_blobs被拒绝；缺测试库时可skip开发检查，但M1验收不能标PASS。
-- [ ] Step 6：连接池并发借还测试：请求超过pool上限有界失败，不永久等待；取消/异常后连接可复用。审阅迁移为新增结构，不含历史授权回填或删除。
+- [x] Step 1：构造A/B用户，同名文件、相同正文、混合授权片段、processing/reviewing、已删除、失效画像、未确认文件、todo仅独立授权等fixture。fixture只能在隔离测试库运行。
+- [x] Step 2：编写失败集成断言：A看不到B；混合授权记录不返回未授权segment/整条content；invalidated画像不可见；pending词典不可见；未确认文件只能见元数据；SQL注入式query仅当字符串处理；limit<1拒绝、超限截断。
+- [x] Step 3：实现设计的8个视图与只读角色脚本；role脚本由管理员运行，仅收账号参数，不写密码。视图投影字段固定，不用SELECT *；新增views不修改旧业务SQL。
+- [x] Step 4：实现repositories，所有读取都接收ReadScope，模型参数不能覆盖scope。计数DISTINCT record_id；coverage去重日期；关键词过滤在LIMIT前。读取后立即归还连接，模型调用不得持有连接。
+- [x] Step 5：使用 `MIRROR_TEST_READ_DSN` 运行 `venv/Scripts/python.exe -m pytest tests/agent_v2/test_data_access_integration.py -q`。必须用真实只读角色证明UPDATE/INSERT/SELECT user_settings/SELECT vault_blobs被拒绝；缺测试库时可skip开发检查，但M1验收不能标PASS。
+- [x] Step 6：连接池并发借还测试：请求超过pool上限有界失败，不永久等待；取消/异常后连接可复用。审阅迁移为新增结构，不含历史授权回填或删除。
 
 ## Task 3（M1）：日期、上下文和新版意图
 
@@ -91,11 +91,16 @@
 - Produces `understand(question, prepared, runtime) -> IntentResult`；正文/命令grant来自可信runtime时走确定性create_record分支，其余调用一次轻量模型。
 - Task 3在types定义Evidence/ToolObservation/ToolCall/AgentEvent/AgentState/RuntimeContext公共名称；后续任务使用同名，不另建重复dict协议。
 
-- [ ] Step 1：时间表驱动测试固定reference_date=2026-10-20，精确断言昨天、上周、2026年8月、最近7天的起止；闰年/跨年/非法日期/offset非法/未提供年份歧义进入Clarification。
-- [ ] Step 2：上下文测试断言仅confirmed top30、稳定排序、alias匹配、无命中回退top30；按当前消息ID排除当前问题及之后消息，过滤fallback；规划12条/回答6条正序且无跨会话数据。
-- [ ] Step 3：实现normalize_time和load_context；不使用LLM做日期算术，不给Python写词典命中数的权限。
-- [ ] Step 4：新版意图测试断言历史中的“方案”能参与独立问题改写；schema脏值被校验；明确授权正文不调用LLM；模型说create但无grant不能执行写入。
-- [ ] Step 5：实现agent_intent模板与understand，新模板只服务graph_v2。运行 `venv/Scripts/python.exe -m pytest tests/agent_v2/test_time_ranges.py tests/agent_v2/test_context_loader.py tests/agent_v2/test_understand.py -q`，预期全部通过，旧意图测试仍通过。
+- [x] Step 1：时间表驱动测试固定reference_date=2026-10-20，精确断言昨天、上周、2026年8月、最近7天的起止；闰年/跨年/非法日期/offset非法/未提供年份歧义进入Clarification。
+- [x] Step 2：上下文测试断言仅confirmed top30、稳定排序、alias匹配、无命中回退top30；按当前消息ID排除当前问题及之后消息，过滤fallback；规划12条/回答6条正序且无跨会话数据。
+- [x] Step 3：实现normalize_time和load_context；不使用LLM做日期算术，不给Python写词典命中数的权限。
+- [x] Step 4：新版意图测试断言历史中的“方案”能参与独立问题改写；schema脏值被校验；明确授权正文不调用LLM；模型说create但无grant不能执行写入。
+- [x] Step 5：实现agent_intent模板与understand，新模板只服务graph_v2。运行 `venv/Scripts/python.exe -m pytest tests/agent_v2/test_time_ranges.py tests/agent_v2/test_context_loader.py tests/agent_v2/test_understand.py -q`，预期全部通过，旧意图测试仍通过。
+
+Task 1–3验收复核（2026-10-20）：
+
+- Task 1原始venv全套历史测试为373 passed；本轮不含`tests/agent_v2`的原venv回归为373 passed，`scripts/sync_upload.py --check`通过。Task 1基线、SHA256、旧prompt blob、独立依赖验证和未执行项见`docs/agent-v2-baseline.md`。Docker镜像本身未构建，基线记录了Docker代理DNS失败。
+- Task 2–3在隔离Python 3.14环境复核完整`tests/`：487 passed、0 skipped；使用一次性PostgreSQL 16.15合成库，应用v3/v4和只读角色，验证8个视图授权、私有基础表拒绝、范围隔离及连接池行为。临时库和监听端口已清理。原venv未安装新依赖`psycopg-pool`，因此未向原venv加包；隔离环境使用锁定的`psycopg-pool==3.3.3`。
 
 ## Task 4（M2）：检索、9个只读工具与证据
 
