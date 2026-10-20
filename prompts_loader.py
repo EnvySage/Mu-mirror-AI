@@ -14,6 +14,7 @@ _FILENAME = {
     "classify": "classify",
     "classify_single": "classify-single",
     "intent": "intent",
+    "agent_intent": "agent_intent",
     "chat": "chat",
     "profile": "profile",
     "inspiration": "inspiration",
@@ -31,6 +32,7 @@ _ALIASES = {
     "classify_single": {"content": "content", "open_todos": "open_todos", "recent_context": "recent_context",
                  "time_rule": "time_rule"},
     "intent": {"query": "query"},
+    "agent_intent": {"question": "question", "history": "history", "glossary": "glossary"},
     "chat": {"question": "question", "history": "history", "context": "context"},
     "profile": {
         "todos": "stats_facts", "learnings": "records", "mood_stats": "mood_stats",

@@ -57,6 +57,7 @@ _defaults = {
         "classify": "prompts/classify.txt",
         "classify_single": "prompts/classify-single.txt",
         "intent": "prompts/intent.txt",
+        "agent_intent": "prompts/agent_intent.txt",
         "chat": "prompts/chat.txt",
         "profile": "prompts/profile.txt",
         "inspiration": "prompts/inspiration.txt",

@@ -40,7 +40,9 @@ prompt 模板一分为二（裁决 0.4 / §9 验收 6 的回滚语义要求）�
 
 import json
 import time
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
+from typing import Callable
 
 from generated import mirror_chat_pb2 as pb2
 from generated import mirror_chat_pb2_grpc as pb2_grpc
@@ -193,13 +195,103 @@ def resolve_done(data: dict, calls: list) -> bool:
     return False
 
 
+@dataclass(frozen=True)
+class PlanEvent:
+    """One planner event, independent of gRPC stream objects."""
+
+    kind: str
+    content: str = ""
+    calls: list = field(default_factory=list)
+    done: bool = False
+    final: bool = False
+    dropped: int = 0
+
+
+def plan_next_step(request, llm, *, prompt_name="plan_tools", cancel: Callable[[], bool] | None = None):
+    """Build the existing planning prompt and yield thinking plus a validated final plan.
+
+    ``plan_tools_single`` retains the legacy non-streaming PlanTools path. The default
+    ``plan_tools`` path retains PlanNextStep's thinking stream and done semantics.
+    """
+    if cancel is not None and cancel():
+        return
+
+    registry = format_tool_registry(request.tools)
+    registry_names = {(t.name or "").strip() for t in request.tools}
+    registry_names.discard("")
+    if not registry_names:
+        yield PlanEvent(kind="final", calls=[], done=True, final=True)
+        return
+
+    glossary = format_glossary(request.glossary)
+    if prompt_name == "plan_tools_single":
+        prompt = loader.render(
+            prompt_name,
+            tools=registry if registry else "（本次无可用工具）",
+            question=request.question,
+            glossary=glossary,
+        )
+        t0 = time.monotonic()
+        response_text = llm.json_task([{"role": "user", "content": prompt}])
+        elapsed_ms = int((time.monotonic() - t0) * 1000)
+        print(f"[PlanTools] LLM 耗时 {elapsed_ms}ms | 响应: {response_text[:200]}")
+        result = parse_json(response_text, ctx="工具规划")
+        calls, dropped = sanitize_calls(result, registry_names)
+        if dropped:
+            print(f"[PlanTools] 剔除违规计划 {dropped} 项（注册表外工具名/args 不可解析/超步数）")
+        print(f"[PlanTools] 计划 {len(calls)} 步: {[(c.tool, c.args_json) for c in calls]}")
+        yield PlanEvent(kind="final", calls=calls, done=True, final=True, dropped=dropped)
+        return
+
+    step = request.step or 1
+    max_steps = request.max_steps or step
+    prompt = loader.render(
+        prompt_name,
+        tools=registry if registry else "（本次无可用工具）",
+        question=request.question,
+        glossary=glossary,
+        previous_results=format_previous_results(request.previous_results),
+        history=format_plan_history(request.history),
+        step=step,
+        max_steps=max_steps,
+        # 小写 true/false 与 prompt 里的字面量对齐。
+        has_retrieval="true" if request.has_retrieval else "false",
+        today=today_text(),
+    )
+
+    t0 = time.monotonic()
+    buffer: list[str] = []
+    thinking_blocks = 0
+    for kind, text in llm.chat_stream([{"role": "user", "content": prompt}],
+                                     thinking_budget=_PLAN_THINKING_BUDGET):
+        if cancel is not None and cancel():
+            return
+        if kind == "thinking":
+            thinking_blocks += 1
+            yield PlanEvent(kind="thinking", content=text)
+            continue
+        buffer.append(text)
+
+    response_text = "".join(buffer)
+    elapsed_ms = int((time.monotonic() - t0) * 1000)
+    print(f"[PlanNextStep] LLM 耗时 {elapsed_ms}ms | thinking 块 {thinking_blocks} | "
+          f"响应: {response_text[:200]}")
+    result = parse_json(response_text, ctx="循环规划")
+    calls, dropped = sanitize_calls(result, registry_names)
+    if dropped:
+        print(f"[PlanNextStep] 剔除违规计划 {dropped} 项（注册表外工具名/args 不可解析/超步数）")
+    done = resolve_done(result, calls)
+    print(f"[PlanNextStep] step={step}/{max_steps} 终帧：done={done} | "
+          f"计划 {len(calls)} 步: {[(c.tool, c.args_json) for c in calls]}")
+    yield PlanEvent(kind="final", calls=calls, done=done, final=True, dropped=dropped)
+
+
 class MirrorChatServicer(_BaseServicer):
     """PlanTools / PlanNextStep servicer——继承 chat_service 的 ExtractIntent/Chat 实现。"""
 
     def PlanTools(self, request, context):
         question = request.question
         llm_config = request.llm_config
-        registry = format_tool_registry(request.tools)
         registry_names = {(t.name or "").strip() for t in request.tools}
         registry_names.discard("")
 
@@ -221,29 +313,11 @@ class MirrorChatServicer(_BaseServicer):
                 model=llm_config.model,
                 protocol=llm_config.protocol,
             )
-
-            prompt = loader.render(
-                "plan_tools_single",
-                tools=registry if registry else "（本次无可用工具）",
-                question=question,
-                glossary=format_glossary(request.glossary),
-            )
-
-            t0 = time.monotonic()
-            # json_task：关思考（工具规划是 JSON 决策，不需要思维链）。实测 18s 级别
-            # 的耗时主要烧在思考 token 上，且它在"用户看到第一个字之前"串行执行。
-            response_text = llm.json_task([{"role": "user", "content": prompt}])
-            elapsed_ms = int((time.monotonic() - t0) * 1000)
-            print(f"[PlanTools] LLM 耗时 {elapsed_ms}ms | 响应: {response_text[:200]}")
-
-            result = parse_json(response_text, ctx="工具规划")
-            calls, dropped = sanitize_calls(result, registry_names)
-            if dropped:
-                print(f"[PlanTools] 剔除违规计划 {dropped} 项"
-                      f"（注册表外工具名/args 不可解析/超步数）")
-            print(f"[PlanTools] 计划 {len(calls)} 步: "
-                  f"{[(c.tool, c.args_json) for c in calls]}")
-            return pb2.PlanToolsReply(calls=calls)
+            final = None
+            for event in plan_next_step(request, llm, prompt_name="plan_tools_single"):
+                if event.final:
+                    final = event
+            return pb2.PlanToolsReply(calls=final.calls if final is not None else [])
 
         except Exception as e:
             print(f"[PlanTools] 错误: {e}")
@@ -260,7 +334,6 @@ class MirrorChatServicer(_BaseServicer):
         """
         question = request.question
         llm_config = request.llm_config
-        registry = format_tool_registry(request.tools)
         registry_names = {(t.name or "").strip() for t in request.tools}
         registry_names.discard("")
         step = request.step or 1
@@ -288,48 +361,11 @@ class MirrorChatServicer(_BaseServicer):
                 model=llm_config.model,
                 protocol=llm_config.protocol,
             )
-
-            prompt = loader.render(
-                "plan_tools",
-                tools=registry if registry else "（本次无可用工具）",
-                question=question,
-                glossary=format_glossary(request.glossary),
-                previous_results=format_previous_results(request.previous_results),
-                history=format_plan_history(request.history),
-                step=step,
-                max_steps=max_steps,
-                # 小写 true/false 与 prompt 里的字面量对齐（Python 的 True 会让模型读到大写）
-                has_retrieval="true" if request.has_retrieval else "false",
-                today=today_text(),
-            )
-
-            t0 = time.monotonic()
-            # chat_stream 而非 json_task：思考重新打开、边想边推（设计稿 §2 黑屏根因）。
-            # thinking 立刻外推给 B；content 是 JSON 正文，只能进 buffer 不能外推。
-            buffer: list[str] = []
-            thinking_blocks = 0
-            for kind, text in llm.chat_stream([{"role": "user", "content": prompt}],
-                                              thinking_budget=_PLAN_THINKING_BUDGET):
-                if kind == "thinking":
-                    thinking_blocks += 1
-                    yield pb2.PlanStepChunk(thinking=text)
-                    continue
-                buffer.append(text)
-
-            response_text = "".join(buffer)
-            elapsed_ms = int((time.monotonic() - t0) * 1000)
-            print(f"[PlanNextStep] LLM 耗时 {elapsed_ms}ms | thinking 块 {thinking_blocks} | "
-                  f"响应: {response_text[:200]}")
-
-            result = parse_json(response_text, ctx="循环规划")
-            calls, dropped = sanitize_calls(result, registry_names)
-            if dropped:
-                print(f"[PlanNextStep] 剔除违规计划 {dropped} 项"
-                      f"（注册表外工具名/args 不可解析/超步数）")
-            done = resolve_done(result, calls)
-            print(f"[PlanNextStep] step={step}/{max_steps} 终帧：done={done} | "
-                  f"计划 {len(calls)} 步: {[(c.tool, c.args_json) for c in calls]}")
-            yield pb2.PlanStepChunk(calls=calls, done=done, final=True)
+            for event in plan_next_step(request, llm):
+                if event.kind == "thinking":
+                    yield pb2.PlanStepChunk(thinking=event.content)
+                elif event.final:
+                    yield pb2.PlanStepChunk(calls=event.calls, done=event.done, final=True)
 
         except Exception as e:
             print(f"[PlanNextStep] 错误: {e}")
