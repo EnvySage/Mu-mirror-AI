@@ -2,8 +2,8 @@
 
 Setup uses a PostgreSQL administrator only for the isolated database:
   1. psql -d mirror_ai_agent_v2_test -f tests/agent_v2/fixtures/agent_data.sql
-  2. psql -d mirror_ai_agent_v2_test -f src/main/resources/db/migration-v4-agent-v2.sql
-  3. psql -d mirror_ai_agent_v2_test -v reader_role=mirror_ai_reader -f deploy/agent-reader-role.sql
+  2. From Mu-mirror-B, apply migration-v3-record-ai-authorization.sql then migration-v4-agent-v2.sql
+  3. From Mu-mirror-B, run deploy/agent-reader-role.sql -v reader_role=mirror_ai_reader
   4. set MIRROR_TEST_READ_DSN to the mirror_ai_reader connection string.
 
 The data fixture refuses to run unless the database has its exact test name.
@@ -12,6 +12,7 @@ The data fixture refuses to run unless the database has its exact test name.
 from __future__ import annotations
 
 import asyncio
+import os
 import time
 from contextlib import ExitStack
 from datetime import datetime
@@ -34,6 +35,7 @@ from agent_data.vault import VaultRepository
 USER_A = UUID("00000000-0000-0000-0000-000000000001")
 USER_B = UUID("00000000-0000-0000-0000-000000000002")
 SESSION_B = UUID("10000000-0000-0000-0000-000000000002")
+READER_ROLE = os.getenv("MIRROR_TEST_READER_ROLE", "mirror_ai_reader")
 
 
 class _FixedEmbedder:
@@ -54,7 +56,7 @@ def test_reader_identity_and_exact_view_grants(read_dsn, agent_pool):
             "WHERE grantee = current_user AND table_schema = 'mirror_ai' AND privilege_type = 'SELECT' "
             "GROUP BY current_user"
         ).fetchone()
-    assert row["user_name"] == "mirror_ai_reader"
+    assert row["user_name"] == READER_ROLE
     assert row["view_count"] == 8
 
 
@@ -212,7 +214,7 @@ def test_pool_wait_is_bounded_and_transactions_return_connections(agent_pool, re
             "current_setting('statement_timeout') AS statement_timeout, "
             "current_setting('lock_timeout') AS lock_timeout"
         ).fetchone()
-        assert row["user_name"] == "mirror_ai_reader"
+        assert row["user_name"] == READER_ROLE
         assert row["read_only"] == "on"
         assert row["statement_timeout"] == "3s"
         assert row["lock_timeout"] == "1s"

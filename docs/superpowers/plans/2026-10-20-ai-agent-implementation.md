@@ -254,18 +254,24 @@ Task 6 验证记录：指定单测78项通过；真实隔离PostgreSQL集成2项
 - report输出engine、outcome、stop_reason、各阶段耗时、首次正文、调用次数、引用正确性、人工评分、token已知/未知；按语义变化分组。
 - shadow run独立ID/parent，不写正式消息、审计、词典计数，不执行Java命令；过载跳过。
 
-- [ ] Step 1：准备至少40题，覆盖设计第14节；同一fixture、模型和时间配对回放。包含权限与失败用例，不能只测顺利问答。
-- [ ] Step 2：测试shadow隔离、并发优先级、在线写请求排除、模拟结果标识；运行离线报告，分别标注日期/observation/引用等行为改进。
-- [ ] Step 3：部署文档写明先备份/应用新增schema与视图，再部署兼容新proto但legacy默认的Java/Python，再部署前端，再为测试用户启用graph_v2。候选依赖与实际部署PG版本必须在测试环境验证。
-- [ ] Step 4：健康检查区分10003和10004、只读SELECT与命令鉴权；Agent关闭时旧服务不因缺DSN而启动失败。回退只切后续请求到legacy，不回滚记录、不删除新增表。
+- [x] Step 1：准备52题，覆盖权限、失败、日期、文件、对话历史、写入授权/幂等；输入按相同fixture、模型引用和reference_date成对进入两个engine。离线适配器可注入真实结果，桩报告只验证报告结构。
+- [x] Step 2：测试shadow不带写grant、不写正式工具审计/消息/词典；单并发无排队，前台graph请求取消shadow；明确写请求不进入shadow。运行SIMULATED报告并按日期、observation、引用等语义标签分组。未执行真实模型配对，未声称行为或质量改进。
+- [x] Step 3：AI/B两份runbook写明备份、v3/v4 schema与views、reader role、proto兼容部署顺序及legacy默认。Python 3.14隔离环境按锁安装并测试LangGraph 1.2.16、psycopg 3.3.6、psycopg-pool 3.3.3；全新合成隔离库上PostgreSQL 16.15应用v3/v4并通过9项只读数据访问集成。
+- [x] Step 4：发布脚本分别探测10003/10004；Agent启用时探测只读SELECT、Java命令接口无凭据401、Agent gRPC拒绝无token。测试Agent关闭且DSN/token缺失时legacy仍能启动。runbook明确仅切换后续请求并保留数据/表。
 - [ ] Step 5：评测门槛按设计第14节，p95样本不足写观察值，不宣称统计显著。小流量通过后设graph_v2默认；稳定一个发布周期后另开清理变更删除旧对话专用代码。
-- [ ] Step 6：最终检查旧RPC/Mapper是否被分类、画像、普通页面引用；有引用继续保留。同步根目录/upload，更新README中“Python只纯推理”的旧说明，明确只读AI访问和业务写工具边界。
+- [x] Step 6：检查旧RPC调用点仍服务旧对话规划、分类/记录处理、词典、画像、摘要、灵感等；ChatSearchMapper/ProfileSnapshotMapper仍被旧对话或其他工具/页面引用，全部保留。同步检查根目录/upload，更新README为受控只读数据边界和Java具名写接口。
+
+Task10实施记录（2026-10-20）：
+
+- AI：52条合成评测案例、可注入adapter的paired replay/report；报告的本地结果标记为`SIMULATED_HARNESS_ONLY`，52对/104行，没有模型调用、质量评分、真实token或业务写成功。`tests/agent_v2`在临时Task10数据库上114 passed、0 skipped；读视图/权限集成9项包含在内。临时数据库及临时reader role已删除。`scripts/sync_upload.py`和`--check`均通过。
+- B：shadow采样默认关闭，decision存在正式run metrics；shadow单并发不排队，显式写请求不采样、前台graph优先取消；shadow只保存run状态/metrics，不落正式消息、工具审计或词典命中。`AgentRunServiceTest,AgentEventAdapterTest,AgentShadowRequestTest,AgentCommandAuthTest`共27项通过。
+- 发布：`deploy/ai-release.sh`语法检查通过；未执行部署、未启用在线shadow或graph_v2。p95、人工评分、小流量和稳定发布周期尚无证据，因此保持`legacy`默认并保留旧引擎。此门槛须在后续获批的测试/灰度发布中完成。
 
 ## 交付自检
 
-- [ ] 设计第1–17节都有对应任务；原建议不被覆盖。
-- [ ] 公共类型、接口签名、proto字段和配置名在任务间一致；新增字段兼容旧客户端。
-- [ ] 五项Review Focus各有明确的失败/成功断言与负责的任务。
-- [ ] “单测通过”“隔离PG集成通过”“桩E2E”“真实模型E2E”“部署验证”分开报告；未运行不能写PASS。
-- [ ] 每阶段可以停止并继续使用legacy；没有把创建成功后自动重跑旧版当作回滚。
-- [ ] 所有实现改动保持可审阅，不未经用户要求提交或部署。
+- [x] 设计第1–17节都有对应任务；原建议不被覆盖。
+- [x] 公共类型、接口签名、proto字段和配置名在任务间一致；新增字段兼容旧客户端。
+- [x] 五项Review Focus各有明确的失败/成功断言与负责的任务。
+- [x] “单测通过”“隔离PG集成通过”“桩E2E”“真实模型E2E”“部署验证”分开报告；未运行不能写PASS。
+- [x] 每阶段可以停止并继续使用legacy；没有把创建成功后自动重跑旧版当作回滚。
+- [x] 用户后续明确要求每阶段本地提交；Task10在对应仓库分别提交，不推送、不部署。

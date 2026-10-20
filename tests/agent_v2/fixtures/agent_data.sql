@@ -21,11 +21,24 @@ DROP TABLE IF EXISTS records CASCADE;
 DROP TABLE IF EXISTS users CASCADE;
 DROP TABLE IF EXISTS user_settings CASCADE;
 DROP TABLE IF EXISTS vault_blobs CASCADE;
+DROP TABLE IF EXISTS tool_calls CASCADE;
 
 CREATE TABLE users (
     id UUID PRIMARY KEY,
     username TEXT NOT NULL,
     password_hash TEXT NOT NULL
+);
+
+CREATE TABLE tool_calls (
+    id BIGSERIAL PRIMARY KEY,
+    user_id UUID NOT NULL,
+    session_id UUID,
+    tool VARCHAR(50) NOT NULL,
+    args JSONB DEFAULT '{}'::jsonb,
+    result_summary VARCHAR(500),
+    success BOOLEAN NOT NULL DEFAULT TRUE,
+    latency_ms INT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE TABLE records (
