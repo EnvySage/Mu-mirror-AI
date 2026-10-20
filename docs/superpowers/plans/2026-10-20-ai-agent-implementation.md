@@ -210,7 +210,13 @@ Task 6 验证记录：指定单测78项通过；真实隔离PostgreSQL集成2项
 - [x] Step 2：实现store/API/纯协议适配；done.status=failed仍停止typing并显示错误状态；创建unknown提示“结果待确认”，不能显示明确失败并引导盲目重建。
 - [x] Step 3：实现轻量创建回执组件，展示仅记录状态与查看入口；普通sources、vault_refs保留原组件。
 - [x] Step 4：运行 `npm run test:chat-protocol`、`npm run build`；另运行 `npm run build:preview` 验证演示构建仍可用。
-- [ ] Step 5：浏览器手工验证旧版对话、新版有来源回答、部分流失败、取消、创建成功、刷新历史恢复卡片。demo preview不发送真实请求，保持现有mock分支。
+- [x] Step 5：浏览器验证旧版格式对话、新版有来源回答、部分流失败、切页取消、创建回执、刷新历史恢复卡片。demo preview保持mock分支且不发送API请求；标准模式只接本地内存stub，不连接真实后端。
+
+Task8浏览器验收记录（2026-10-20）：
+
+- F：`npm run test:chat-protocol` 5 passed；`npm run build`、`npm run build:preview`成功。
+- Chromium 155隔离配置、本地Vite与Node内存stub验证普通回复、sources、部分失败保留正文、路由离开取消（stub记录到客户端断开）、created_records单独回执与刷新后历史回放。该结果是浏览器stub E2E，不是Java/Python真实服务E2E，也未写入数据库。
+- `build:preview`对话只显示演示答复，浏览器未产生API请求；375/768/1440视口document/body均无横向溢出，stub接口返回正常时Chat页无控制台错误。没有已提交视觉基线，视觉回归结论为INCONCLUSIVE；未运行axe/Lighthouse/CWV审计。
 
 **Task 8 实施记录（2026-10-20）**
 
