@@ -206,10 +206,17 @@ Task 6 验证记录：指定单测78项通过；真实隔离PostgreSQL集成2项
 - Store每次主动send生成UUID，网络重试保留该UUID；meta保存runId/requestId；done将created_records归一为 `{recordId,status,createdAt}`。
 - 回执组件通过现有UI store的selectedRecordId/记录抽屉打开记录；不新造不存在的记录ID路由。
 
-- [ ] Step 1：Node测试断言同一次发送重连沿用ID；新发送生成新ID；partial error保留正文；未知新增字段不破坏旧meta/done；created_records/history回放一致。
-- [ ] Step 2：实现store/API/纯协议适配；done.status=failed仍停止typing并显示错误状态；创建unknown提示“结果待确认”，不能显示明确失败并引导盲目重建。
-- [ ] Step 3：实现轻量创建回执组件，展示仅记录状态与查看入口；普通sources、vault_refs保留原组件。
-- [ ] Step 4：运行 `npm run test:chat-protocol`、`npm run build`。浏览器手工验证旧版对话、新版有来源回答、部分流失败、取消、创建成功、刷新历史恢复卡片。demo preview不发送真实请求，保持现有mock分支。
+- [x] Step 1：Node测试断言同一次发送重连沿用ID；新发送生成新ID；partial error保留正文；未知新增字段不破坏旧meta/done；created_records/history回放一致。
+- [x] Step 2：实现store/API/纯协议适配；done.status=failed仍停止typing并显示错误状态；创建unknown提示“结果待确认”，不能显示明确失败并引导盲目重建。
+- [x] Step 3：实现轻量创建回执组件，展示仅记录状态与查看入口；普通sources、vault_refs保留原组件。
+- [x] Step 4：运行 `npm run test:chat-protocol`、`npm run build`；另运行 `npm run build:preview` 验证演示构建仍可用。
+- [ ] Step 5：浏览器手工验证旧版对话、新版有来源回答、部分流失败、取消、创建成功、刷新历史恢复卡片。demo preview不发送真实请求，保持现有mock分支。
+
+**Task 8 实施记录（2026-10-20）**
+
+- F：新增请求ID与同ID重试、meta/done归一化、partial失败保留、运行状态查询、创建回执和历史回放；创建回执明确展示“仅记录”，沿用既有记录详情入口。普通sources、vault_refs和demo mock分支保留。
+- 测试：`npm run test:chat-protocol` 5项通过；`npm run build` 与 `npm run build:preview` 均成功。构建不是浏览器端到端验证。
+- 浏览器手工检查未执行：Chrome DevTools连接报告共享profile已被另一个Chrome实例占用，无法连接该浏览器；因此对话来源、部分流失败、取消、创建以及刷新历史卡片的交互仍待浏览器验证。
 
 ## Task 9（M4）：接通创建分支并做业务E2E
 
