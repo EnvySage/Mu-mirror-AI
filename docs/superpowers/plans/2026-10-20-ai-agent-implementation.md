@@ -227,7 +227,7 @@ Task8浏览器验收记录（2026-10-20）：
 
 - F：新增请求ID与同ID重试、meta/done归一化、partial失败保留、运行状态查询、创建回执和历史回放；创建回执明确展示“仅记录”，沿用既有记录详情入口。普通sources、vault_refs和demo mock分支保留。
 - 测试：`npm run test:chat-protocol` 5项通过；`npm run build` 与 `npm run build:preview` 均成功。构建不是浏览器端到端验证。
-- 浏览器手工检查未执行：Chrome DevTools连接报告共享profile已被另一个Chrome实例占用，无法连接该浏览器；因此对话来源、部分流失败、取消、创建以及刷新历史卡片的交互仍待浏览器验证。
+- 首次浏览器检查因Chrome DevTools共享profile被占用而未完成；后续已在隔离Chromium 155 profile、本地Vite和Node内存stub上完成交互验证，细节见上方“Task8浏览器验收记录”。该验收仍不是Java/Python真实服务E2E；视觉回归因缺少基线为INCONCLUSIVE，axe/Lighthouse/CWV仍未运行。
 
 ## Task 9（M4）：接通创建分支并做业务E2E
 
