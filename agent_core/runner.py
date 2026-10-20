@@ -131,7 +131,10 @@ def make_runtime(request: Any, dependencies: AgentDependencies, cancellation: An
         max_retries=0,
     )
     embedding_client = None
-    if embedding_config is not None and getattr(embedding_config, "source", ""):
+    # Explicit Java-authorized writes have a deterministic path and never enter
+    # retrieval. Avoid loading an embedding model for a request that cannot use it.
+    if (not has_write_input and embedding_config is not None
+            and getattr(embedding_config, "source", "")):
         embedding_client = embedding_factory(
             source=embedding_config.source,
             local_model=embedding_config.local_model,

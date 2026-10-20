@@ -229,11 +229,18 @@ Task 6 验证记录：指定单测78项通过；真实隔离PostgreSQL集成2项
 - create_record分支只使用runtime授权正文与grant；返回created_records与确定性action_reply，不依赖LLM生成成功确认。
 - action_unknown/failed/success分别对应outcome与stop_reason；created_record不能作为已授权AI记忆sources。
 
-- [ ] Step 1：图测试断言明确创建时不做初始RAG、不调用LLM重写正文；无grant时registry不提供create_record且执行层拒绝；shadow使用模拟client。
-- [ ] Step 2：接通图和SSE回执；处理写成功后网络/模型失败的Java回执收尾，不能重复delta或同时给出成功和失败的矛盾信息。
-- [ ] Step 3：隔离测试环境E2E：发送“帮我记一篇日记：今天把镜子的聊天功能跑通了”，词典含镜子别名；数据库正文保持原文、source=user、record_only、ai_processing_authorized=false，没有自动生成approved chunks/待办。
-- [ ] Step 4：相同requestId重发、并发同call、响应丢失、点击取消、创建后删除再重放，分别检查一条记录或明确已删除事实；下一次新requestId主动保存相同正文可新建。
-- [ ] Step 5：生成E2E报告，包含真实执行环境与桩/真实模型标记，不能把模拟创建算业务写入成功。只在隔离库执行，不触碰真实用户数据。
+- [x] Step 1：图测试断言明确创建时不做初始RAG、不调用LLM重写正文；无grant时registry不提供create_record且执行层拒绝；shadow使用模拟client。
+- [x] Step 2：接通图和SSE回执；处理写成功后网络/模型失败的Java回执收尾，不能重复delta或同时给出成功和失败的矛盾信息。
+- [x] Step 3：隔离测试环境E2E：发送“帮我记一篇日记：今天把镜子的聊天功能跑通了”，词典含镜子别名；数据库正文保持原文、source=user、record_only、ai_processing_authorized=false，没有自动生成approved chunks/待办。
+- [x] Step 4：相同requestId重发、并发同call、响应丢失、点击取消、创建后删除再重放，分别检查一条记录或明确已删除事实；下一次新requestId主动保存相同正文可新建。
+- [x] Step 5：生成E2E报告，包含真实执行环境与桩/真实模型标记，不能把模拟创建算业务写入成功。只在隔离库执行，不触碰真实用户数据。
+
+**Task 9 实施记录（2026-10-20）**
+
+- AI：明确 create_record grant 路径跳过 embedding client 初始化；新增图断言和真实 Java/Python/PostgreSQL E2E 驱动脚本。`pytest -q tests/agent_v2` 为 97 passed、11 skipped；11 项均因未设置 `MIRROR_TEST_READ_DSN` 而跳过只读仓库集成检查。运行 `scripts/sync_upload.py` 及 `--check`，upload 镜像同步。
+- B：新增 SSE 断流发生在异步 dispatch 前的取消终态收尾，并以回执覆盖 Python 结束前的写后失败；`AgentCommandAuthTest,AgentRunServiceTest` 为 16 passed。修复 context path `/api` 与内部命令 Controller/过滤器重复包含 `/api` 的路由冲突；外部命令 URL 仍为 `/api/internal/agent/commands/...`。
+- 全应用启动暴露出 Mapper 注解 SQL 中原始 `<`、`<>`、pgvector `<=>` 被 MyBatis XML 解析器拒绝。对五个 Mapper 的 SQL 运算符做 XML 实体转义；SQL 语义不变，Spring 容器可正常启动。
+- 隔离业务 E2E 报告：`tests/agent_v2/reports/task9-create-record-e2e.json`。真实 Java HTTP/SSE + Python gRPC + PostgreSQL；真实 RecordService 事务写入，LLM 未调用（显式授权分支确定性处理）。验证正文原样、`source=user`、`record_only`、`ai_processing_authorized=false`、零 chunks/todos，以及同ID重放、并发、断流重放、断连取消模拟、删会话重放和新ID重建。断流与取消是 HTTP 客户端断连模拟，不是浏览器手工点击；未宣称真实模型 E2E。
 
 ## Task 10（M5）：对照、部署与退役条件
 
