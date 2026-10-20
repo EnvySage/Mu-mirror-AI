@@ -38,6 +38,47 @@ def test_simulated_replay_marks_every_result_and_never_claims_a_write_or_quality
     assert all(row["tokens"]["known"] is False for row in runs)
 
 
+@pytest.mark.parametrize(("field", "wrong_value"), [
+    ("case_id", "another-case"),
+    ("engine", "graph_v2"),
+    ("fixture_id", "another-fixture"),
+    ("reference_date", "2026-10-21"),
+    ("model_config_ref", "another-model"),
+    ("prompt_profile", "another-prompt"),
+])
+def test_replay_rejects_adapter_pairing_metadata_mismatch(field, wrong_value):
+    case = read_jsonl("eval/agent_v2/cases.jsonl")[0]
+
+    def mismatched_adapter(case, engine):
+        result = simulated_result(case, engine)
+        result[field] = wrong_value
+        return result
+
+    with pytest.raises(ValueError, match="adapter pairing metadata mismatch"):
+        replay([case], mismatched_adapter)
+
+
+def test_replay_rejects_adapter_missing_pairing_metadata():
+    case = read_jsonl("eval/agent_v2/cases.jsonl")[0]
+
+    def incomplete_adapter(case, engine):
+        result = simulated_result(case, engine)
+        del result["prompt_profile"]
+        return result
+
+    with pytest.raises(ValueError, match="adapter pairing metadata mismatch.*prompt_profile"):
+        replay([case], incomplete_adapter)
+
+
+def test_report_rejects_mismatched_pair_metadata_when_built_from_external_rows():
+    case = read_jsonl("eval/agent_v2/cases.jsonl")[0]
+    runs = replay([case], simulated_result)
+    runs[1]["model_config_ref"] = "another-model"
+
+    with pytest.raises(ValueError, match="run pairing metadata mismatch.*model_config_ref"):
+        build_report([case], runs)
+
+
 def test_shadow_runtime_has_no_write_capability_and_rejects_any_write_grant():
     request = make_request(shadow=True, question="只读影子评测问题")
     dependencies = make_dependencies(FakeLlm(), FakeRepositories())

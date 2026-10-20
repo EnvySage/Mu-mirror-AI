@@ -35,6 +35,10 @@ def simulated_result(case: dict[str, Any], engine: str) -> dict[str, Any]:
     return {
         "case_id": case["case_id"],
         "engine": engine,
+        "fixture_id": case["fixture_id"],
+        "reference_date": case["reference_date"],
+        "model_config_ref": case["model_config_ref"],
+        "prompt_profile": case["prompt_profile"],
         "prompt_hash": None,
         "outcome": "not_executed",
         "stop_reason": "SIMULATED",
@@ -56,7 +60,10 @@ def simulated_result(case: dict[str, Any], engine: str) -> dict[str, Any]:
 def replay(cases: list[dict[str, Any]], adapter: Callable[[dict[str, Any], str], dict[str, Any]]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for case in cases:
-        required = {"case_id", "fixture_id", "question", "history", "reference_date", "model_config_ref"}
+        required = {
+            "case_id", "fixture_id", "question", "history", "reference_date",
+            "model_config_ref", "prompt_profile",
+        }
         missing = required - case.keys()
         if missing:
             raise ValueError(f"case {case.get('case_id', '<unknown>')} missing {sorted(missing)}")
@@ -64,15 +71,20 @@ def replay(cases: list[dict[str, Any]], adapter: Callable[[dict[str, Any], str],
             result = adapter(case, engine)
             if not isinstance(result, dict):
                 raise ValueError(f"adapter must return a dict for {case['case_id']}/{engine}")
-            rows.append({
-                **result,
+            expected_identity = {
                 "case_id": case["case_id"],
+                "engine": engine,
                 "fixture_id": case["fixture_id"],
                 "reference_date": case["reference_date"],
                 "model_config_ref": case["model_config_ref"],
-                "prompt_profile": case.get("prompt_profile"),
-                "engine": engine,
-            })
+                "prompt_profile": case["prompt_profile"],
+            }
+            for field, expected in expected_identity.items():
+                if field not in result or result[field] != expected:
+                    raise ValueError(
+                        f"adapter pairing metadata mismatch for {case['case_id']}/{engine}: {field}"
+                    )
+            rows.append(dict(result))
     return rows
 
 

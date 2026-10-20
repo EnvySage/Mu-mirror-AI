@@ -11,6 +11,7 @@ from typing import Any
 
 ENGINES = ("legacy", "graph_v2")
 MIN_P95_SAMPLES = 30
+PAIRING_FIELDS = ("fixture_id", "reference_date", "model_config_ref", "prompt_profile")
 
 
 def read_jsonl(path: str | Path) -> list[dict[str, Any]]:
@@ -66,12 +67,23 @@ def _engine_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
 
 def build_report(cases: list[dict[str, Any]], runs: list[dict[str, Any]]) -> dict[str, Any]:
     case_by_id = {case["case_id"]: case for case in cases}
+    if len(case_by_id) != len(cases):
+        raise ValueError("duplicate evaluation case_id")
+    for case in cases:
+        missing = set(PAIRING_FIELDS) - case.keys()
+        if missing:
+            raise ValueError(f"case {case['case_id']} missing pairing metadata: {sorted(missing)}")
+
     seen: set[tuple[str, str]] = set()
     grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for row in runs:
         case_id, engine = row.get("case_id"), row.get("engine")
         if case_id not in case_by_id or engine not in ENGINES:
             raise ValueError(f"run references unknown case or engine: {case_id!r}/{engine!r}")
+        case = case_by_id[case_id]
+        for field in PAIRING_FIELDS:
+            if field not in row or row[field] != case[field]:
+                raise ValueError(f"run pairing metadata mismatch for {case_id}/{engine}: {field}")
         key = (case_id, engine)
         if key in seen:
             raise ValueError(f"duplicate result for {case_id}/{engine}")
@@ -89,6 +101,7 @@ def build_report(cases: list[dict[str, Any]], runs: list[dict[str, Any]]) -> dic
             "fixture_id": case["fixture_id"],
             "reference_date": case["reference_date"],
             "model_config_ref": case["model_config_ref"],
+            "prompt_profile": case["prompt_profile"],
             "prompt_hashes": {engine: pair[engine].get("prompt_hash") if pair[engine] else None
                               for engine in ENGINES},
             "paired": complete,
@@ -128,7 +141,7 @@ def build_report(cases: list[dict[str, Any]], runs: list[dict[str, Any]]) -> dic
         "case_count": len(cases),
         "run_count": len(runs),
         "complete_pair_count": sum(bool(pair["paired"]) for pair in pairs),
-        "pairing_basis": ["fixture_id", "reference_date", "model_config_ref", "prompt_profile"],
+        "pairing_basis": list(PAIRING_FIELDS),
         "quality_claim": "none_simulated" if simulated else "manual_scoring_required",
         "engines": {engine: _engine_summary(grouped[engine]) for engine in ENGINES},
         "semantic_change_groups": semantic_groups,
