@@ -282,6 +282,7 @@ Task10实施记录（2026-10-20）：
 - AI既有验证：之前一次`tests/agent_v2`在临时Task10数据库上114 passed、0 skipped，包含9项读视图/权限集成；该临时集成数据库及reader role随后删除。本次更正后重新运行`pytest tests/agent_v2 -q`为114 passed、11 skipped；11项均因未配置`MIRROR_TEST_READ_DSN`而未重跑PostgreSQL集成，并非通过新增skip隐藏失败。`scripts/sync_upload.py`及`--check`通过。
 - B：shadow采样默认关闭，decision存在正式run metrics；shadow单并发不排队，显式写请求不采样、前台graph优先取消；shadow只保存run状态/metrics，不落正式消息、工具审计或词典命中。`AgentRunServiceTest,AgentEventAdapterTest,AgentShadowRequestTest,AgentCommandAuthTest`共27项通过。
 - 发布：`deploy/ai-release.sh`语法检查通过；未执行部署、未启用在线shadow或graph_v2。原52对p95测量的graph_v2延迟门槛未通过，本次只做定向复评，没有当前版本的完整p95样本。meter原始差额仍未解释；故障注入、真实具名写接口验证、小流量和稳定发布周期均未完成。Task10 Step 5保持未完成，`legacy`继续作为默认并保留旧引擎；本轮限定为真实离线配对，没有进入staging或部署。
+- 2026-10-21真实离线配对复跑：`eval/agent_v2/reports/task10-real-model-paired-20261020-recheck.json`包含52对/104次真实模型运行，全部完成；模型调用计量器累计415/500，其中本轮配对增量328，与报告逐轮计数一致；此前不完整运行和单案例冒烟共计消耗87次。请求串行执行，相邻Java聊天请求至少间隔3秒。当前legacy的52样本p95为12,032.721 ms，graph_v2为26,050.875 ms（约2.165倍、慢约116.5%），未达到架构第14节的“不超过旧版20%”门槛。legacy结果为34 answer/18 fallback；graph_v2为32 answer/6 fallback/14 clarification。人工质量评分与引用核验均未执行；18条故障运行未做故障注入；20条写场景均未配置具名业务命令接口，业务写成功数为0。token和费用仍未知。该复跑是本地真实模型配对，不代表在线灰度或完整写入端到端。Task10 Step 5继续保持未完成，`legacy`继续为默认引擎；还需先分析graph_v2延迟与结果差异，补人工质量/引用评估及故障和写入验收，之后才可讨论任何灰度切换。本轮没有部署、在线shadow或生产写入。
 
 ## 交付自检
 
