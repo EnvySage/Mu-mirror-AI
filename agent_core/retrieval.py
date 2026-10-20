@@ -7,6 +7,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Sequence
+from collections.abc import Callable
 
 from agent_core.types import Evidence, IntentResult, TimeWindow
 from agent_data.records import RecordFilters
@@ -38,6 +39,7 @@ def retrieve(
     limit: int = DIARY_LIMIT,
     deadline: float | None = None,
     reference_time: datetime | None = None,
+    clock: Callable[[], float] | None = None,
 ) -> RetrievalResult:
     """Retrieve one route only; preserve explicit metadata filters on degradation."""
     scope = require_scope(scope)
@@ -95,7 +97,7 @@ def retrieve(
     if embedder is None:
         return _embedding_degraded(records, scope, filters, hard_filters, route, limit, "embedding_unavailable:missing_client")
 
-    timeout = _remaining_timeout(deadline)
+    timeout = _remaining_timeout(deadline, clock)
     try:
         embed = getattr(embedder, "embed", None)
         if not callable(embed):
@@ -202,10 +204,10 @@ def _profile_evidence(profile) -> Evidence:
     )
 
 
-def _remaining_timeout(deadline: float | None) -> float | None:
+def _remaining_timeout(deadline: float | None, clock: Callable[[], float] | None = None) -> float | None:
     if deadline is None:
         return None
-    remaining = deadline - time.monotonic()
+    remaining = deadline - (clock() if clock is not None else time.monotonic())
     if remaining <= 0:
         raise TimeoutError("graph_v2 deadline expired before embedding")
     return remaining

@@ -131,12 +131,12 @@
 - Produces `AgentRunnerServicer.RunAgent(request, context)`，严格对应设计第11节proto字段号；只有custom事件出边界。
 - Event.seq从1递增；一轮至多一个completed/failed；RuntimeContext资源在finally关闭。
 
-- [ ] Step 1：用脚本模型/工具写图测试：done=true+calls执行最后一批；空计划；第4轮终止；重复规范化参数终止；planner缺终帧仍保留已有证据；正常文件补读与异常不补读；两轮invoke之间状态全重置。
-- [ ] Step 2：实现顺序图与runner；plan_rounds/tool_call_count分别累计；循环180s与整轮480s独立；recursion_limit=64只作最后保护。
-- [ ] Step 3：proto按设计实现，更新generate_proto.py生成列表和相对import修复规则；调用生成脚本。两仓proto逐字节相同；不手改stub。
-- [ ] Step 4：gRPC测试在临时端口启动独立server；无内部token在查库/调用模型前被拒绝；run_id与seq正确；保留10003旧RPC；第3个Agent请求立即RESOURCE_EXHAUSTED，不无限排队。
-- [ ] Step 5：deadline/cancel测试用可控时钟与阻塞桩：取消后不启动下一工具；流关闭；预算只减不重置；数据库异常触发受控失败；不得靠后台线程遗留继续执行。
-- [ ] Step 6：只读全链路从临时Agent server到隔离PG，检查Java查询HTTP/gRPC调用计数为0。运行 `venv/Scripts/python.exe -m pytest tests/agent_v2/test_graph.py tests/agent_v2/test_agent_grpc.py tests/agent_v2/test_budget_cancel.py -q`，预期全部通过；同步检查upload。
+- [x] Step 1：用脚本模型/工具写图测试：done=true+calls执行最后一批；空计划；第4轮终止；重复规范化参数终止；planner缺终帧仍保留已有证据；正常文件补读与异常不补读；两轮invoke之间状态全重置。
+- [x] Step 2：实现顺序图与runner；plan_rounds/tool_call_count分别累计；循环180s与整轮480s独立；recursion_limit=64只作最后保护。
+- [x] Step 3：proto按设计实现，更新generate_proto.py生成列表和相对import修复规则；调用生成脚本。两仓proto逐字节相同；不手改stub。
+- [x] Step 4：gRPC测试在临时端口启动独立server；无内部token在查库/调用模型前被拒绝；run_id与seq正确；保留10003旧RPC；第3个Agent请求立即RESOURCE_EXHAUSTED，不无限排队。
+- [x] Step 5：deadline/cancel测试用可控时钟与阻塞桩：取消后不启动下一工具；流关闭；预算只减不重置；数据库异常触发受控失败；不得靠后台线程遗留继续执行。
+- [x] Step 6：只读全链路从临时Agent server到隔离PG，检查Java查询HTTP/gRPC调用计数为0。运行 `venv/Scripts/python.exe -m pytest tests/agent_v2/test_graph.py tests/agent_v2/test_agent_grpc.py tests/agent_v2/test_budget_cancel.py -q`，预期全部通过；同步检查upload。
 
 ## Task 6（M3）：Java运行生命周期、引擎分派与结果落库
 

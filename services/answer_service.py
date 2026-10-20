@@ -2,7 +2,9 @@
 
 import json
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Callable
+from types import SimpleNamespace
 
 from generated import mirror_chat_pb2 as pb2
 from config import CONFIG
@@ -413,7 +415,7 @@ def build_agent_plan_messages(
         "agent_plan",
         question=question,
         history=_format_history(history),
-        glossary=format_glossary(glossary),
+        glossary=_format_agent_glossary(glossary),
         tools=json.dumps(tools, ensure_ascii=False),
         retrieval_summary=retrieval_summary,
         file_candidates=json.dumps(list(dict.fromkeys(file_ids)), ensure_ascii=False),
@@ -424,6 +426,24 @@ def build_agent_plan_messages(
         today=today,
     )
     return [{"role": "system", "content": prompt}, {"role": "user", "content": question}]
+
+
+def _format_agent_glossary(glossary):
+    """Adapt read-view glossary timestamps to the shared prompt renderer."""
+    adapted = []
+    for term in glossary:
+        confirmed_at = getattr(term, "confirmed_at", None)
+        if confirmed_at is None:
+            confirmed_at = getattr(term, "last_confirmed_at", None)
+        if isinstance(confirmed_at, datetime):
+            confirmed_at = confirmed_at.isoformat()
+        adapted.append(SimpleNamespace(
+            term=term.term,
+            aliases=term.aliases,
+            description=term.description,
+            confirmed_at=confirmed_at or "",
+        ))
+    return format_glossary(adapted)
 
 
 def build_agent_answer_messages(

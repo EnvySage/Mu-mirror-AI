@@ -96,7 +96,7 @@ def understand(
         if config is None:
             raise ValueError("graph_v2 intent requires an LLM client or request LLM config")
         factory = llm_factory or create_llm
-        timeout = _remaining_timeout(getattr(runtime, "deadline", None))
+        timeout = _remaining_timeout(getattr(runtime, "deadline", None), getattr(runtime, "clock", None))
         llm = factory(
             provider=config.provider,
             api_key=config.api_key,
@@ -116,7 +116,7 @@ def understand(
         history=history,
         glossary=_format_agent_glossary(prepared.glossary_for_intent),
     )
-    timeout = _remaining_timeout(getattr(runtime, "deadline", None))
+    timeout = _remaining_timeout(getattr(runtime, "deadline", None), getattr(runtime, "clock", None))
     response = parse_json(
         llm.json_task(
             [{"role": "user", "content": prompt}], timeout=timeout, max_retries=0,
@@ -144,10 +144,10 @@ def understand(
     )
 
 
-def _remaining_timeout(deadline: float | None) -> float | None:
+def _remaining_timeout(deadline: float | None, clock: Callable[[], float] | None = None) -> float | None:
     if deadline is None:
         return None
-    remaining = float(deadline) - time.monotonic()
+    remaining = float(deadline) - (clock() if clock is not None else time.monotonic())
     if remaining <= 0:
         raise TimeoutError("graph_v2 deadline expired before the LLM request")
     return remaining

@@ -11,6 +11,17 @@ import yaml
 _CONFIG_PATH = Path(__file__).parent / "config.yml"
 _defaults = {
     "server": {"port": 10003, "workers": 4},
+    "agent": {
+        "enabled": False,
+        "port": 10004,
+        "workers": 2,
+        "maximum_concurrent_rpcs": 2,
+        "total_budget_ms": 480000,
+        "loop_budget_ms": 180000,
+        "answer_budget_ms": 180000,
+        "max_plan_rounds": 4,
+        "half_life_days": 30,
+    },
     "llm": {
         "timeout_seconds": 60,  # 非流式调用总超时（按 max_retries 平摊，单次尝试 30s）
         # 流式调用"两块数据之间最多等多久"。原先沿用单次尝试超时（10s），2026-09-21 联调实测

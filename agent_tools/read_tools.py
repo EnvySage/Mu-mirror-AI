@@ -270,7 +270,7 @@ def _find_item(args, runtime, scope, repos):
             for word in term.aliases if isinstance(word, str) and word.strip()
         ))
     filters = VaultFilters(category=category, created_after=start_at, created_before=end_at, aliases=aliases)
-    timeout = _remaining_timeout(runtime.deadline)
+    timeout = _remaining_timeout(runtime.deadline, runtime)
     embedder = runtime.embedding_client
     degraded = bool(normalized_query and embedder is None)
     try:
@@ -300,7 +300,7 @@ def _recall_item(args, runtime, scope, repos):
     query = args.get("query")
     if query is not None and (not isinstance(query, str) or len(query.strip()) > 256):
         raise ValueError("query must contain at most 256 characters")
-    timeout = _remaining_timeout(runtime.deadline)
+    timeout = _remaining_timeout(runtime.deadline, runtime)
     recalled = repos.vault.recall(
         scope, item_id, query.strip() if isinstance(query, str) and query.strip() else None,
         runtime.embedding_client, timeout=timeout, max_retries=0,
@@ -406,10 +406,11 @@ def _iso(value):
     return value.isoformat() if value is not None else None
 
 
-def _remaining_timeout(deadline: float | None) -> float | None:
+def _remaining_timeout(deadline: float | None, runtime: RuntimeContext) -> float | None:
     if deadline is None:
         return None
-    remaining = deadline - time.monotonic()
+    clock = getattr(runtime, "clock", None)
+    remaining = deadline - (clock() if callable(clock) else time.monotonic())
     if remaining <= 0:
         raise TimeoutError("graph_v2 deadline expired before data query")
     return remaining

@@ -127,6 +127,13 @@ class AgentState:
     vault_refs: list[Any] = field(default_factory=list)
     fallback: bool = False
     outcome: str = ""
+    prepared_context: PreparedContext | None = None
+    retrieval_summary: str = ""
+    plan_done: bool = False
+    pending_auto_backstop: list[bool] = field(default_factory=list)
+    backstop_attempted: bool = False
+    error_code: str = ""
+    degraded_reasons: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True, slots=True)
@@ -152,3 +159,11 @@ class RuntimeContext:
     cancelled: Callable[[], bool] | Any | None = None
     event_writer: Any = None
     repositories: Any = None
+    loop_deadline: float | None = None
+    answer_deadline: float | None = None
+    max_plan_rounds: int = 4
+    half_life_days: float = 30.0
+    shadow: bool = False
+    answer_budget_ms: int = 180_000
+    clock: Callable[[], float] | None = None
+    total_deadline: float | None = None
