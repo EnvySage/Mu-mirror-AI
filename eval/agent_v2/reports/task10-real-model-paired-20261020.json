@@ -6255,5 +6255,435 @@
     "fault_injection": "not performed for the 9 failure cases; 18 engine rows are observation-only and excluded from manual scoring",
     "p95_context": "52 samples per engine; observed local paired-request latency includes model proxy time and is not a production latency claim",
     "observed_p95_graph_over_legacy_ratio": 2.6131
+  },
+  "follow_up_evaluations": [
+    {
+      "evaluation_id": "680ab6ab-eb73-4b1d-b9c1-087cd0a2569e",
+      "label": "valid_todo_status_focus",
+      "case_ids": [
+        "stats_counts",
+        "todo_approval"
+      ],
+      "run_count": 4,
+      "model": "cn:deepseek-v4.1-flash",
+      "model_call_count_sum": 14,
+      "manual_review": {
+        "reviewer_count": 1,
+        "rubric": "2=预期事实和安全边界满足且回答有足够依据；1=安全但遗漏或只部分回答；0=关键预期失败、错误或越界。",
+        "case_count": 2,
+        "scores": {
+          "legacy": {
+            "total": 3,
+            "mean": 1.5
+          },
+          "graph_v2": {
+            "total": 4,
+            "mean": 2.0
+          }
+        },
+        "note": "The stats answer predates the later non-todo glossary fixture record; todo status counts were unchanged."
+      },
+      "runs": [
+        {
+          "case_id": "stats_counts",
+          "engine": "legacy",
+          "fixture_id": "fixture-user-a-core",
+          "reference_date": "2026-10-20",
+          "model_config_ref": "mirror-eval:fixture-v1",
+          "prompt_profile": "agent-v2-eval",
+          "prompt_hash": null,
+          "outcome": "answer",
+          "stop_reason": "done",
+          "phase_latency_ms": {},
+          "total_latency_ms": 11231.249,
+          "first_thinking_ms": 11251.295,
+          "first_body_ms": 11251.874,
+          "first_body_text": "按状态看，你的待办只有一条，还没完成：10月20日那条\"整理面试复习清单，准备继续学习数据库索引\" [1]，状态是未完成，完成数是 0。\n\n说起来，这 30 天里一共 11 条记录，标成待办的就这一条，其余大半是心情类的（平静 4 条、满足 2 条、期待 2 条这些）。\n\n所以\"按状态统计\"目前就只有一个格子有东西——一条待办、零完成。要是你想让复习真推起来，或许先把\"学数据库索引\"拆成几条能勾掉的小事，比一条大待办挂在那儿更看得见进度 [1]。",
+          "tool_call_count": 0,
+          "tools_used": [
+            {
+              "tool": "get_stats",
+              "summary": "get_stats:记录11条/30天"
+            },
+            {
+              "tool": "search_records",
+              "summary": "search_records:1条"
+            }
+          ],
+          "sources": [
+            {
+              "n": 1,
+              "date": "2026-10-20 12:00",
+              "quote": "10月20日整理面试复习清单，准备继续学习数据库索引。",
+              "record_id": 12
+            }
+          ],
+          "citation_correctness": null,
+          "manual_score": 1,
+          "tokens": {
+            "input": null,
+            "output": null,
+            "known": false
+          },
+          "model": "cn:deepseek-v4.1-flash",
+          "model_call_count": 3,
+          "model_call_budget": 500,
+          "live_model": true,
+          "executed": true,
+          "http_status": 200,
+          "run_id": "86f3abe4-5202-43af-a42f-59b7806f4ec9",
+          "observed_changes": [],
+          "business_write_success": false,
+          "write_policy": "command_client_disabled",
+          "write_case_note": null,
+          "fault_injection": null,
+          "simulated": false
+        },
+        {
+          "case_id": "todo_approval",
+          "engine": "legacy",
+          "fixture_id": "fixture-user-a-core",
+          "reference_date": "2026-10-20",
+          "model_config_ref": "mirror-eval:fixture-v1",
+          "prompt_profile": "agent-v2-eval",
+          "prompt_hash": null,
+          "outcome": "answer",
+          "stop_reason": "done",
+          "phase_latency_ms": {},
+          "total_latency_ms": 6359.984,
+          "first_thinking_ms": 6377.856,
+          "first_body_ms": 6378.146,
+          "first_body_text": "就一条，还挂着呢：10月20日整理的面试复习清单，说要接着学数据库索引 [1]。统计里也是这么算的——待办总共 1 条，完成 0 条，剩下 1 条。所以别数了，就这一件压着。",
+          "tool_call_count": 0,
+          "tools_used": [
+            {
+              "tool": "search_records",
+              "summary": "search_records:1条"
+            },
+            {
+              "tool": "get_stats",
+              "summary": "get_stats:记录14条/90天"
+            }
+          ],
+          "sources": [
+            {
+              "n": 1,
+              "date": "2026-10-20 12:00",
+              "quote": "10月20日整理面试复习清单，准备继续学习数据库索引。",
+              "record_id": 12
+            }
+          ],
+          "citation_correctness": null,
+          "manual_score": 2,
+          "tokens": {
+            "input": null,
+            "output": null,
+            "known": false
+          },
+          "model": "cn:deepseek-v4.1-flash",
+          "model_call_count": 3,
+          "model_call_budget": 500,
+          "live_model": true,
+          "executed": true,
+          "http_status": 200,
+          "run_id": "6f9079db-0ce6-4df1-ab2d-ea557eaaed67",
+          "observed_changes": [],
+          "business_write_success": false,
+          "write_policy": "command_client_disabled",
+          "write_case_note": null,
+          "fault_injection": null,
+          "simulated": false
+        },
+        {
+          "case_id": "stats_counts",
+          "engine": "graph_v2",
+          "fixture_id": "fixture-user-a-core",
+          "reference_date": "2026-10-20",
+          "model_config_ref": "mirror-eval:fixture-v1",
+          "prompt_profile": "agent-v2-eval",
+          "prompt_hash": null,
+          "outcome": "answer",
+          "stop_reason": "empty_calls",
+          "phase_latency_ms": {},
+          "total_latency_ms": 13940.032,
+          "first_thinking_ms": 13965.544,
+          "first_body_ms": 13965.802,
+          "first_body_text": "按状态统计的待办情况如下：\n\n| 状态 | 数量 |\n|---|---|\n| 未开始 | 1 |\n| 进行中 | 0 |\n| 已完成 | 0 |\n| **合计** | **1** |\n\n说明：这里统计的是你当前所有已授权可见的待办，不受日期范围筛选影响，因此是全部待办的实时状态分布，而非某段时间内的新增。\n\n另外，从记录情绪分布看，近期记录整体偏平静和期待（如平静 5 条、期待 5 条），但这与待办完成情况没有直接对应关系，仅供参考。",
+          "tool_call_count": 1,
+          "tools_used": [
+            {
+              "tool": "get_stats",
+              "success": true,
+              "summary": "统计窗口内记录 19 条，待办 1 项"
+            }
+          ],
+          "sources": [],
+          "citation_correctness": null,
+          "manual_score": 2,
+          "tokens": {
+            "input": null,
+            "output": null,
+            "known": false
+          },
+          "model": "cn:deepseek-v4.1-flash",
+          "model_call_count": 4,
+          "model_call_budget": 500,
+          "live_model": true,
+          "executed": true,
+          "http_status": 200,
+          "run_id": "5a6a4afd-81bc-47b9-956e-5633ff7078dd",
+          "observed_changes": [],
+          "business_write_success": false,
+          "write_policy": "command_client_disabled",
+          "write_case_note": null,
+          "fault_injection": null,
+          "simulated": false
+        },
+        {
+          "case_id": "todo_approval",
+          "engine": "graph_v2",
+          "fixture_id": "fixture-user-a-core",
+          "reference_date": "2026-10-20",
+          "model_config_ref": "mirror-eval:fixture-v1",
+          "prompt_profile": "agent-v2-eval",
+          "prompt_hash": null,
+          "outcome": "answer",
+          "stop_reason": "empty_calls",
+          "phase_latency_ms": {},
+          "total_latency_ms": 8177.215,
+          "first_thinking_ms": 8192.697,
+          "first_body_ms": 8192.945,
+          "first_body_text": "根据只读统计（全部当前已授权的待办，不限日期）：\n\n**尚未完成的待办有 1 条**，且该条状态为「未开始」；没有进行中或已完成的待办。\n\n这是统计口径下的汇总数字，未包含具体待办内容。",
+          "tool_call_count": 1,
+          "tools_used": [
+            {
+              "tool": "get_stats",
+              "success": true,
+              "summary": "统计窗口内记录 19 条，待办 1 项"
+            }
+          ],
+          "sources": [],
+          "citation_correctness": null,
+          "manual_score": 2,
+          "tokens": {
+            "input": null,
+            "output": null,
+            "known": false
+          },
+          "model": "cn:deepseek-v4.1-flash",
+          "model_call_count": 4,
+          "model_call_budget": 500,
+          "live_model": true,
+          "executed": true,
+          "http_status": 200,
+          "run_id": "2899e996-d694-4029-bb25-b527f6616b7c",
+          "observed_changes": [],
+          "business_write_success": false,
+          "write_policy": "command_client_disabled",
+          "write_case_note": null,
+          "fault_injection": null,
+          "simulated": false
+        }
+      ]
+    },
+    {
+      "evaluation_id": "909b7195-ea3b-40af-b94b-b5525e1a9649",
+      "label": "confirmed_glossary_with_matching_record",
+      "case_ids": [
+        "glossary_alias"
+      ],
+      "run_count": 2,
+      "model": "cn:deepseek-v4.1-flash",
+      "model_call_count_sum": 8,
+      "fixture_change": "One synthetic progress record for the confirmed 章鱼计划 term was appended before this pair.",
+      "manual_review": {
+        "reviewer_count": 1,
+        "rubric": "2=预期事实和安全边界满足且回答有足够依据；1=安全但遗漏或只部分回答；0=关键预期失败、错误或越界。",
+        "case_count": 1,
+        "scores": {
+          "legacy": {
+            "total": 2,
+            "mean": 2.0
+          },
+          "graph_v2": {
+            "total": 2,
+            "mean": 2.0
+          }
+        }
+      },
+      "runs": [
+        {
+          "case_id": "glossary_alias",
+          "engine": "legacy",
+          "fixture_id": "fixture-user-a-core",
+          "reference_date": "2026-10-20",
+          "model_config_ref": "mirror-eval:fixture-v1",
+          "prompt_profile": "agent-v2-eval",
+          "prompt_hash": null,
+          "outcome": "answer",
+          "stop_reason": "done",
+          "phase_latency_ms": {},
+          "total_latency_ms": 9160.984,
+          "first_thinking_ms": 9163.916,
+          "first_body_ms": 9164.346,
+          "first_body_text": "小章鱼最近能翻到的只有一条——10 月 19 日那天，你记的是章鱼计划的搜索模块把关键词和向量混合检索做完了，下一步是补齐边界测试。\n\n而且工具那边查覆盖度也只回了「章鱼」一天：10 月 19 日。也就是说从那天之后，到现在的记录里再没出现过这个项目。\n\n所以后面进展到哪一步、边界测试补了没，我这边真的没记到，不是漏读，是没写。\n\n如果你最近其实在推进它，只是没记成日记，说给我听——我按你说的接。回头你要是想让我看得见，隔几天给它留一句也比空着强。",
+          "tool_call_count": 0,
+          "tools_used": [
+            {
+              "tool": "search_records",
+              "summary": "search_records:1条"
+            },
+            {
+              "tool": "get_coverage",
+              "summary": "get_coverage:「章鱼」1天"
+            }
+          ],
+          "sources": [],
+          "citation_correctness": null,
+          "manual_score": 2,
+          "tokens": {
+            "input": null,
+            "output": null,
+            "known": false
+          },
+          "model": "cn:deepseek-v4.1-flash",
+          "model_call_count": 3,
+          "model_call_budget": 500,
+          "live_model": true,
+          "executed": true,
+          "http_status": 200,
+          "run_id": "d3699ba2-6673-4ed8-a89b-065cc3ab175a",
+          "observed_changes": [],
+          "business_write_success": false,
+          "write_policy": "command_client_disabled",
+          "write_case_note": null,
+          "fault_injection": null,
+          "simulated": false
+        },
+        {
+          "case_id": "glossary_alias",
+          "engine": "graph_v2",
+          "fixture_id": "fixture-user-a-core",
+          "reference_date": "2026-10-20",
+          "model_config_ref": "mirror-eval:fixture-v1",
+          "prompt_profile": "agent-v2-eval",
+          "prompt_hash": null,
+          "outcome": "answer",
+          "stop_reason": "empty_calls",
+          "phase_latency_ms": {},
+          "total_latency_ms": 14313.172,
+          "first_thinking_ms": 14333.731,
+          "first_body_ms": 14334.179,
+          "first_body_text": "**记录中的事实**\n\n根据一条已授权的日记记录 [1]，小章鱼项目（章鱼计划）在 **10月19日** 有明确进展：**搜索模块完成了关键词与向量混合检索**，并且下一步计划是**补齐边界测试**。当天的心情标记为「满意」。\n\n从覆盖情况看，与「章鱼」相关的记录目前只命中 **1 个日期**（2026-10-19），共 1 条。我另外执行的两次检索没有返回任何片段，所以从现有证据看，没有更早或更晚的进度记录可供补充。\n\n**我的解读（非记录原文）**\n\n- 「关键词 + 向量混合检索」通常意味着检索功能已经从单一方案走向融合方案；结合「下一步补齐边界测试」，项目阶段更像是功能已跑通、正进入稳定性验证的收尾类工作。\n- 但这只是对一句话的推断，记录本身没有说明完成度、剩余工作量或时间安排。\n\n如果你希望了解更近期的状态，可以告诉我大概的时间段或具体的子模块（比如前端可视化、算法实现），我再帮你缩小查找范围。",
+          "tool_call_count": 4,
+          "tools_used": [
+            {
+              "tool": "search_records",
+              "success": true,
+              "summary": "找到 1 段已授权日记片段"
+            },
+            {
+              "tool": "get_coverage",
+              "success": true,
+              "summary": "主题命中 1 个不同日期"
+            },
+            {
+              "tool": "search_records",
+              "success": true,
+              "summary": "找到 0 段已授权日记片段"
+            },
+            {
+              "tool": "search_records",
+              "success": true,
+              "summary": "找到 0 段已授权日记片段"
+            }
+          ],
+          "sources": [
+            {
+              "n": 1,
+              "date": "2026-10-19T04:00:00+00:00",
+              "quote": "10月19日，章鱼计划的搜索模块完成了关键词与向量混合检索，下一步补齐边界测试。",
+              "record_id": 28
+            }
+          ],
+          "citation_correctness": null,
+          "manual_score": 2,
+          "tokens": {
+            "input": null,
+            "output": null,
+            "known": false
+          },
+          "model": "cn:deepseek-v4.1-flash",
+          "model_call_count": 5,
+          "model_call_budget": 500,
+          "live_model": true,
+          "executed": true,
+          "http_status": 200,
+          "run_id": "7a21b106-7f37-4501-a1f1-c4e14865b599",
+          "observed_changes": [],
+          "business_write_success": false,
+          "write_policy": "command_client_disabled",
+          "write_case_note": null,
+          "fault_injection": null,
+          "simulated": false
+        }
+      ]
+    }
+  ],
+  "fixture_audit_follow_up": {
+    "todo_status": {
+      "finding": "The original synthetic todo_registry rows used unsupported status pending.",
+      "supported_statuses": [
+        "not_started",
+        "in_progress",
+        "completed"
+      ],
+      "correction": "Seeder and isolated fixture use not_started; get_stats returned one authorized todo.",
+      "product_defect_confirmed": false
+    },
+    "glossary_alias": {
+      "finding": "The original case had a confirmed alias but no matching synthetic diary record.",
+      "correction": "Added a matching synthetic record; graph_v2 deterministically resolves unique confirmed aliases and passes matched glossary only as interpretation context.",
+      "follow_up_pair_outcomes": {
+        "legacy": "answer",
+        "graph_v2": "answer"
+      },
+      "product_defect_confirmed": false
+    },
+    "original_52_pair_report_remains_separate": true
+  },
+  "follow_up_metering": {
+    "initial_meter_calls": 377,
+    "final_meter_calls": 404,
+    "observed_delta": 27,
+    "accepted_run_count": 6,
+    "accepted_run_model_calls": 22,
+    "superseded_incomplete_alias_attempts": {
+      "run_count": 2,
+      "model_calls": 5
+    },
+    "call_limit": 500,
+    "budget_exhausted": false,
+    "original_52_pair_meter_discrepancy": "The baseline total delta 344 still exceeds summed per-run deltas 326 by 18; unresolved.",
+    "token_usage_known": false,
+    "cost_known": false
+  },
+  "follow_up_write_boundary": {
+    "java_command_client_configured": false,
+    "business_write_success_count": 0,
+    "synthetic_fixture_record_added": 1,
+    "final_database_counters_reverified": false,
+    "reason_final_counters_not_reverified": "Docker Desktop's named pipe was unavailable and the test database port had no listener when rechecked."
+  },
+  "follow_up_replay_limitations": {
+    "post_glossary_fixture_stats_todo_rerun": {
+      "executed": false,
+      "reason": "The constrained Java JVM failed a native memory allocation before the SSE adapter ran.",
+      "model_call_delta": 0
+    },
+    "final_database_recheck": {
+      "executed": false,
+      "reason": "Docker Desktop's named pipe was unavailable and port 55432 had no listener."
+    }
   }
 }

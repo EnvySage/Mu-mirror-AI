@@ -274,10 +274,12 @@ Task8浏览器验收记录（2026-10-20）：
 
 Task10实施记录（2026-10-20）：
 
-- AI：52条合成评测案例、可注入adapter的paired replay/report；桩报告仍标记为`SIMULATED_HARNESS_ONLY`。另完成真实离线配对报告`eval/agent_v2/reports/task10-real-model-paired-20261020.json`：52对/104条最新结果，使用本地OpenAI兼容代理和`cn:deepseek-v4.1-flash`；修正glossary别名和空片段夹具后重跑对应配对。单人评分覆盖33个案例/引擎；9个故障案例未注入、10个写场景未启用Java命令接口，均不作为质量/写入验收。观察p95为legacy 9,973 ms、graph_v2 26,061 ms；graph_v2约2.61倍，延迟门槛未通过。另发现graph_v2待办统计把1条已授权待办报为0，且未解析已确认的`小章鱼项目`别名。meter总差额344与逐轮计数326相差18，尚未解释；token及费用未知。无真实业务写入，隔离库source=user记录仍为25条、receipt为0。
-- AI既有验证：`tests/agent_v2`在临时Task10数据库上114 passed、0 skipped；读视图/权限集成9项包含在内。临时数据库及临时reader role已删除。`scripts/sync_upload.py`和`--check`均通过。
+- AI：52条合成评测案例、可注入adapter的paired replay/report；桩报告仍标记为`SIMULATED_HARNESS_ONLY`。原始真实离线配对报告`eval/agent_v2/reports/task10-real-model-paired-20261020.json`包含52对/104条结果，使用本地OpenAI兼容代理和`cn:deepseek-v4.1-flash`。原始p95为legacy 9,973 ms、graph_v2 26,061 ms（各52样本），graph_v2约2.61倍；该结果早于本次定向代码/fixture更正，延迟门槛仍未通过，且没有更正后的30样本p95。原单人评分覆盖33个案例/引擎；9个故障案例未注入、10个写场景未启用Java命令接口，不能作为故障/写入验收。
+- 后续fixture审计确认两项旧发现不是已证实的产品缺陷：原todo fixture使用了代码不支持的`pending`状态；read repo仅统计`not_started`、`in_progress`、`completed`。todo案例已改为按设计通过`get_stats`统计，fixture改用`not_started`，定向真实配对返回1条已授权待办。词典案例原先只有已确认别名、没有匹配的合成日记记录；现已在seeder增加一条对应`章鱼计划`的进展记录，并在graph_v2对唯一匹配的已确认alias做确定性归一、把匹配词典作为解释上下文传给新版回答prompt（旧prompt未改）。补记录后的真实legacy/graph_v2配对均基于一条已授权来源回答。
+- 定向离线复评接受的6行（`stats_counts`、`todo_approval`两引擎，以及fixture补齐后的`glossary_alias`两引擎）共计22次模型调用；首次针对缺少进展记录的alias配对另消耗5次并已排除评分。meter从377到404，增量27与上述22+5一致。原始52对仍有meter差额344与逐轮计数326相差18的问题。token和费用未知。复评单人分数（0–2）为legacy 5/6、graph_v2 6/6，仅作三个定向案例的描述，未合并进原33例均值。隔离库中追加的是合成fixture记录，不是业务写入；本轮未配置Java具名写接口，run rows没有业务写成功。追加记录后的stats/todo复跑未执行：受限Java JVM在SSE适配器启动前发生Windows native memory allocation失败；结束时Docker Desktop命名管道不可用且55432无监听，因此最终source-user/receipt计数也没有复读。
+- AI既有验证：之前一次`tests/agent_v2`在临时Task10数据库上114 passed、0 skipped，包含9项读视图/权限集成；该临时集成数据库及reader role随后删除。本次更正后重新运行`pytest tests/agent_v2 -q`为114 passed、11 skipped；11项均因未配置`MIRROR_TEST_READ_DSN`而未重跑PostgreSQL集成，并非通过新增skip隐藏失败。`scripts/sync_upload.py`及`--check`通过。
 - B：shadow采样默认关闭，decision存在正式run metrics；shadow单并发不排队，显式写请求不采样、前台graph优先取消；shadow只保存run状态/metrics，不落正式消息、工具审计或词典命中。`AgentRunServiceTest,AgentEventAdapterTest,AgentShadowRequestTest,AgentCommandAuthTest`共27项通过。
-- 发布：`deploy/ai-release.sh`语法检查通过；未执行部署、未启用在线shadow或graph_v2。真实离线p95已测，但graph_v2延迟门槛未通过；人工评分只覆盖33个非故障、非写入案例，且存在待办统计和glossary别名回归。没有故障注入、真实具名写接口验证、小流量或稳定发布周期证据，因此Task10 Step 5保持未完成，`legacy`继续作为默认并保留旧引擎。后续需先修复并重评，再由用户另行批准测试/灰度环境。
+- 发布：`deploy/ai-release.sh`语法检查通过；未执行部署、未启用在线shadow或graph_v2。原52对p95测量的graph_v2延迟门槛未通过，本次只做定向复评，没有当前版本的完整p95样本。meter原始差额仍未解释；故障注入、真实具名写接口验证、小流量和稳定发布周期均未完成。Task10 Step 5保持未完成，`legacy`继续作为默认并保留旧引擎；本轮限定为真实离线配对，没有进入staging或部署。
 
 ## 交付自检
 

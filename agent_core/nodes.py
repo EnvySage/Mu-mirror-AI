@@ -374,6 +374,7 @@ def synthesize(state: AgentState, runtime: Runtime[RuntimeContext]) -> dict[str,
         state.evidence,
         state.observations,
         citation_index=index,
+        glossary=(state.prepared_context.glossary_matched if state.prepared_context else ()),
     )
     now = context.clock() if context.clock is not None else time.monotonic()
     deadline = min(context.deadline, now + context.answer_budget_ms / 1000.0) if context.deadline is not None else (

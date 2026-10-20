@@ -1,7 +1,8 @@
 """Intent extraction shared by the legacy servicer and future agent flows."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
+import re
 from types import SimpleNamespace
 from typing import Any, Callable
 import time
@@ -126,6 +127,11 @@ def understand(
     result = _validate_agent_intent(response, question, runtime)
     if result.action_kind == "clarification":
         return result
+    resolved_question = _resolve_confirmed_glossary_aliases(
+        question, result.standalone_question, prepared.glossary_matched,
+    )
+    if resolved_question != result.standalone_question:
+        result = replace(result, standalone_question=resolved_question)
     normalized = normalize_time(result.time_expression, runtime.reference_date, runtime.timezone)
     if isinstance(normalized, Clarification):
         return AgentIntentResult(
@@ -142,6 +148,39 @@ def understand(
         file_query_mode=result.file_query_mode, validation_issues=result.validation_issues,
         time_window=normalized,
     )
+
+
+def _resolve_confirmed_glossary_aliases(question: str, standalone_question: str, terms) -> str:
+    """Normalize unique, confirmed aliases before semantic retrieval and planning."""
+    question_folded = question.casefold()
+    aliases: dict[str, tuple[str, str]] = {}
+    ambiguous: set[str] = set()
+    for term in terms or ():
+        canonical = getattr(term, "term", "")
+        if not isinstance(canonical, str) or not canonical.strip():
+            continue
+        for alias in getattr(term, "aliases", ()) or ():
+            if not isinstance(alias, str) or not alias.strip() or alias.casefold() not in question_folded:
+                continue
+            key = alias.casefold()
+            current = aliases.get(key)
+            if current is not None and current[1] != canonical:
+                ambiguous.add(key)
+            else:
+                aliases[key] = (alias, canonical)
+
+    resolved = standalone_question
+    seen_terms: set[str] = set()
+    for key, (alias, canonical) in sorted(aliases.items(), key=lambda item: len(item[1][0]), reverse=True):
+        if key in ambiguous or canonical in seen_terms:
+            continue
+        seen_terms.add(canonical)
+        pattern = re.compile(re.escape(alias), re.IGNORECASE)
+        if pattern.search(resolved):
+            resolved = pattern.sub(canonical, resolved)
+        elif canonical.casefold() not in resolved.casefold():
+            resolved = f"{resolved}（已确认词条：{canonical}）"
+    return resolved
 
 
 def _remaining_timeout(deadline: float | None, clock: Callable[[], float] | None = None) -> float | None:

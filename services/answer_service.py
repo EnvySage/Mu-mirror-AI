@@ -453,6 +453,7 @@ def build_agent_answer_messages(
     observations,
     *,
     citation_index: CitationIndex | None = None,
+    glossary=(),
     prompt_name="agent_chat",
 ):
     """Build graph_v2 answer messages; history appears only once in the message list."""
@@ -461,6 +462,7 @@ def build_agent_answer_messages(
         prompt_name,
         evidence=render_evidence(evidence, index),
         observations=render_observations(observations),
+        glossary=_format_agent_glossary(glossary),
     )
     messages = [{"role": "system", "content": prompt}]
     messages.extend({"role": message.role, "content": message.content} for message in history)

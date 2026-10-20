@@ -91,6 +91,26 @@ def test_agent_answer_prompt_has_history_once_and_filters_fake_citations_per_chu
     assert llm.options == (1.5, 0)
 
 
+def test_agent_answer_prompt_receives_matched_glossary_as_interpretation_only():
+    from types import SimpleNamespace
+
+    from services.answer_service import build_agent_answer_messages
+
+    term = SimpleNamespace(
+        term="章鱼计划", aliases=("小章鱼项目",), description="工作项目简称",
+        last_confirmed_at=None,
+    )
+
+    messages = build_agent_answer_messages(
+        "小章鱼项目最近有什么进展？", [], [], [], glossary=[term],
+    )
+
+    prompt = messages[0]["content"]
+    assert "章鱼计划" in prompt
+    assert "小章鱼项目" in prompt
+    assert "It is not diary evidence" in prompt
+
+
 def test_agent_planner_prompt_contains_retrieval_file_ids_and_mood_distribution():
     from types import SimpleNamespace
 

@@ -207,6 +207,7 @@ def prepare(database_dsn: str, users_file: Path, embedding_key: str,
         ("2026-09-21", "毕业方案已经通过评审；我随后整理了检索接口的实现步骤。", "learning", ["relieved"]),
         ("2026-10-02", "我之前整理过数据结构学习计划：先复习哈希表，再做图算法和动态规划练习。", "learning", ["calm"]),
         ("2026-10-05", "两位用户都写了共同短语：蓝色纸船。账户隔离必须阻止跨用户返回。", "note", ["calm"]),
+        ("2026-10-19", "10月19日，章鱼计划的搜索模块完成了关键词与向量混合检索，下一步补齐边界测试。", "work", ["satisfied"]),
     ]
     denied_specs = [
         ("2026-10-11", "这条尚未获准进行 AI 处理的健康记录不能进入长期记忆。", "health", False, False, "done", False),
@@ -302,7 +303,7 @@ def prepare(database_dsn: str, users_file: Path, embedding_key: str,
             todo_chunk = chunk_by_text[record_specs[11][1]]
             todo_id = cursor.execute(
                 "INSERT INTO public.todo_registry (user_id, title, current_status, source_chunk_id) "
-                "VALUES (%s, '完成数据库索引复习', 'pending', %s) RETURNING id",
+                "VALUES (%s, '完成数据库索引复习', 'not_started', %s) RETURNING id",
                 (core_id, todo_chunk),
             ).fetchone()[0]
             cursor.execute(
@@ -312,7 +313,7 @@ def prepare(database_dsn: str, users_file: Path, embedding_key: str,
             )
             cursor.execute(
                 "INSERT INTO public.todo_registry (user_id, title, current_status, source_chunk_id) "
-                "VALUES (%s, '未确认的复习提示', 'pending', %s)",
+                "VALUES (%s, '未确认的复习提示', 'not_started', %s)",
                 (core_id, chunk_by_text[denied_specs[3][1]]),
             )
 

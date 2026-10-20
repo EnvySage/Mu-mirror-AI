@@ -3,6 +3,7 @@ from datetime import date
 from types import SimpleNamespace
 
 from agent_core.types import IntentResult, PreparedContext, RuntimeContext, TimeExpression
+from agent_data.glossary import GlossaryTerm
 from agent_data.scope import ReadScope
 from services import intent_service
 
@@ -27,11 +28,11 @@ def _scope():
     )
 
 
-def _prepared(history=()):
+def _prepared(history=(), glossary=()):
     return PreparedContext(
-        glossary_top30=(),
-        glossary_matched=(),
-        glossary_for_intent=(),
+        glossary_top30=tuple(glossary),
+        glossary_matched=tuple(glossary),
+        glossary_for_intent=tuple(glossary),
         matched_ids=(),
         history_plan=tuple(history),
         history_answer=tuple(history[-6:]),
@@ -83,6 +84,55 @@ def test_understand_rewrites_followup_with_context_history_once(monkeypatch):
     assert rendered["name"] == "agent_intent"
     assert rendered["question"] == "继续分析"
     assert rendered["history"] == "assistant: 之前讨论的方案是先做小范围验证"
+
+
+def test_understand_normalizes_confirmed_glossary_alias_before_retrieval(monkeypatch):
+    llm = FakeLlm({
+        "action_kind": "read",
+        "route": "hybrid",
+        "standalone_question": "小章鱼项目最近有什么进展？",
+        "content_type": None,
+        "moods": [],
+        "time_expression": {"kind": "none"},
+        "file_query_mode": "none",
+    })
+    monkeypatch.setattr(intent_service.loader, "render", lambda name, **kwargs: "prompt")
+    term = GlossaryTerm(
+        id=1,
+        user_id=_scope().user_id,
+        term="章鱼计划",
+        aliases=("小章鱼项目", "章鱼项目"),
+        description="当前工作项目",
+        query_hit_count=3,
+        last_confirmed_at=None,
+    )
+
+    result = intent_service.understand(
+        "小章鱼项目最近有什么进展？", _prepared(glossary=(term,)), _runtime(llm),
+    )
+
+    assert result.standalone_question == "章鱼计划最近有什么进展？"
+
+
+def test_understand_does_not_resolve_alias_shared_by_confirmed_terms(monkeypatch):
+    llm = FakeLlm({
+        "action_kind": "read",
+        "route": "hybrid",
+        "standalone_question": "镜子最近有什么进展？",
+        "content_type": None,
+        "moods": [],
+        "time_expression": {"kind": "none"},
+        "file_query_mode": "none",
+    })
+    monkeypatch.setattr(intent_service.loader, "render", lambda name, **kwargs: "prompt")
+    first = GlossaryTerm(1, _scope().user_id, "章鱼计划", ("镜子",), "", 1, None)
+    second = GlossaryTerm(2, _scope().user_id, "个人项目", ("镜子",), "", 1, None)
+
+    result = intent_service.understand(
+        "镜子最近有什么进展？", _prepared(glossary=(first, second)), _runtime(llm),
+    )
+
+    assert result.standalone_question == "镜子最近有什么进展？"
 
 
 def test_agent_intent_prompt_is_separate_from_legacy_prompt():
