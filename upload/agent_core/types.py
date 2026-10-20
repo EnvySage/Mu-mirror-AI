@@ -75,6 +75,13 @@ class ToolObservation:
 
 
 @dataclass(frozen=True, slots=True)
+class CreatedRecord:
+    record_id: int
+    status: str
+    created_at: str
+
+
+@dataclass(frozen=True, slots=True)
 class AgentEvent:
     kind: str
     content: str = ""
@@ -125,6 +132,7 @@ class AgentState:
     answer: str = ""
     sources: list[Any] = field(default_factory=list)
     vault_refs: list[Any] = field(default_factory=list)
+    created_records: list[CreatedRecord] = field(default_factory=list)
     fallback: bool = False
     outcome: str = ""
     prepared_context: PreparedContext | None = None

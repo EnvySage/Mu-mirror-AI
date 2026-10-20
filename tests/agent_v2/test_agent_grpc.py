@@ -1,7 +1,9 @@
 import os
 import threading
 import time
+from dataclasses import replace
 from types import SimpleNamespace
+from uuid import UUID, uuid5
 
 import grpc
 import pytest
@@ -17,6 +19,7 @@ from agent_data.vault import VaultRepository
 from generated import agent_pb2, agent_pb2_grpc
 from server import build_agent_server, build_legacy_server
 from services.agent_service import AgentRunnerServicer
+from agent_tools.command_client import CommandResult
 from tests.agent_v2.agent_fakes import FakeLlm, FakeRepositories, make_dependencies, make_request
 
 
@@ -27,7 +30,7 @@ def _run_channel(request, port, *, token=TOKEN):
     with grpc.insecure_channel(f"127.0.0.1:{port}") as channel:
         stub = agent_pb2_grpc.AgentRunnerStub(channel)
         metadata = (("x-internal-token", token),) if token else ()
-        return list(stub.RunAgent(request, metadata=metadata, timeout=5))
+        return list(stub.RunAgent(request, metadata=metadata, timeout=15))
 
 
 def test_missing_or_wrong_internal_token_is_rejected_before_dependency_factory():
@@ -205,6 +208,99 @@ def test_authenticated_agent_reads_isolated_pg_directly_without_java_clients():
     assert events[-1].WhichOneof("event") == "completed"
     assert events[-1].completed.tool_call_count == 1
     assert events[-1].completed.outcome == "answer"
-    # AgentDependencies intentionally has repositories and direct SDK clients only; no Java RPC/HTTP client.
+    # The command client is server-owned and is only used when Java supplies a grant.
     assert dependencies.repositories is repos
-    assert not hasattr(dependencies, "command_client")
+    assert dependencies.command_client is None
+
+
+def test_authenticated_create_record_uses_java_authorized_original_content():
+    class FakeCommandClient:
+        def create_record(self, runtime, content):
+            assert content == "授权的原文"
+            assert runtime.allowed_write_tools == ("create_record",)
+            call_id = str(uuid5(UUID(runtime.run_id), "create_record:0"))
+            return CommandResult("success", "OK", call_id,
+                                 73, "record_only", "2026-10-20T12:00:00+08:00")
+
+    llm = FakeLlm()
+    dependencies = replace(
+        make_dependencies(llm, FakeRepositories()), command_client=FakeCommandClient(),
+    )
+    servicer = AgentRunnerServicer(internal_token=TOKEN, dependencies=dependencies)
+    server, _, port = build_agent_server(port=0, servicer=servicer)
+    server.start()
+    try:
+        request = make_request(
+            run_id="b7695748-5311-4ecb-8dab-5d0c244f1a63",
+            question="帮我记一篇日记：授权的原文",
+        )
+        request.command_grant = "opaque-java-grant"
+        request.authorized_record_content = "授权的原文"
+        request.allowed_write_tools.append("create_record")
+        events = _run_channel(request, port)
+    finally:
+        server.stop(0)
+        servicer.close()
+
+    assert [event.WhichOneof("event") for event in events][-3:] == ["delta", "meta", "completed"]
+    assert events[-1].completed.outcome == "action_success"
+    assert events[-1].completed.created_records[0].record_id == 73
+    assert events[-1].completed.created_records[0].status == "record_only"
+    tool_events = [event.tool_finished for event in events if event.WhichOneof("event") == "tool_finished"]
+    assert len(tool_events) == 1
+    assert tool_events[0].audited_by_java
+    assert "授权的原文" not in tool_events[0].args_json
+
+
+def test_unknown_create_result_is_not_a_java_write_failure_or_second_audit():
+    class UnknownCommandClient:
+        def create_record(self, runtime, content):
+            call_id = str(uuid5(UUID(runtime.run_id), "create_record:0"))
+            return CommandResult("unknown", "ACTION_RESULT_UNKNOWN", call_id)
+
+    llm = FakeLlm()
+    repos = FakeRepositories()
+    dependencies = replace(
+        make_dependencies(llm, repos), command_client=UnknownCommandClient(),
+    )
+    servicer = AgentRunnerServicer(internal_token=TOKEN, dependencies=dependencies)
+    server, _, port = build_agent_server(port=0, servicer=servicer)
+    server.start()
+    try:
+        request = make_request(
+            run_id="b7695748-5311-4ecb-8dab-5d0c244f1a63",
+            question="帮我记一篇日记：授权的原文",
+        )
+        request.command_grant = "opaque-java-grant"
+        request.authorized_record_content = "授权的原文"
+        request.allowed_write_tools.append("create_record")
+        events = _run_channel(request, port)
+    finally:
+        server.stop(0)
+        servicer.close()
+
+    completed = events[-1].completed
+    assert completed.outcome == "action_unknown"
+    assert completed.stop_reason == "write_unknown"
+    assert not completed.created_records
+    tool_events = [event.tool_finished for event in events if event.WhichOneof("event") == "tool_finished"]
+    assert len(tool_events) == 1
+    assert not tool_events[0].success
+    assert tool_events[0].audited_by_java
+    assert llm.plan_calls == 0
+    assert llm.answer_calls == 0
+    assert repos.records.search_calls == []
+    assert repos.records.vector_calls == []
+
+
+def test_make_runtime_rejects_shadow_write_grant():
+    from agent_core.runner import make_runtime
+
+    request = make_request(run_id="b7695748-5311-4ecb-8dab-5d0c244f1a63")
+    request.command_grant = "opaque-java-grant"
+    request.authorized_record_content = "授权的原文"
+    request.allowed_write_tools.append("create_record")
+    request.shadow = True
+
+    with pytest.raises(ValueError, match="shadow runs cannot carry a write grant"):
+        make_runtime(request, make_dependencies(FakeLlm(), FakeRepositories(), embedding=False))

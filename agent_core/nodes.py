@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import time
 from dataclasses import replace
 from datetime import datetime, time as day_time
@@ -16,7 +17,7 @@ from langgraph.runtime import Runtime
 from agent_core.evidence import assign_citations, merge_evidence
 from agent_core.retrieval import retrieve
 from agent_core.runner import AgentAbort, MAX_CALLS_PER_ROUND, check_control
-from agent_core.types import AgentState, Evidence, IntentResult, RuntimeContext, ToolCall
+from agent_core.types import AgentState, CreatedRecord, Evidence, IntentResult, RuntimeContext, ToolCall
 from agent_tools.read_tools import execute_read_tool
 from agent_tools.registry import READ_TOOL_REGISTRY, get_read_tool_specs
 from llm_json import parse_json
@@ -58,7 +59,7 @@ def route_action(state: AgentState) -> str:
     if state.action_kind == "clarification":
         return "clarify"
     if state.action_kind == "create_record":
-        return "write_disabled"
+        return "create_record"
     return "synthesize"
 
 
@@ -452,9 +453,82 @@ def write_disabled(state: AgentState, runtime: Runtime[RuntimeContext]) -> dict[
     }
 
 
+def create_record(state: AgentState, runtime: Runtime[RuntimeContext]) -> dict[str, Any]:
+    """Execute only Java-authorized original text; the model never supplies saved content."""
+    context = runtime.context
+    check_control(context)
+    if (not isinstance(context.command_grant, str) or not context.command_grant.strip()
+            or not isinstance(context.authorized_record_content, str)
+            or "create_record" not in context.allowed_write_tools
+            or context.command_client is None):
+        return write_disabled(state, runtime)
+
+    content = context.authorized_record_content
+    content_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
+    started = time.perf_counter()
+    try:
+        result = context.command_client.create_record(context, content)
+    except Exception:
+        from agent_tools.command_client import CommandResult
+        from uuid import uuid5, UUID
+
+        result = CommandResult(
+            "unknown", "COMMAND_OUTCOME_UNKNOWN",
+            str(uuid5(UUID(str(context.run_id)), "create_record:0")),
+        )
+    latency_ms = max(0, int((time.perf_counter() - started) * 1000))
+    emit(
+        runtime, "tool_finished", call_id=result.call_id, tool="create_record",
+        args_json=json.dumps({"content_sha256": content_hash}, separators=(",", ":")),
+        summary=(f"create_record:{result.record_id}" if result.succeeded else result.code),
+        success=result.succeeded, code=result.code, latency_ms=latency_ms,
+        # A timeout can hide a committed Java write; do not emit a second audit
+        # with the same deterministic call ID while the receipt is unknown.
+        audited_by_java=result.succeeded or result.outcome == "unknown",
+    )
+    if result.succeeded:
+        answer = "已保存这条日记；目前是仅记录状态"
+        emit(runtime, "delta", answer)
+        return {
+            "answer": answer,
+            "sources": [],
+            "vault_refs": [],
+            "created_records": [CreatedRecord(result.record_id, result.record_status, result.created_at)],
+            "outcome": "action_success",
+            "stop_reason": "write_completed",
+            "fallback": False,
+            "tool_call_count": 1,
+        }
+    if result.outcome == "unknown":
+        return {
+            "answer": "这次保存结果暂时无法核对，我不能确认是否已创建。请稍后查看本轮状态。",
+            "sources": [],
+            "vault_refs": [],
+            "created_records": [],
+            "outcome": "action_unknown",
+            "stop_reason": "write_unknown",
+            "fallback": False,
+            "error_code": result.code,
+            "tool_call_count": 1,
+        }
+    return {
+        "answer": "",
+        "sources": [],
+        "vault_refs": [],
+        "created_records": [],
+        "outcome": "action_failed",
+        "stop_reason": "write_failed",
+        "fallback": False,
+        "error_code": result.code,
+        "tool_call_count": 1,
+    }
+
+
 def finalize(state: AgentState, runtime: Runtime[RuntimeContext]) -> dict[str, Any]:
     context = runtime.context
     tools_used = list(dict.fromkeys(item.tool for item in state.observations))
+    if state.action_kind == "create_record" and state.tool_call_count and "create_record" not in tools_used:
+        tools_used.append("create_record")
     emit(runtime, "meta", route=state.route, tools_used=tools_used)
     if state.stop_reason in {"cancelled", "total_deadline", "read_error", "write_failed"}:
         emit(
@@ -480,7 +554,7 @@ def finalize(state: AgentState, runtime: Runtime[RuntimeContext]) -> dict[str, A
         answer_text=state.answer,
         sources=state.sources,
         vault_refs=state.vault_refs,
-        created_records=(),
+        created_records=state.created_records,
         stop_reason=state_reason,
         outcome=state.outcome or "answer",
         fallback=state.fallback,

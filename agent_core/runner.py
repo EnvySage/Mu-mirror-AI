@@ -40,6 +40,7 @@ class AgentDependencies:
     max_total_budget_ms: int = TOTAL_BUDGET_MS
     max_loop_budget_ms: int = LOOP_BUDGET_MS
     answer_budget_ms: int = ANSWER_BUDGET_MS
+    command_client: Any = None
 
 
 def canonical_tool_args(args: dict[str, Any]) -> str:
@@ -79,12 +80,21 @@ def make_runtime(request: Any, dependencies: AgentDependencies, cancellation: An
     except (ZoneInfoNotFoundError, ValueError) as exc:
         raise ValueError("timezone is unknown") from exc
 
-    if (
-        tuple(getattr(request, "allowed_write_tools", ()) or ())
-        or getattr(request, "command_grant", "")
-        or getattr(request, "authorized_record_content", "")
-    ):
-        raise ValueError("write commands are not enabled in this read-only agent version")
+    allowed_write_tools = tuple(getattr(request, "allowed_write_tools", ()) or ())
+    command_grant = getattr(request, "command_grant", "")
+    authorized_record_content = getattr(request, "authorized_record_content", "")
+    has_write_input = bool(allowed_write_tools or command_grant or authorized_record_content)
+    if getattr(request, "shadow", False) and has_write_input:
+        raise ValueError("shadow runs cannot carry a write grant")
+    if has_write_input:
+        if (allowed_write_tools != ("create_record",) or not isinstance(command_grant, str)
+                or not command_grant.strip() or not isinstance(authorized_record_content, str)
+                or not authorized_record_content.strip() or _utf16_units(authorized_record_content) > 2000):
+            raise ValueError("create_record grant input is incomplete or invalid")
+        if dependencies.command_client is None:
+            raise ValueError("create_record command client is unavailable")
+    elif allowed_write_tools or command_grant or authorized_record_content:
+        raise ValueError("write grant input is inconsistent")
 
     total_ms = _bounded_budget(
         getattr(request, "total_budget_ms", 0), dependencies.max_total_budget_ms, TOTAL_BUDGET_MS,
@@ -145,10 +155,10 @@ def make_runtime(request: Any, dependencies: AgentDependencies, cancellation: An
         llm=llm,
         llm_config=llm_config,
         embedding_client=embedding_client,
-        command_client=None,
-        command_grant=None,
-        authorized_record_content=None,
-        allowed_write_tools=(),
+        command_client=dependencies.command_client if has_write_input else None,
+        command_grant=command_grant if has_write_input else None,
+        authorized_record_content=authorized_record_content if has_write_input else None,
+        allowed_write_tools=allowed_write_tools if has_write_input else (),
         deadline=total_deadline,
         total_deadline=total_deadline,
         cancelled=cancellation,
@@ -160,6 +170,10 @@ def make_runtime(request: Any, dependencies: AgentDependencies, cancellation: An
         answer_budget_ms=answer_budget_ms,
         clock=dependencies.clock,
     )
+
+
+def _utf16_units(value: str) -> int:
+    return len(value.encode("utf-16-le")) // 2
 
 
 def run_agent(request: Any, dependencies: AgentDependencies, cancellation: Any = None):

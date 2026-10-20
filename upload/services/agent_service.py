@@ -190,6 +190,7 @@ def _create_default_dependencies() -> AgentDependencies:
     from agent_data.records import RecordRepository
     from agent_data.todos import TodoRepository
     from agent_data.vault import VaultRepository
+    from agent_tools.command_client import CommandClient
 
     dsn = os.getenv("MIRROR_AI_READ_DSN", "")
     pool = create_read_pool(dsn)
@@ -202,5 +203,7 @@ def _create_default_dependencies() -> AgentDependencies:
         history=HistoryRepository(pool),
         vault=VaultRepository(pool),
     )
-    return AgentDependencies(repositories=repositories)
+    command_base_url = os.getenv("MIRROR_AGENT_COMMAND_BASE_URL", "").strip()
+    command_client = CommandClient(command_base_url) if command_base_url else None
+    return AgentDependencies(repositories=repositories, command_client=command_client)
 

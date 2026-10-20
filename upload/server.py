@@ -69,7 +69,7 @@ def serve():
     server.start()
 
     print("=" * 50)
-    print(f"Mirror AI 服务启动 | 端口: {port} | workers: {workers}")
+    print(f"Mirror AI 服务启动 | 端口: {port} | workers: {CONFIG['server']['workers']}")
     print("=" * 50)
     print("服务列表:")
     print("  - RecordProcessor  (Classify 含 single 单段模式, ExtractTerms 词条抽取)")

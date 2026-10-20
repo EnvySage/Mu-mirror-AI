@@ -180,12 +180,19 @@ Task 6 验证记录：指定单测78项通过；真实隔离PostgreSQL集成2项
 - Consumes Task 6 `AgentRunRepository.lockRun(UUID)`；该接口与数据库实现由Task 6提供。
 - Produces Python `CommandClient.create_record(runtime, content) -> CommandResult`；固定UUIDv5调用ID，POST不自动重试，超时后只查同一回执。
 
-- [ ] Step 1：授权测试覆盖空正文/2001字/历史或文件里的指令/缺前缀/含糊“确认”；均不能获得grant。明确原文获得唯一槽位；模型更改一字hash不符。
-- [ ] Step 2：服务测试断言传RecordService的DTO没有title/date字段且requestAiProcessing=false；同call同内容返回同record；不同内容409；不同用户不能查回执；shadow、过期、失去租约、取消run不允许新写入。
-- [ ] Step 3：实现grant、内部认证filter与controller，并在Task 6的RunAgent输入组装处接入按需write grant；header使用X-Mirror-Command-Grant，现有JWT filter不误识别；路径没有permitAll旁路。关闭filter的Servlet重复注册。
-- [ ] Step 4：实现事务内run行锁+记录创建+回执+写工具审计；传播加入同一业务事务。用真实隔离PG并发两个同call请求，断言只有一条记录、一条回执、一条审计；故障注入在record insert后抛异常，三者全部回滚。
-- [ ] Step 5：Python client测试：POST返回丢失但GET回执存在→success；GET也不可用/无结果→unknown；断言无第二次POST、无新call_id。明确业务拒绝→failed。
-- [ ] Step 6：运行B `mvn -Dtest=AgentCommandServiceTest,AgentCommandAuthTest test`；集成 `AgentCommandTransactionIT`显式连接测试PG后运行。缺PG不能宣称原子幂等通过；AI command_client测试通过。写工具开关仍默认false。
+- [x] Step 1：授权测试覆盖空正文/2001字/历史或文件里的指令/缺前缀/含糊“确认”；均不能获得grant。明确原文获得唯一槽位；模型更改一字hash不符。
+- [x] Step 2：服务测试断言传RecordService的DTO没有title/date字段且requestAiProcessing=false；同call同内容返回同record；不同内容409；不同用户不能查回执；shadow、过期、失去租约、取消run不允许新写入。
+- [x] Step 3：实现grant、内部认证filter与controller，并在Task 6的RunAgent输入组装处接入按需write grant；header使用X-Mirror-Command-Grant，现有JWT filter不误识别；路径没有permitAll旁路。关闭filter的Servlet重复注册。
+- [x] Step 4：实现事务内run行锁+记录创建+回执+写工具审计；传播加入同一业务事务。用真实隔离PG并发两个同call请求，断言只有一条记录、一条回执、一条审计；故障注入在record insert后抛异常，三者全部回滚。
+- [x] Step 5：Python client测试：POST返回丢失但GET回执存在→success；GET也不可用/无结果→unknown；断言无第二次POST、无新call_id。明确业务拒绝→failed。
+- [x] Step 6：运行B `mvn -Dtest=AgentCommandServiceTest,AgentCommandAuthTest test`；集成 `AgentCommandTransactionIT`显式连接测试PG后运行。缺PG不能宣称原子幂等通过；AI command_client测试通过。写工具开关仍默认false。
+
+**Task 7 验收记录（2026-10-20）**
+
+- Java：`AgentCommandServiceTest`、`AgentCommandAuthTest`、`AgentRunServiceTest`、`AgentCommandTransactionIT` 共24项通过。Task7事务测试连接新建隔离库 `mirror_ai_agent_v2_task7_578df4ee_test`（PostgreSQL 16.15）；调用真实 `RecordServiceImpl.create()`，用同事务的数据源测试替身执行记录 mapper 和写工具审计 mapper，并验证并发与故障回滚。未通过完整 Spring 应用上下文验证命令 HTTP E2E。
+- Python：`test_command_client.py` 与 `test_agent_grpc.py` 共13项通过、1项跳过；跳过项要求 `MIRROR_TEST_READ_DSN`，属于只读仓库 PostgreSQL 检查。fake gRPC 测试覆盖授权原文与成功/未知结果，不等同真实 Java HTTP 或真实业务端到端。
+- 依赖：现有 Python venv 缺少 requirements.txt 已声明的 `langgraph==1.2.16`、`psycopg[binary]==3.3.6`、`psycopg-pool==3.3.3`；在系统 Temp 下用 uv 为 Python 3.14 创建独立 target 验证，未改现有 venv 或项目依赖。
+- 镜像：执行 `scripts/sync_upload.py`，随后 `scripts/sync_upload.py --check` 显示 runtime upload 文件同步。
 
 ## Task 8（M3/M4）：前端请求ID、部分失败与创建回执
 
