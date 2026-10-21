@@ -18,6 +18,7 @@ cmd = [
     "./proto/embedding.proto",
     "./proto/mirror_chat.proto",
     "./proto/mirror_profile.proto",
+    "./proto/agent.proto",
 ]
 
 print("生成 gRPC 代码...")
@@ -58,6 +59,13 @@ fixes = {
     ],
     "generated/mirror_profile_pb2_grpc.py": [
         ("import mirror_profile_pb2 as mirror__profile__pb2", "from generated import mirror_profile_pb2 as mirror__profile__pb2"),
+    ],
+    "generated/agent_pb2.py": [
+        ("import common_pb2 as common__pb2", "from generated import common_pb2 as common__pb2"),
+        ("import mirror_chat_pb2 as mirror__chat__pb2", "from generated import mirror_chat_pb2 as mirror__chat__pb2"),
+    ],
+    "generated/agent_pb2_grpc.py": [
+        ("import agent_pb2 as agent__pb2", "from generated import agent_pb2 as agent__pb2"),
     ],
 }
 

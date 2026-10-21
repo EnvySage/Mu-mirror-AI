@@ -1,0 +1,15 @@
+.git
+.idea
+.jbeval
+.codemoss
+.pytest_cache
+__pycache__
+venv
+tests
+docs
+upload
+scripts
+config.yml
+=0.40.0
+**/__pycache__/
+**/.pytest_cache/

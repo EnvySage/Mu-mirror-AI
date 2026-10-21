@@ -1,0 +1,98 @@
+syntax = "proto3";
+package mirror;
+option java_package = "org.xianshen.mumirrorb.grpc.gen";
+option java_outer_classname = "AgentProto";
+import "common.proto";
+import "mirror_chat.proto";
+
+service AgentRunner {
+  rpc RunAgent(AgentRunRequest) returns (stream AgentEvent);
+}
+message AgentRunRequest {
+  string run_id = 1;
+  string user_id = 2;
+  string session_id = 3;
+  int64 user_message_id = 4;
+  string question = 5;
+  LlmConfig llm_config = 6;
+  EmbeddingConfig embedding_config = 7;
+  string reference_date = 8;
+  string timezone = 9;
+  int32 max_plan_rounds = 10;
+  int64 total_budget_ms = 11;
+  int64 loop_budget_ms = 12;
+  double half_life_days = 13;
+  bool shadow = 14;
+  string command_grant = 15;
+  string authorized_record_content = 16;
+  repeated string allowed_write_tools = 17;
+  AssistantContext assistant_context = 18;
+}
+message AgentText { string content = 1; }
+message AgentMeta { string route = 1; repeated string tools_used = 2; }
+message AgentToolTrace {
+  string call_id = 1;
+  string tool = 2;
+  string args_json = 3;
+  string summary = 4;
+  bool success = 5;
+  string code = 6;
+  int64 latency_ms = 7;
+  bool audited_by_java = 8;
+  bool auto_backstop = 9;
+}
+message AgentVaultRef {
+  int32 n = 1;
+  int64 vault_item_id = 2;
+  string display_name = 3;
+  string file_type = 4;
+  int64 size_bytes = 5;
+  string digest_status = 6;
+  string quote = 7;
+}
+message AgentCreatedRecord {
+  int64 record_id = 1;
+  string status = 2;
+  string created_at = 3;
+}
+message AgentMetrics {
+  map<string, int64> phase_latency_ms = 1;
+  optional int64 first_thinking_ms = 2;
+  optional int64 first_delta_ms = 3;
+  optional int64 input_tokens = 4;
+  optional int64 output_tokens = 5;
+  repeated string degraded_reasons = 6;
+  map<string, string> prompt_hashes = 7;
+}
+message AgentCompleted {
+  string answer_text = 1;
+  repeated Source sources = 2;
+  repeated AgentVaultRef vault_refs = 3;
+  repeated AgentCreatedRecord created_records = 4;
+  string stop_reason = 5;
+  string outcome = 6;
+  bool fallback = 7;
+  repeated int64 glossary_hit_ids = 8;
+  int32 plan_rounds = 9;
+  int32 tool_call_count = 10;
+  AgentMetrics metrics = 11;
+}
+message AgentFailure {
+  string code = 1;
+  string message = 2;
+  bool has_partial_answer = 3;
+  string stop_reason = 4;
+  AgentMetrics metrics = 5;
+}
+message AgentEvent {
+  string run_id = 1;
+  int64 seq = 2;
+  oneof event {
+    AgentMeta meta = 3;
+    AgentText thinking = 4;
+    AgentText delta = 5;
+    AgentToolTrace tool_finished = 6;
+    AgentCompleted completed = 7;
+    AgentFailure failed = 8;
+  }
+}

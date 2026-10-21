@@ -14,6 +14,9 @@ _FILENAME = {
     "classify": "classify",
     "classify_single": "classify-single",
     "intent": "intent",
+    "agent_intent": "agent_intent",
+    "agent_plan": "agent_plan",
+    "agent_chat": "agent_chat",
     "chat": "chat",
     "profile": "profile",
     "inspiration": "inspiration",
@@ -32,7 +35,19 @@ _ALIASES = {
     "classify_single": {"content": "content", "open_todos": "open_todos", "recent_context": "recent_context",
                  "time_rule": "time_rule", "growth_context": "growth_context"},
     "intent": {"query": "query"},
-    "chat": {"context": "context", "glossary": "glossary", "tool_results": "tool_results"},
+    "agent_intent": {"question": "question", "history": "history", "glossary": "glossary"},
+    "agent_plan": {
+        "question": "question", "history": "history", "glossary": "glossary",
+        "tools": "tools", "retrieval_summary": "retrieval_summary", "file_candidates": "file_candidates",
+        "mood_distribution": "mood_distribution", "observations": "observations", "step": "step",
+        "max_steps": "max_steps", "today": "today", "assistant_context": "assistant_context",
+    },
+    "agent_chat": {"evidence": "evidence", "observations": "observations", "glossary": "glossary", "assistant_context": "assistant_context"},
+    "chat": {
+        "question": "question", "history": "history", "context": "context",
+        "glossary": "glossary", "tool_results": "tool_results",
+        "assistant_context": "assistant_context",
+    },
     "profile": {
         "todos": "stats_facts", "learnings": "records", "mood_stats": "mood_stats",
         "keywords": "keywords", "active_time": "active_time",
@@ -46,7 +61,7 @@ _ALIASES = {
     "extract_terms": {"chunks": "chunks", "existing_terms": "existing_terms"},
     # plan_tools_single：旧 PlanTools 走的 HEAD 原文快照模板，占位符仍是老三样
     # （tools/question/glossary），不含任何循环语境位——回滚路径要的就是旧行为原样。
-    "plan_tools_single": {"tools": "tools", "question": "question", "glossary": "glossary"},
+    "plan_tools_single": {"tools": "tools", "question": "question", "glossary": "glossary", "assistant_context": "assistant_context"},
     # plan_tools 第 2 套（chat-loop-design.md §5.1 循环版，只给 PlanNextStep 用）：
     # 除 tools/question/glossary 外新增循环语境渲染位。登记在此的 key 会在调用方漏传时
     # 兜底成空串（render 的 setdefault 分支），所以模板里新增占位符必须同步登记，
@@ -55,6 +70,7 @@ _ALIASES = {
         "tools": "tools", "question": "question", "glossary": "glossary",
         "history": "history", "previous_results": "previous_results",
         "step": "step", "max_steps": "max_steps", "max_calls": "max_calls", "today": "today",
+        "assistant_context": "assistant_context",
     },
     "chat_day_summary": {
         "messages": "messages", "source_date": "source_date", "timezone": "timezone",

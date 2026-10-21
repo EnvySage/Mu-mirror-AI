@@ -13,6 +13,9 @@ def create_embedder(
     api_key: str = "",
     api_model: str = "",
     base_url: str = "",
+    *,
+    timeout: float | None = None,
+    max_retries: int | None = None,
 ) -> BaseEmbedder:
     """
     根据配置创建对应的 Embedding 实例
@@ -37,6 +40,8 @@ def create_embedder(
             api_key=api_key,
             model=api_model,
             base_url=base_url,
+            timeout=timeout,
+            max_retries=max_retries,
         )
     else:
         raise ValueError(f"未知的 Embedding 来源: {source}")

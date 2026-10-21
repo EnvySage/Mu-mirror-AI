@@ -7,12 +7,14 @@ class BaseEmbedder(ABC):
     """Embedding 基类，本地/API 实现需继承此类"""
 
     @abstractmethod
-    def embed(self, text: str) -> list[float]:
+    def embed(self, text: str, *, timeout: float | None = None, max_retries: int | None = None) -> list[float]:
         """单条文本转向量"""
         ...
 
     @abstractmethod
-    def embed_batch(self, texts: list[str]) -> list[list[float]]:
+    def embed_batch(
+        self, texts: list[str], *, timeout: float | None = None, max_retries: int | None = None
+    ) -> list[list[float]]:
         """批量文本转向量"""
         ...
 

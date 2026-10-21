@@ -1,6 +1,7 @@
 // AI 服务流水线（Mu-mirror-AI）
 //
-// Python 不编译：没有构建阶段，同步代码 + 按需装依赖 + 重启 gRPC 进程。
+// Python 不编译：同步代码 + 按需装依赖 + 重启；健康检查分别验证 legacy 与可选 Agent。
+// Agent 启用时，凭据由 Jenkins Credentials 绑定为环境变量，不写入仓库或控制台。
 // 重启窗口内 B 侧对 AI 掉线是"降级不炸"，用户只会短暂缺少 AI 功能，不会报错白屏。
 pipeline {
   agent any

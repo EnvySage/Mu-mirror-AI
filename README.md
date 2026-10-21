@@ -1,18 +1,18 @@
 # Mu-mirror-AI
 
-Mirror 应用的 Python AI 服务。基于 gRPC，为「AI 日记镜子」系统提供全部推理能力：记录分类拆分、意图抽取、向量化、对话规划与生成、用户画像（镜子）生成。
+Mirror 应用的 Python AI 服务。基于 gRPC，为「AI 日记镜子」系统提供记录处理、意图抽取、向量化、用户画像，以及 graph_v2 完整对话流程。
 
-**无状态**：本服务不连数据库、不存任何会话状态。用户的 LLM / Embedding 配置随**每次 gRPC 请求**到达（`LlmConfig` / `EmbeddingConfig` 消息），用完即弃。数据与业务全在 Java 侧。
+**无会话状态**：本服务不保存会话状态，也不使用 checkpoint。旧 gRPC 接口只做原有 AI 处理；graph_v2 每轮直接连接 PostgreSQL 的 `mirror_ai` 受控只读视图，Python 按可信 user/session/message 范围加载词典、历史、检索资料并执行只读工具。模型配置随每次 gRPC 请求到达，用完即弃。
 
 ## 在系统中的位置
 
 ```
-Vue 3 前端 ──HTTP(/api, JWT)──> Spring Boot 后端 ──SQL──> PostgreSQL + pgvector
-                                      │
-                                      └──gRPC──> 本服务（纯推理，无状态）
+Vue 3 前端 ──HTTP(/api, JWT)──> Spring Boot 后端 ──SQL/业务写入──> PostgreSQL + pgvector
+                                      ├──gRPC :10003──> 旧版 AI RPC
+                                      └──gRPC :10004──> graph_v2 对话 Agent ──只读视图──> PostgreSQL
 ```
 
-**分工原则：Java 管数据与业务，Python 管纯推理。** 向量检索用 pgvector SQL 在 Java 端完成；本服务只负责"把文本变成结构化结果"。
+**分工原则：Java 管鉴权、模型配置解密、聊天入口、会话与消息持久化、SSE 转发和业务写入；Python 管完整对话流程与受控只读数据访问。** 真正的写操作只通过 Java 具名业务接口执行；普通记录创建默认只保存用户原文，不自动授权 AI 整理或长期记忆。旧引擎和 graph_v2 并存，每轮开始时固定引擎，失败不会自动换引擎重跑。
 
 ## 技术栈
 

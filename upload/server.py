@@ -2,6 +2,7 @@
 
 import time
 from concurrent import futures
+import os
 
 import grpc
 
@@ -15,27 +16,60 @@ from services.lexicon_service import RecordProcessorServicer
 from services.embedding_service import EmbeddingServiceServicer
 from services.plan_service import MirrorChatServicer
 from services.profile_service import MirrorProfileServicer
+from services.agent_service import AgentRunnerServicer
+from generated import agent_pb2_grpc as agent_grpc
 
 
-def serve():
-    port = CONFIG["server"]["port"]
+def build_legacy_server(*, port: int | None = None):
+    """Create the existing 10003 server with every legacy RPC still registered."""
+    legacy_port = CONFIG["server"]["port"] if port is None else port
     workers = CONFIG["server"]["workers"]
-
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=workers))
-
-    # 注册所有服务
-    # RecordProcessor 用 lexicon_service 版本：Classify（继承自 record_processor）+ ExtractTerms
-    # MirrorChat 用 plan_service 版本：ExtractIntent/Chat（继承自 chat_service）+ PlanTools
     rp_grpc.add_RecordProcessorServicer_to_server(RecordProcessorServicer(), server)
     emb_grpc.add_EmbeddingServiceServicer_to_server(EmbeddingServiceServicer(), server)
     chat_grpc.add_MirrorChatServicer_to_server(MirrorChatServicer(), server)
     profile_grpc.add_MirrorProfileServicer_to_server(MirrorProfileServicer(), server)
+    bound_port = server.add_insecure_port(f"[::]:{legacy_port}")
+    if bound_port == 0:
+        raise RuntimeError(f"could not bind legacy gRPC port {legacy_port}")
+    return server, bound_port
 
-    server.add_insecure_port(f'[::]:{port}')
+
+def build_agent_server(*, port: int | None = None, servicer: AgentRunnerServicer | None = None):
+    """Create the isolated 10004 Agent server with a hard RPC concurrency ceiling."""
+    agent_config = CONFIG["agent"]
+    agent_port = agent_config["port"] if port is None else port
+    workers = int(agent_config["workers"])
+    maximum = int(agent_config["maximum_concurrent_rpcs"])
+    server = grpc.server(
+        futures.ThreadPoolExecutor(max_workers=workers),
+        maximum_concurrent_rpcs=maximum,
+    )
+    instance = servicer or AgentRunnerServicer()
+    agent_grpc.add_AgentRunnerServicer_to_server(instance, server)
+    bound_port = server.add_insecure_port(f"[::]:{agent_port}")
+    if bound_port == 0:
+        raise RuntimeError(f"could not bind Agent gRPC port {agent_port}")
+    return server, instance, bound_port
+
+
+def serve():
+    server, port = build_legacy_server()
+    agent_server = None
+    agent_servicer = None
+    agent_port = None
+    agent_enabled = bool(CONFIG["agent"].get("enabled", False)) or os.getenv("MIRROR_AI_AGENT_ENABLED", "").lower() in {
+        "1", "true", "yes", "on",
+    }
+    if agent_enabled:
+        if not os.getenv("MIRROR_AGENT_INTERNAL_TOKEN") or not os.getenv("MIRROR_AI_READ_DSN"):
+            raise RuntimeError("Agent is enabled but MIRROR_AGENT_INTERNAL_TOKEN or MIRROR_AI_READ_DSN is missing")
+        agent_server, agent_servicer, agent_port = build_agent_server()
+        agent_server.start()
     server.start()
 
     print("=" * 50)
-    print(f"Mirror AI 服务启动 | 端口: {port} | workers: {workers}")
+    print(f"Mirror AI 服务启动 | 端口: {port} | workers: {CONFIG['server']['workers']}")
     print("=" * 50)
     print("服务列表:")
     print("  - RecordProcessor  (Classify 含 single 单段模式, ExtractTerms 词条抽取)")
@@ -43,6 +77,8 @@ def serve():
     print("  - MirrorChat       (ExtractIntent, Chat 流式, PlanTools 工具规划)")
     print("                    (PlanNextStep 循环规划, SummarizeDay 每日总结/记忆候选)")
     print("  - MirrorProfile    (GenerateProfile)")
+    if agent_enabled:
+        print(f"  - AgentRunner      (read-only RunAgent 流式, 端口 {agent_port}, 并发上限 2)")
     print("=" * 50)
 
     try:
@@ -50,7 +86,11 @@ def serve():
             time.sleep(86400)
     except KeyboardInterrupt:
         print("\n正在停止...")
+        if agent_server is not None:
+            agent_server.stop(0)
         server.stop(0)
+        if agent_servicer is not None:
+            agent_servicer.close()
         print("已停止")
 
 
