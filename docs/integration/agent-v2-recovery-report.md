@@ -4,7 +4,7 @@
 
 ## 当前范围与边界
 
-三端均在 `codex/assistant-growth-agent-v2`，以成长重设计 HEAD 为第一父线，合入各自保留的本地 v2 历史。Java 与 AI 合并已完成冲突收尾；Vue 的三处冲突也已整合。所有业务改动仍是本地工作区/暂存区状态，尚未推送或部署。所有 SQL 验证均在本轮创建的 `codex-agent-v2-it-20261021` 临时 PostgreSQL 16 容器内执行；没有连接或改动现有应用数据库。
+三端均在 `codex/assistant-growth-agent-v2`，以成长重设计 HEAD 为第一父线，合入各自保留的本地 v2 历史。Java 与 AI 合并已完成冲突收尾；Vue 的三处冲突也已整合。Java 与 AI 的 Gate 提交已保存在本地：B `8a13f01d2d38252365d23bab504c9afd4fa7525c`，AI `ed8a55adfe7a723c9e0faa856554708f10126030`；Vue 合并改动仍在暂存区，尚未提交。三端均未推送或部署。所有 SQL 验证均在本轮创建的 `codex-agent-v2-it-20261021` 临时 PostgreSQL 16 容器内执行；没有连接或改动现有应用数据库。
 
 Java 继续默认 `legacy`，graph 用户白名单为空、shadow rate 为 0、create-record flag 默认为关闭。graph_v2 暂不具备原有 record/todo/memory/growth prepare-confirm 卡片工具；依赖这些功能的用户不得被加入 allowlist。
 
@@ -21,6 +21,7 @@ Java 继续默认 `legacy`，graph 用户白名单为空、shadow rate 为 0、c
 |---|---|
 | Java 全量 Maven（排除需单独运行的 `MuMirrorBApplicationTests`） | 460 项通过，0 失败，0 跳过；环境为临时 PostgreSQL，包含数据库、授权、成长、日常会话、命令事务与 run 并发测试。 |
 | Java Agent/growth/chat 数据库子集 | 12 项通过，0 跳过。 |
+| Java Spring 上下文 | `MuMirrorBApplicationTests`：1 项通过；临时 PostgreSQL、仅测试 JWT 配置。 |
 | Java 数据迁移 | 在隔离 DB 从成长基线 v10 `schema.sql` 加载后执行 v11，创建 8 个 `mirror_ai` 视图、`agent_runs` 与 `agent_command_receipts`。 |
 | Python reader grants | 执行 `deploy/agent-reader-role.sql` 后 8 个视图有 SELECT；`mirror_ai_reader` 对 `public.records` 无 SELECT。 |
 | AI Python 全量 | `pytest tests -q`：522 项通过。 |
@@ -28,7 +29,7 @@ Java 继续默认 `legacy`，graph 用户白名单为空、shadow rate 为 0、c
 | Vue | Node 测试 17/17 通过；`npm run build` 通过；此前 `npm run build:preview` 也通过。 |
 | 空白/冲突检查 | 三仓库 `git ls-files -u` 均为空；暂存和未暂存 `git diff --check` 通过。 |
 
-Java 应用上下文 smoke 当前用临时数据源和测试 JWT secret 单独复跑中，结果待补。
+Java 应用上下文 smoke 已通过；本地测试配置需显式提供 datasource、`jwt.secret` 与 `jwt.expiration`，这些只用于隔离测试。
 
 ## 尚未通过的验收门槛
 
