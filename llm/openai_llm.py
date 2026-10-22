@@ -5,7 +5,7 @@ from typing import Generator
 from openai import APIConnectionError, APIStatusError, APITimeoutError, OpenAI, Timeout as OpenAITimeout
 
 from config import CONFIG
-from errors import (
+from mirror_core.errors import (
     AiServiceError,
     LlmTimeoutError,
     LlmUnavailableError,

@@ -17,7 +17,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))  # 仓库根，import errors/llm_json/...
 
-from errors import (  # noqa: E402
+from mirror_core.errors import (  # noqa: E402
     AiServiceError,
     ContentInvalidError,
     LlmTimeoutError,
@@ -26,7 +26,7 @@ from errors import (  # noqa: E402
     safe_details,
     translate_llm_sdk_exception,
 )
-from llm_json import parse_json  # noqa: E402
+from mirror_core.llm_json import parse_json  # noqa: E402
 from services import chat_service  # noqa: E402
 
 import grpc  # noqa: E402
@@ -310,7 +310,7 @@ class TestSafeDetails:
             def abort(self, code, details):
                 self.aborted = (code, details)
 
-        from errors import abort_with_mapped
+        from mirror_core.errors import abort_with_mapped
         ctx = Ctx()
         abort_with_mapped(ctx, RuntimeError("connection refused to 10.0.0.5:5432"))
         code, details = ctx.aborted

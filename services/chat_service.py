@@ -12,9 +12,9 @@ PlanTools 的工具执行结果（ChatRequest.tool_results，field 6）由 Chat 
 from generated import mirror_chat_pb2 as pb2
 from generated import mirror_chat_pb2_grpc as pb2_grpc
 
-from errors import abort_with_mapped
+from mirror_core.errors import abort_with_mapped
 from llm.factory import create_llm
-from llm_json import parse_json
+from mirror_core.llm_json import parse_json
 
 ROLE_ASSISTANT = "assistant"
 

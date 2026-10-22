@@ -11,10 +11,10 @@ from agent_core.time_ranges import normalize_time
 from agent_core.types import Clarification
 from agent_core.types import IntentResult as AgentIntentResult
 from agent_core.types import PreparedContext, RuntimeContext, TimeExpression
-from glossary_render import format_glossary
+from mirror_core.glossary_render import format_glossary
 from llm.factory import create_llm
-from llm_json import parse_json
-from prompts_loader import loader
+from mirror_core.llm_json import parse_json
+from mirror_core.prompts_loader import loader
 
 QUERY_TYPES = {"profile", "structured", "semantic", "hybrid"}
 DEFAULT_QUERY_TYPE = "hybrid"

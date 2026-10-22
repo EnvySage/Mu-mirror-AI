@@ -37,13 +37,14 @@ services/                服务实现
 llm/                     LLM 客户端封装：openai_llm / anthropic_llm + factory（用户配置驱动）
 embedding/               api_embedder（阿里云 MaaS 等）/ local_embedder（BGE-m3）+ factory
 prompts/                 9 套 prompt 模板（见下）
-prompts_loader.py        占位符渲染 + 别名通道（旧调用名不破坏）
-time_substitution.py     相对时间消解（"今天"→"9月22日"，见下）
-glossary_render.py       个人词典注入渲染
-todo_render.py           待办清单注入渲染
-recent_context_render.py 近期记录摘要注入渲染
-errors.py                异常 → gRPC 状态码统一映射
-llm_json.py              LLM 输出 JSON 解析（容错代码块包裹等）
+mirror_core/             业务辅助层
+  prompts_loader.py      占位符渲染 + 别名通道（旧调用名不破坏）
+  time_substitution.py   相对时间消解（"今天"→"9月22日"，见下）
+  glossary_render.py     个人词典注入渲染
+  todo_render.py         待办清单注入渲染
+  recent_context_render.py 近期记录摘要注入渲染
+  errors.py              异常 → gRPC 状态码统一映射
+  llm_json.py            LLM 输出 JSON 解析（容错代码块包裹等）
 config.py / config.yml   服务级配置加载
 proto/                   Proto 定义（**契约源头，改动需与 Java 仓对齐**）
 generated/               生成的 gRPC 代码（勿手改）
@@ -81,17 +82,17 @@ upload/                  部署镜像副本（与根目录逐字节同步，见�
 ### 冒烟与测试
 
 ```bash
-# 单测（357 项，无需外部依赖）
+# 单测（563 项，无需外部依赖）
 .venv/Scripts/python.exe -m pytest tests/ -q
 
 # 冒烟（18 项，需桩 LLM 在线）
-.venv/Scripts/python.exe test_client.py --stub
+.venv/Scripts/python.exe scripts/smoke_client.py --stub
 
 # 环境自检
-.venv/Scripts/python.exe test_environment.py
+.venv/Scripts/python.exe scripts/check_environment.py
 ```
 
-E2E 脚本（`tests/e2e_round*.py`）需要真实 server + 桩 LLM 同时在线。
+真实数据库 E2E：`tests/agent_v2/e2e_create_record.py`（需隔离测试库与 Java 命令接口）。
 
 ### 桩 LLM
 
@@ -143,7 +144,7 @@ E2E 脚本（`tests/e2e_round*.py`）需要真实 server + 桩 LLM 同时在线�
 | `extract_terms.txt` | 个人词典候选抽取 |
 | `plan_tools.txt` / `plan_tools_single.txt` | 工具规划 / 回滚路径快照 |
 
-模板用字面 `{key}` 替换而非 `str.format`（模板内含 JSON 示例的花括号）。`prompts_loader._ALIASES` 提供别名通道，旧调用名不会因模板改名而失效。
+模板用字面 `{key}` 替换而非 `str.format`（模板内含 JSON 示例的花括号）。`mirror_core.prompts_loader._ALIASES` 提供别名通道，旧调用名不会因模板改名而失效。
 
 ## 重新生成 Proto
 
@@ -159,7 +160,7 @@ E2E 脚本（`tests/e2e_round*.py`）需要真实 server + 桩 LLM 同时在线�
 
 `deploy/ai-release.sh` 为 Jenkins 发布脚本：rsync 覆盖代码（不碰 venv）→ 依赖清单变化时才 `pip install` → 重启 systemd 服务 → 探活 10003 端口。
 
-Windows 一键部署见仓库外层的 `部署AI.bat`。**打包用排除法而非白名单**——白名单漏一个模块就是线上 `ImportError`（2026-09-22 踩过：`time_substitution.py` 新增后未加进白名单）。
+Windows 一键部署见仓库外层的 `部署AI.bat`。**打包用排除法而非白名单**——白名单漏一个模块就是线上 `ImportError`（2026-09-22 踩过：`mirror_core/time_substitution.py` 新增后未加进白名单）。
 
 ## 关于 `upload/`
 

@@ -329,7 +329,7 @@ class TestLoaderAliases:
     def test_legacy_names_map_to_new_placeholders(self):
         """代码侧旧名 todos/learnings 经别名渲染进模板新占位符 stats_facts/records
         （prompts_loader._ALIASES["profile"]：todos→stats_facts、learnings→records）"""
-        from prompts_loader import loader
+        from mirror_core.prompts_loader import loader
         p = loader.render("profile", todos="- 未完成待办：x", learnings="- 记录原文",
                           mood_stats="", keywords="", active_time="",
                           total_records=1, time_range="", recent_chats="",

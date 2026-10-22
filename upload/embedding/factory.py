@@ -3,7 +3,7 @@
 from embedding.base import BaseEmbedder
 from embedding.local_embedder import LocalEmbedder
 from embedding.api_embedder import ApiEmbedder
-from errors import require_config
+from mirror_core.errors import require_config
 
 
 def create_embedder(

@@ -5,15 +5,18 @@ GetModelInfo（健康检查 + 携带 EmbeddingConfig 的维度校验，api/local
 无真实 LLM Key 时用 --stub 模式：本地起一个假 LLM HTTP 服务，验证 gRPC 全链路。
 
 用法:
-  python test_client.py            # 真实 LLM（需有效 key）
-  python test_client.py --stub     # 桩模式（零外部依赖）
-  python test_client.py --skip-embed   # 跳过 local Embed（避免下载 BGE-m3）
+  python scripts/smoke_client.py            # 真实 LLM（需有效 key）
+  python scripts/smoke_client.py --stub     # 桩模式（零外部依赖）
+  python scripts/smoke_client.py --skip-embed   # 跳过 local Embed（避免下载 BGE-m3）
 """
 
 import json
 import sys
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import grpc
 

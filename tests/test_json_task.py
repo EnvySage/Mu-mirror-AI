@@ -33,7 +33,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from anthropic import APIStatusError as AnthropicStatusError  # noqa: E402
 from openai import APIStatusError as OpenAiStatusError  # noqa: E402
 
-from errors import AiServiceError, LlmUnavailableError  # noqa: E402
+from mirror_core.errors import AiServiceError, LlmUnavailableError  # noqa: E402
 from llm.anthropic_llm import AnthropicLlm  # noqa: E402
 from llm.base import BaseLlm  # noqa: E402
 from llm.openai_llm import OpenAiLlm  # noqa: E402

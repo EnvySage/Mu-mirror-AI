@@ -4,7 +4,7 @@ from openai import OpenAI
 
 from config import CONFIG
 from embedding.base import BaseEmbedder
-from errors import require_config
+from mirror_core.errors import require_config
 
 # 不再维护 PROVIDER_DEFAULTS：早期版本按 provider 兜底 embedding 模型/地址
 # （qwen→text-embedding-v3 等），"用户没配"会被静默替换成别的模型真实调用计费。

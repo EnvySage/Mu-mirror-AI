@@ -3,11 +3,11 @@
 环境测试脚本 - 验证 Mu-mirror-AI 项目依赖是否正确安装
 """
 
-import sys
 import os
+import sys
+from pathlib import Path
 
-# 添加 lib 目录到 Python 路径
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'lib'))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 def test_imports():
     """测试所有必要的依赖是否可以导入"""

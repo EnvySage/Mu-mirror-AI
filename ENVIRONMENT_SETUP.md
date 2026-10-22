@@ -20,7 +20,7 @@ source activate.sh
 ```bash
 python your_script.py
 # 或者
-python test_environment.py
+python scripts/check_environment.py
 ```
 
 ### 方法 2: 手动设置环境变量
@@ -69,7 +69,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'lib'))
 运行环境测试脚本验证配置：
 
 ```bash
-PYTHONPATH=./lib python test_environment.py
+python scripts/check_environment.py
 ```
 
 ## 项目结构
@@ -83,7 +83,7 @@ Mu-mirror-AI/
 ├── prompts/                # 提示词文件
 ├── docs/                   # 文档
 ├── activate.sh             # 环境激活脚本
-├── test_environment.py     # 环境测试脚本
+├── scripts/                # 工具脚本（冒烟/环境自检/桩 LLM）
 ├── requirements.txt        # 依赖列表
 └── server.py               # 服务器入口
 ```
@@ -134,5 +134,5 @@ python your_script.py
 
 1. 阅读 `docs/development.md` 了解开发规范
 2. 查看 `README.md` 了解项目概况
-3. 运行 `test_environment.py` 确认环境正常
+3. 运行 `scripts/check_environment.py` 确认环境正常
 4. 开始开发你的功能！

@@ -23,10 +23,10 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from generated import common_pb2 as common  # noqa: E402
 from generated import record_processor_pb2 as rp_pb2  # noqa: E402
 
-from prompts_loader import loader  # noqa: E402
+from mirror_core.prompts_loader import loader  # noqa: E402
 from services import record_processor as rps  # noqa: E402
 from services.record_processor import _parse_todo_ref  # noqa: E402
-from todo_render import format_open_todos  # noqa: E402
+from mirror_core.todo_render import format_open_todos  # noqa: E402
 
 
 def _hint(todo_id=7, title="补作业", excerpt="明天要补作业", created="2026-08-20T10:00:00",
@@ -155,7 +155,7 @@ class TestFormatOpenTodos:
 
     def test_cap_at_max_hints(self):
         """超过 max_hints 截断保留前 N 条（config todo_hint.max_hints）"""
-        from todo_render import _MAX_HINTS
+        from mirror_core.todo_render import _MAX_HINTS
         hints = [_hint(todo_id=i) for i in range(1, _MAX_HINTS + 10)]
         out = format_open_todos(hints)
         assert f"#{_MAX_HINTS}" in out
@@ -451,5 +451,5 @@ class TestConfig:
         assert CONFIG["todo_hint"]["max_excerpt_chars"] == 100
 
     def test_render_limits_follow_config(self):
-        from todo_render import _MAX_EXCERPT_CHARS, _MAX_HINTS
+        from mirror_core.todo_render import _MAX_EXCERPT_CHARS, _MAX_HINTS
         assert _MAX_HINTS == 20 and _MAX_EXCERPT_CHARS == 100

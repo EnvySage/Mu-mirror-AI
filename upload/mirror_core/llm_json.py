@@ -9,7 +9,7 @@ ctx 用于错误消息区分类别（"意图"/"画像"/"分类"），不参与�
 
 import json
 
-from errors import ContentInvalidError
+from mirror_core.errors import ContentInvalidError
 
 
 def parse_json(text: str, ctx: str = "LLM") -> dict:

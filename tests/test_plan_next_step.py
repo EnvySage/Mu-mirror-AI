@@ -26,7 +26,7 @@ from generated import common_pb2  # noqa: E402
 from generated import mirror_chat_pb2 as chat_pb2  # noqa: E402
 from generated import mirror_chat_pb2_grpc as chat_grpc  # noqa: E402
 
-from errors import AiServiceError  # noqa: E402
+from mirror_core.errors import AiServiceError  # noqa: E402
 from services.plan_service import (  # noqa: E402
     MirrorChatServicer,
     format_previous_results,
@@ -496,7 +496,7 @@ _SINGLE_MARKERS = ("工具规划助手", "情绪安慰", "最多 2 步")
 
 class TestTemplateSeparation:
     def test_single_template_has_the_same_submission_boundary(self):
-        from prompts_loader import PROMPT_DIR
+        from mirror_core.prompts_loader import PROMPT_DIR
         for name in ("plan_tools.txt", "plan_tools_single.txt"):
             text = (PROMPT_DIR / name).read_text(encoding="utf-8")
             assert "PREPARE_WRITE" in text and "等待用户确认" in text
@@ -534,7 +534,7 @@ class TestTemplateSeparation:
         assert "情绪安慰" not in prompt
 
     def test_two_templates_are_different_files(self):
-        from prompts_loader import PROMPT_DIR, _FILENAME
+        from mirror_core.prompts_loader import PROMPT_DIR, _FILENAME
         assert _FILENAME["plan_tools"] == "plan_tools"
         assert _FILENAME["plan_tools_single"] == "plan_tools_single"
         loop = (PROMPT_DIR / "plan_tools.txt").read_text(encoding="utf-8")

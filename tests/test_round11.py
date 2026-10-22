@@ -397,7 +397,7 @@ class TestPromptWiring:
         """旧 PlanTools 路径的模板（chat-loop-design.md 裁决 0.4：回滚要退回已知旧行为，
         所以 plan_tools.txt 循环化后，PlanTools 改渲染 plan_tools_single —— HEAD 原文快照，
         本用例断言一字未改）"""
-        from prompts_loader import loader
+        from mirror_core.prompts_loader import loader
         p = loader.render("plan_tools_single", tools="1. search_records：检索",
                           question="我论文咋样了", glossary="")
         assert "工具规划助手" in p
@@ -414,7 +414,7 @@ class TestPromptWiring:
     def test_plan_tools_loop_template_renders(self):
         """循环版模板（chat-loop-design.md §5.1，只给 PlanNextStep 用）——与上一个用例
         互为对照：同一批规则换了措辞，且多出循环语境渲染位"""
-        from prompts_loader import loader
+        from mirror_core.prompts_loader import loader
         p = loader.render("plan_tools", tools="1. search_records：检索", question="我论文咋样了",
                           glossary="", history="h", previous_results="（空）",
                           step=2, max_steps=4, max_calls=2)
@@ -428,13 +428,13 @@ class TestPromptWiring:
             assert ph not in p
 
     def test_plan_tools_glossary_placeholder(self):
-        from prompts_loader import loader
+        from mirror_core.prompts_loader import loader
         g = "以下用户个人词汇表仅供参考，解释可能过时；与近期记录矛盾时，以近期记录为准。\n- 论文：毕设"
         assert "毕设" in loader.render("plan_tools_single", tools="t", question="q", glossary=g)
         assert "毕设" in loader.render("plan_tools", tools="t", question="q", glossary=g)
 
     def test_chat_template_tool_results_placeholder(self):
-        from prompts_loader import loader
+        from mirror_core.prompts_loader import loader
         p = loader.render("chat", question="CHAT_QUESTION_42", history="CHAT_HISTORY_77",
                           context="c", glossary="",
                           tool_results="工具 get_stats 返回：30 天 42 条")
@@ -448,7 +448,7 @@ class TestPromptWiring:
 
     def test_chat_template_backward_compat(self):
         """chat 模板既有占位符不受影响（回归保障）"""
-        from prompts_loader import loader
+        from mirror_core.prompts_loader import loader
         p = loader.render("chat", question="CHAT_USER_Q_MARKER", history="CHAT_HISTORY_MARKER",
                           context="[1] 资料",
                           glossary="", tool_results="")

@@ -15,11 +15,11 @@ from generated import mirror_profile_pb2 as pb2
 from generated import mirror_profile_pb2_grpc as pb2_grpc
 
 from config import CONFIG
-from errors import abort_with_mapped
-from glossary_render import format_glossary
+from mirror_core.errors import abort_with_mapped
+from mirror_core.glossary_render import format_glossary
 from llm.factory import create_llm
-from llm_json import parse_json
-from prompts_loader import loader
+from mirror_core.llm_json import parse_json
+from mirror_core.prompts_loader import loader
 
 VALID_TAGS_MIN = 1
 

@@ -5,8 +5,8 @@ from datetime import date, datetime
 
 from generated import mirror_chat_pb2 as pb2
 from llm.factory import create_llm
-from llm_json import parse_json
-from prompts_loader import loader
+from mirror_core.llm_json import parse_json
+from mirror_core.prompts_loader import loader
 
 _MEMORY_KINDS = {"fact", "preference", "plan", "event"}
 _MAX_CANDIDATES = 3

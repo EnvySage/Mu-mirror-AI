@@ -20,7 +20,7 @@ from agent_core.runner import AgentAbort, MAX_CALLS_PER_ROUND, check_control
 from agent_core.types import AgentState, CreatedRecord, Evidence, IntentResult, RuntimeContext, ToolCall
 from agent_tools.read_tools import execute_read_tool
 from agent_tools.registry import READ_TOOL_REGISTRY, get_read_tool_specs
-from llm_json import parse_json
+from mirror_core.llm_json import parse_json
 from services import answer_service, intent_service
 
 

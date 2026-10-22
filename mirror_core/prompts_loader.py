@@ -7,7 +7,7 @@ from pathlib import Path
 
 from config import CONFIG
 
-PROMPT_DIR = Path(__file__).parent / "prompts"
+PROMPT_DIR = Path(__file__).resolve().parents[1] / "prompts"
 
 # 逻辑名 → 文件名
 _FILENAME = {

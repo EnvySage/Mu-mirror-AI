@@ -1,7 +1,7 @@
 """E2E 联调桩 LLM — OpenAI 兼容 HTTP 服务（端口 18080）
 
 供 Java 后端配置 ai_protocol=openai / base_url=http://127.0.0.1:18080/v1 时使用。
-按 prompt 关键词返回不同 JSON / SSE 流式，与 Mu-mirror-AI/test_client.py 的桩一致。
+按 prompt 关键词返回不同 JSON / SSE 流式，与 Mu-mirror-AI/scripts/smoke_client.py 的桩一致。
 """
 import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer

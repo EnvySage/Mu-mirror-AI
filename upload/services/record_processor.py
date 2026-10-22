@@ -9,14 +9,14 @@ from generated import common_pb2 as common
 from generated import record_processor_pb2 as pb2
 from generated import record_processor_pb2_grpc as pb2_grpc
 
-from errors import abort_with_mapped
-from glossary_render import format_glossary
+from mirror_core.errors import abort_with_mapped
+from mirror_core.glossary_render import format_glossary
 from llm.factory import create_llm
-from llm_json import parse_json
-from prompts_loader import loader
-from recent_context_render import format_recent_context
-from time_substitution import format_time_rule, parse_reference_date, resolve_substitutions
-from todo_render import format_open_todos
+from mirror_core.llm_json import parse_json
+from mirror_core.prompts_loader import loader
+from mirror_core.recent_context_render import format_recent_context
+from mirror_core.time_substitution import format_time_rule, parse_reference_date, resolve_substitutions
+from mirror_core.todo_render import format_open_todos
 
 # 枚举映射表（proto 枚举名大写）
 CONTENT_TYPE_MAP = {

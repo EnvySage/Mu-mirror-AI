@@ -6,7 +6,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from generated import common_pb2 as common  # noqa: E402
 from generated import record_processor_pb2 as rp_pb2  # noqa: E402
-from prompts_loader import loader  # noqa: E402
+from mirror_core.prompts_loader import loader  # noqa: E402
 from services.record_processor import RecordProcessorServicer, _parse_growth_suggestions  # noqa: E402
 
 

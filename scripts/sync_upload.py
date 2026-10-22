@@ -13,17 +13,10 @@ from pathlib import Path
 RUNTIME_ROOT_FILES = (
     "config.example.yml",
     "config.py",
-    "errors.py",
     "generate_proto.py",
-    "glossary_render.py",
-    "llm_json.py",
-    "prompts_loader.py",
-    "recent_context_render.py",
     "requirements-minimal.txt",
     "requirements-minimal.lock.txt",
     "server.py",
-    "time_substitution.py",
-    "todo_render.py",
 )
 
 RUNTIME_GROUPS = {
@@ -33,6 +26,7 @@ RUNTIME_GROUPS = {
     "embedding": {".py"},
     "generated": {".py"},
     "llm": {".py"},
+    "mirror_core": {".py"},
     "prompts": {".txt"},
     "services": {".py"},
 }

@@ -5,7 +5,7 @@ import pytest
 from generated import common_pb2, mirror_chat_pb2
 from services import plan_service
 from services.plan_service import plan_next_step, sanitize_calls
-from prompts_loader import PromptLoader
+from mirror_core.prompts_loader import PromptLoader
 
 
 @pytest.mark.parametrize("mode", ["single_helper", "single_rpc", "loop_helper", "loop_rpc"])

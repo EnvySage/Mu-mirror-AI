@@ -7,7 +7,7 @@ import httpx  # anthropic SDK 自身依赖，非新增依赖
 from anthropic import APIConnectionError, APIStatusError, APITimeoutError
 
 from config import CONFIG
-from errors import (
+from mirror_core.errors import (
     AiServiceError,
     LlmTimeoutError,
     LlmUnavailableError,

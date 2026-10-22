@@ -180,7 +180,7 @@ def test_understand_does_not_resolve_alias_shared_by_confirmed_terms(monkeypatch
 
 
 def test_agent_intent_prompt_is_separate_from_legacy_prompt():
-    from prompts_loader import loader
+    from mirror_core.prompts_loader import loader
 
     agent_prompt = loader.render("agent_intent", question="当前问题", history="历史", glossary="词典")
     legacy_prompt = loader.load("intent")

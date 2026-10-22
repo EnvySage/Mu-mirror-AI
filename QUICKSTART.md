@@ -19,7 +19,7 @@ source activate.sh
 ### 2. 验证环境
 
 ```bash
-python test_environment.py
+python scripts/check_environment.py
 ```
 
 ### 3. 运行项目
@@ -29,7 +29,7 @@ python test_environment.py
 python server.py
 
 # 或者运行测试客户端
-python test_client.py
+python scripts/smoke_client.py
 ```
 
 ## 依赖说明
@@ -127,7 +127,7 @@ Mu-mirror-AI/
 ├── prompts/                # 提示词
 ├── docs/                   # 文档
 ├── activate.sh             # 环境激活脚本
-├── test_environment.py     # 环境测试脚本
+├── scripts/                # 工具脚本（冒烟/环境自检/桩 LLM）
 ├── requirements.txt        # 完整版依赖
 ├── requirements-minimal.txt # 精简版依赖
 └── server.py               # 服务器入口
@@ -146,5 +146,5 @@ Mu-mirror-AI/
 
 1. Python 版本是否为 3.12+
 2. 是否已激活环境 (`source activate.sh`)
-3. 依赖是否正确安装 (`python test_environment.py`)
+3. 依赖是否正确安装 (`python scripts/check_environment.py`)
 4. 查看 `ENVIRONMENT_SETUP.md` 获取详细说明

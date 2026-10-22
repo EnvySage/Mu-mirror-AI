@@ -25,10 +25,10 @@ from generated import record_processor_pb2_grpc as pb2_grpc
 
 from services.record_processor import RecordProcessorServicer as _BaseServicer
 from config import CONFIG
-from errors import abort_with_mapped
+from mirror_core.errors import abort_with_mapped
 from llm.factory import create_llm
-from llm_json import parse_json
-from prompts_loader import loader
+from mirror_core.llm_json import parse_json
+from mirror_core.prompts_loader import loader
 
 # kind 三选一（英文小写，设计稿第 3 节分级）
 VALID_KINDS = {"new", "evidence", "update"}
