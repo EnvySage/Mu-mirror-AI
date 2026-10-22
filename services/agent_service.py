@@ -117,6 +117,10 @@ class AgentRunnerServicer(agent_grpc.AgentRunnerServicer):
                 if not isinstance(item, dict) or item.get("vault_item_id") is None:
                     continue
                 vault_metadata[int(item["vault_item_id"])] = item
+        elif event.kind == "prepare_action":
+            output.prepare_action.call_id = str(metadata.get("call_id", ""))
+            output.prepare_action.tool = str(metadata.get("tool", ""))
+            output.prepare_action.args_json = str(metadata.get("args_json", "{}"))
         elif event.kind == "completed":
             completed = output.completed
             completed.answer_text = str(metadata.get("answer_text", ""))

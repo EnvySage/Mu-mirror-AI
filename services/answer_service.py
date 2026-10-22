@@ -449,6 +449,9 @@ def stream_answer(
     tool_sources=(), cancel: Callable[[], bool] | None = None,
 ):
     """Yield filtered thinking/delta/final events using the legacy wire semantics."""
+    from services.tool_output_guard import ToolCallTextFilter
+
+    protocol_filter = ToolCallTextFilter()
     buffer: list[str] = []
     n_files = sum(
         len(_extract_file_items(r.tool, _parse_payload(r.payload_json)))
@@ -459,18 +462,24 @@ def stream_answer(
         max_cite=len(chunks) + len(tool_sources),
         max_file_cite=n_files,
     )
-    for kind, text in llm.chat_stream(messages):
-        if cancel is not None and cancel():
-            return
-        if kind == "thinking":
-            yield AnswerEvent(kind="thinking", content=text)
-            continue
-        text = fake_cites.feed(text)
-        if not text:
-            continue
-        buffer.append(text)
-        yield AnswerEvent(kind="delta", content=text)
-    tail = fake_cites.flush()
+    stream = llm.chat_stream(messages)
+    try:
+        for kind, text in stream:
+            if cancel is not None and cancel():
+                return
+            if kind == "thinking":
+                yield AnswerEvent(kind="thinking", content=text)
+                continue
+            text = fake_cites.feed(protocol_filter.feed(text))
+            if not text:
+                continue
+            buffer.append(text)
+            yield AnswerEvent(kind="delta", content=text)
+    finally:
+        close = getattr(stream, "close", None)
+        if callable(close):
+            close()
+    tail = fake_cites.feed(protocol_filter.flush()) + fake_cites.flush()
     if tail:
         buffer.append(tail)
         yield AnswerEvent(kind="delta", content=tail)
@@ -635,6 +644,9 @@ def stream_agent_answer(
     timeout: float | None = None,
 ):
     """Stream graph_v2 output with per-chunk fake-citation filtering and frozen sources."""
+    from services.tool_output_guard import ToolCallTextFilter
+
+    protocol_filter = ToolCallTextFilter()
     evidence = tuple(evidence)
     index = citation_index or assign_citations(evidence)
     tool_names = [observation.tool for observation in observations]
@@ -650,7 +662,7 @@ def stream_agent_answer(
             if kind == "thinking":
                 yield AnswerEvent(kind="thinking", content=text)
                 continue
-            filtered = fake_cites.feed(text)
+            filtered = fake_cites.feed(protocol_filter.feed(text))
             if filtered:
                 buffer.append(filtered)
                 yield AnswerEvent(kind="delta", content=filtered)
@@ -658,7 +670,7 @@ def stream_agent_answer(
         close = getattr(stream, "close", None)
         if callable(close):
             close()
-    tail = fake_cites.flush()
+    tail = fake_cites.feed(protocol_filter.flush()) + fake_cites.flush()
     if tail:
         buffer.append(tail)
         yield AnswerEvent(kind="delta", content=tail)

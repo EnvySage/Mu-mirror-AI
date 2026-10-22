@@ -13,14 +13,14 @@ The Java release and database procedure live in [Mu-mirror-B `docs/agent-v2-roll
 
 ## 2. Integrated baseline capability boundary (2026-10-21)
 
-The merged code keeps Java `legacy` as the default and graph_v2 opt-in. The current canary allowlist is empty and shadow sampling defaults to zero. The following boundary is intentional until the missing graph tools and full local flow are validated:
+The merged code keeps Java `legacy` as the default and graph_v2 opt-in. The current canary allowlist is empty and shadow sampling defaults to zero. The following boundary is intentional while the full local flow and graph_v2 release gates remain incomplete:
 
 | Capability | Current support | Boundary |
 |---|---|---|
 | User-scoped history, retrieved records, glossary, profile, todo and vault reads | graph_v2 reads through the eight `mirror_ai` views and trusted `AssistantContext` | Views enforce the current record authorization and forgotten-chat-source exclusions; keep the Java-created user/session/message scope intact. |
-| Explicit `create_record` | graph_v2 can request the named Java command and receive an idempotent receipt when the feature flag and grant are enabled | It is not a generic write path; default command creation remains disabled. |
-| Existing prepare/confirm action cards for records, todos, memory changes and growth adjustments | Available in the Java legacy tool flow and existing UI | These tools are not mapped into graph_v2 yet. Do not enable graph_v2 for users who depend on those cards; do not represent graph output as an approved or completed card action. |
-| Custom growth axes, growth ledger, daily summaries and memory forget/edit actions | Preserved in the current Java/Vue product flow | Their end-to-end behavior with graph_v2 is not yet validated. Keep legacy selected until that coverage exists. |
+| Record, todo, memory-candidate and growth-adjustment requests | graph_v2 receives Java's registered `PREPARE_WRITE` tool definitions and can emit one `prepare_action`; Java invokes the matching existing tool, persists a pending card and sends `action_proposal`/`action_status` SSE | The event can only prepare a card. The user must confirm through the existing Java action API before any business change. The regular chat request no longer carries the direct `create_record` grant. |
+| Target selection and invalid action requests | Java can return the existing todo selection list; graph_v2 shows a concise question and waits for the user's next message | Target IDs and all operation arguments are revalidated by Java. Python cannot confirm, submit or delete a card. |
+| Custom growth axes, growth ledger, daily summaries and memory forget/edit actions | Preserved in the current Java/Vue product flow; growth adjustment cards and memory-candidate cards are now callable from graph_v2 | Actual local Java→Python→Vue card confirmation and history restoration still require manual acceptance. Keep legacy selected by default until the broader graph_v2 release gates pass. |
 | SSE run receipt and restored chat history | Vue protocol/store support and unit coverage are present | A real local Java→Python→Vue SSE plus history-reload scenario remains an acceptance gate. |
 
 This capability table describes code and tests available on the merged local baseline; it does not authorize a database migration or traffic rollout. The legacy engine remains selected by default.

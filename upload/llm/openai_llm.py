@@ -95,7 +95,8 @@ class OpenAiLlm(BaseLlm):
                     temperature: float = 0.7,
                     thinking_budget: int | None = None, *,
                     timeout: float | None = None,
-                    max_retries: int | None = None) -> Generator[tuple[str, str], None, None]:
+                    max_retries: int | None = None,
+                    max_tokens: int | None = None) -> Generator[tuple[str, str], None, None]:
         """流式对话：每项 (kind, text)，kind ∈ {"thinking", "content"}。
 
         thinking_budget 仅为与 base 签名对齐而接收，本实现**不生效**：OpenAI 兼容系
@@ -113,6 +114,7 @@ class OpenAiLlm(BaseLlm):
                 temperature=temperature,
                 stream=True,
                 timeout=request_timeout,
+                **({"max_tokens": max_tokens} if max_tokens is not None else {}),
             )
         except APITimeoutError as e:
             raise LlmTimeoutError(f"LLM 流式连接超时（>{_STREAM_READ_TIMEOUT:.0f}s）") from e
@@ -154,6 +156,7 @@ class OpenAiLlm(BaseLlm):
     def json_task(
         self, messages: list[dict], temperature: float = 0.7, *,
         timeout: float | None = None, max_retries: int | None = None,
+        max_tokens: int | None = None,
     ) -> str:
         """轻量 JSON 任务：关思考 + 小 max_tokens（意图路由 / 工具规划）
 
@@ -164,7 +167,7 @@ class OpenAiLlm(BaseLlm):
             model=self.model,
             messages=messages,
             temperature=temperature,
-            max_tokens=_JSON_TASK_MAX_TOKENS,
+            max_tokens=_JSON_TASK_MAX_TOKENS if max_tokens is None else max_tokens,
         )
         try:
             return self._create_text(

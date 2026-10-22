@@ -25,6 +25,7 @@ def build_graph():
     graph.add_node("fallback", nodes.fallback)
     graph.add_node("clarify", nodes.clarify)
     graph.add_node("create_record", nodes.create_record)
+    graph.add_node("prepare_action", nodes.prepare_action)
     graph.add_node("write_disabled", nodes.write_disabled)
     graph.add_node("finalize", nodes.finalize)
 
@@ -39,6 +40,7 @@ def build_graph():
             "clarify": "clarify",
             "write_disabled": "write_disabled",
             "create_record": "create_record",
+            "prepare_action": "prepare_action",
         },
     )
     graph.add_edge("retrieve", "plan")
@@ -65,7 +67,7 @@ def build_graph():
         nodes.after_backstop,
         {"act": "act", "synthesize": "synthesize", "fallback": "fallback", "finalize": "finalize"},
     )
-    for node_name in ("synthesize", "fallback", "clarify", "write_disabled", "create_record"):
+    for node_name in ("synthesize", "fallback", "clarify", "write_disabled", "create_record", "prepare_action"):
         graph.add_edge(node_name, "finalize")
     graph.add_edge("finalize", END)
     return graph.compile()

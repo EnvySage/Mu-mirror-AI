@@ -71,7 +71,7 @@ class _JsonTaskLlm:
     def __init__(self):
         self.prompt = ""
 
-    def json_task(self, messages, temperature=0.7):
+    def json_task(self, messages, temperature=0.7, **kwargs):
         self.prompt = messages[0]["content"]
         return '{"calls": []}'
 

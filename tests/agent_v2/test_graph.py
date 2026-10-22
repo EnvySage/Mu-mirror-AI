@@ -1,6 +1,7 @@
 import json
 
 from agent_core.runner import canonical_tool_args, run_agent
+from generated import common_pb2
 from tests.agent_v2.agent_fakes import (
     FakeLlm,
     FakeRepositories,
@@ -171,3 +172,39 @@ def test_two_invocations_on_one_compiled_graph_start_with_fresh_state():
     assert [event.metadata["route"] for event in first if event.kind == "meta"] == ["semantic"]
     assert [event.metadata["route"] for event in second if event.kind == "meta"] == ["semantic"]
     assert llm.plan_calls == 2
+
+
+def test_prepare_action_emits_java_request_without_saving_or_answering_first():
+    intent = {
+        "action_kind": "prepare_action",
+        "route": "structured",
+        "standalone_question": "创建今天的工作记录",
+        "content_type": "work",
+        "moods": [],
+        "time_expression": {"kind": "none"},
+        "file_query_mode": "none",
+        "prepare_tool": "prepare_record",
+        "prepare_args": {"kind": "record.create", "rawContent": "今天改 bug 改到头晕。"},
+    }
+    tool = common_pb2.ToolSpec(
+        name="prepare_record", description="准备待确认记录卡",
+        args_schema="{kind:record.create,rawContent:string}", effect="PREPARE_WRITE",
+    )
+    llm = FakeLlm(intent=intent)
+    repos = FakeRepositories([make_chunk()])
+
+    events = list(run_agent(
+        make_request(question="帮我写日记，今天改 bug 改到头晕", prepare_tools=[tool]),
+        make_dependencies(llm, repos),
+    ))
+
+    proposals = [event for event in events if event.kind == "prepare_action"]
+    terminal = _terminal(events)
+    assert len(proposals) == 1
+    assert proposals[0].metadata["tool"] == "prepare_record"
+    assert json.loads(proposals[0].metadata["args_json"])["rawContent"] == "今天改 bug 改到头晕。"
+    assert terminal.kind == "completed"
+    assert terminal.metadata["answer_text"] == ""
+    assert terminal.metadata["outcome"] == "action_prepared"
+    assert repos.records.search_calls == []
+    assert not any(event.kind == "tool_finished" for event in events)

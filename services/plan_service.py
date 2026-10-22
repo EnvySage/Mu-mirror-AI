@@ -140,12 +140,15 @@ def sanitize_calls(data: dict, registry_names: set[str]) -> list[pb2.PlannedCall
                 dropped += 1
                 continue
         if not isinstance(args, dict):
-            args = {}  # 缺 args/非对象：工具执行侧自兜底默认值，不算违规
+            if tool.startswith("prepare_"):
+                dropped += 1
+                continue
+            args = {}  # Preserve legacy defaults for read tools only.
         if _has_authority_argument(args):
             dropped += 1
             continue
         try:
-            args_json = json.dumps(args, ensure_ascii=False)
+            args_json = json.dumps(args, ensure_ascii=False, allow_nan=False)
         except (TypeError, ValueError):
             dropped += 1
             continue
@@ -224,6 +227,13 @@ def allowed_registry_names(tools) -> set[str]:
             if (t.name or "").strip() and (getattr(t, "effect", "") or "READ").strip() in ("READ", "PREPARE_WRITE")}
 
 
+def _preparation_output_options(tools) -> dict:
+    # A plan can embed editable record content, unlike the old short read-only JSON.
+    return {"max_tokens": 8192} if any(
+        getattr(tool, "effect", "") == "PREPARE_WRITE" for tool in tools
+    ) else {}
+
+
 @dataclass(frozen=True)
 class PlanEvent:
     """One planner event, independent of gRPC stream objects."""
@@ -261,7 +271,8 @@ def plan_next_step(request, llm, *, prompt_name="plan_tools", cancel: Callable[[
             assistant_context=assistant_context_text(getattr(request, "assistant_context", None)),
         )
         t0 = time.monotonic()
-        response_text = llm.json_task([{"role": "user", "content": prompt}])
+        response_text = llm.json_task([{"role": "user", "content": prompt}],
+                                      **_preparation_output_options(request.tools))
         elapsed_ms = int((time.monotonic() - t0) * 1000)
         print(f"[PlanTools] LLM 耗时 {elapsed_ms}ms | 响应: {response_text[:200]}")
         result = parse_json(response_text, ctx="工具规划")
@@ -294,7 +305,8 @@ def plan_next_step(request, llm, *, prompt_name="plan_tools", cancel: Callable[[
     buffer: list[str] = []
     thinking_blocks = 0
     for kind, text in llm.chat_stream([{"role": "user", "content": prompt}],
-                                     thinking_budget=_PLAN_THINKING_BUDGET):
+                                     thinking_budget=_PLAN_THINKING_BUDGET,
+                                     **_preparation_output_options(request.tools)):
         if cancel is not None and cancel():
             return
         if kind == "thinking":
@@ -364,7 +376,8 @@ class MirrorChatServicer(_BaseServicer):
             t0 = time.monotonic()
             # json_task：关思考（工具规划是 JSON 决策，不需要思维链）。实测 18s 级别
             # 的耗时主要烧在思考 token 上，且它在"用户看到第一个字之前"串行执行。
-            response_text = llm.json_task([{"role": "user", "content": prompt}])
+            response_text = llm.json_task([{"role": "user", "content": prompt}],
+                                          **_preparation_output_options(request.tools))
             elapsed_ms = int((time.monotonic() - t0) * 1000)
             print(f"[PlanTools] LLM 耗时 {elapsed_ms}ms | 响应: {response_text[:200]}")
 
@@ -439,7 +452,8 @@ class MirrorChatServicer(_BaseServicer):
             buffer: list[str] = []
             thinking_blocks = 0
             for kind, text in llm.chat_stream([{"role": "user", "content": prompt}],
-                                              thinking_budget=_PLAN_THINKING_BUDGET):
+                                              thinking_budget=_PLAN_THINKING_BUDGET,
+                                              **_preparation_output_options(request.tools)):
                 if kind == "thinking":
                     thinking_blocks += 1
                     yield pb2.PlanStepChunk(thinking=text)

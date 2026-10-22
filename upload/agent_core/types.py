@@ -99,6 +99,9 @@ class IntentResult:
     file_query_mode: str
     validation_issues: tuple[str, ...] = ()
     time_window: TimeWindow | None = None
+    prepare_tool: str | None = None
+    prepare_args: dict[str, Any] | None = None
+    clarification_question: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -176,3 +179,4 @@ class RuntimeContext:
     clock: Callable[[], float] | None = None
     total_deadline: float | None = None
     assistant_context: Any = None
+    prepare_tools: tuple[dict[str, str], ...] = ()

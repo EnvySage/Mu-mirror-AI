@@ -64,7 +64,7 @@ def extract_intent(query, glossary, llm_config, *, llm_factory: Callable = creat
     )
 
 
-AGENT_ACTION_KINDS = {"read", "create_record", "conversation", "clarification"}
+AGENT_ACTION_KINDS = {"read", "create_record", "prepare_action", "conversation", "clarification"}
 AGENT_FILE_QUERY_MODES = {"none", "list", "body"}
 _TIME_EXPRESSION_FIELDS = {"kind", "date", "month", "offset", "days"}
 
@@ -116,11 +116,16 @@ def understand(
         question=question,
         history=history,
         glossary=_format_agent_glossary(prepared.glossary_for_intent),
+        prepare_tools=_format_prepare_tools(getattr(runtime, "prepare_tools", ())),
     )
     timeout = _remaining_timeout(getattr(runtime, "deadline", None), getattr(runtime, "clock", None))
+    # Card parameters can contain up to 2000 UTF-16 units of diary text. The old
+    # 256-token routing budget cannot hold even the expanded intent envelope.
+    json_options = {"max_tokens": 8192} if getattr(runtime, "prepare_tools", ()) else {}
     response = parse_json(
         llm.json_task(
             [{"role": "user", "content": prompt}], timeout=timeout, max_retries=0,
+            **json_options,
         ),
         ctx="新版意图",
     )
@@ -140,6 +145,9 @@ def understand(
             moods=result.moods, time_expression=result.time_expression,
             file_query_mode=result.file_query_mode,
             validation_issues=tuple(dict.fromkeys((*result.validation_issues, normalized.code))),
+            prepare_tool=result.prepare_tool,
+            prepare_args=result.prepare_args,
+            clarification_question=result.clarification_question,
         )
     return AgentIntentResult(
         action_kind=result.action_kind, route=result.route,
@@ -147,7 +155,23 @@ def understand(
         moods=result.moods, time_expression=result.time_expression,
         file_query_mode=result.file_query_mode, validation_issues=result.validation_issues,
         time_window=normalized,
+        prepare_tool=result.prepare_tool,
+        prepare_args=result.prepare_args,
+        clarification_question=result.clarification_question,
     )
+
+
+def _format_prepare_tools(tools) -> str:
+    rows = []
+    for tool in tools or ():
+        if not isinstance(tool, dict):
+            continue
+        name = tool.get("name", "")
+        description = tool.get("description", "")
+        args_schema = tool.get("args_schema", "")
+        if name and description:
+            rows.append(f"- {name}: {description} 参数：{args_schema}")
+    return "\n".join(rows) if rows else "（当前没有可准备的操作卡工具）"
 
 
 def _resolve_confirmed_glossary_aliases(question: str, standalone_question: str, terms) -> str:
@@ -264,6 +288,30 @@ def _validate_agent_intent(
         file_query_mode = "none"
         issues.append("invalid_file_query_mode")
 
+    prepare_tool = result.get("prepare_tool")
+    prepare_args = result.get("prepare_args")
+    clarification_question = result.get("clarification_question", "")
+    if not isinstance(clarification_question, str) or len(clarification_question) > 160:
+        clarification_question = ""
+        issues.append("invalid_clarification_question")
+    if action_kind == "prepare_action":
+        available = {
+            item.get("name") for item in (getattr(runtime, "prepare_tools", ()) or ())
+            if isinstance(item, dict) and isinstance(item.get("name"), str)
+        }
+        if not isinstance(prepare_tool, str) or prepare_tool not in available:
+            prepare_tool = None
+            issues.append("unavailable_prepare_tool")
+        if not isinstance(prepare_args, dict):
+            prepare_args = None
+            issues.append("invalid_prepare_args")
+        elif len(str(prepare_args)) > 12000:
+            prepare_args = None
+            issues.append("prepare_args_too_large")
+    else:
+        prepare_tool = None
+        prepare_args = None
+
     if action_kind == "create_record" and not _has_trusted_create_grant(runtime):
         action_kind = "clarification"
         issues.append("unauthorized_create_record")
@@ -280,6 +328,9 @@ def _validate_agent_intent(
         time_expression=expression,
         file_query_mode=file_query_mode,
         validation_issues=tuple(dict.fromkeys(issues)),
+        prepare_tool=prepare_tool,
+        prepare_args=prepare_args,
+        clarification_question=clarification_question.strip(),
     )
 
 

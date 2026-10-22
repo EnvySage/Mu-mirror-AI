@@ -86,6 +86,50 @@ def test_understand_rewrites_followup_with_context_history_once(monkeypatch):
     assert rendered["history"] == "assistant: 之前讨论的方案是先做小范围验证"
 
 
+def test_understand_accepts_only_java_registered_prepare_tools(monkeypatch):
+    llm = FakeLlm({
+        "action_kind": "prepare_action",
+        "route": "structured",
+        "standalone_question": "记录今天改 bug 改到头晕",
+        "content_type": "work",
+        "moods": [],
+        "time_expression": {"kind": "none"},
+        "file_query_mode": "none",
+        "prepare_tool": "prepare_record",
+        "prepare_args": {"kind": "record.create", "rawContent": "今天改 bug 改到头晕。"},
+    })
+    rendered = {}
+    monkeypatch.setattr(intent_service.loader, "render", lambda name, **kwargs: rendered.update(kwargs) or "prompt")
+    runtime = _runtime(llm, prepare_tools=({
+        "name": "prepare_record", "description": "待用户确认的记录卡",
+        "args_schema": "{kind:record.create,rawContent:string}",
+    },))
+
+    result = intent_service.understand("帮我写日记，我今天改 bug 改到头晕", _prepared(), runtime)
+
+    assert result.action_kind == "prepare_action"
+    assert result.prepare_tool == "prepare_record"
+    assert result.prepare_args == {"kind": "record.create", "rawContent": "今天改 bug 改到头晕。"}
+    assert "prepare_record" in rendered["prepare_tools"]
+    assert llm.options["max_tokens"] >= 4096
+
+
+def test_understand_downgrades_unregistered_prepare_tools_to_clarification(monkeypatch):
+    llm = FakeLlm({
+        "action_kind": "prepare_action", "route": "structured", "standalone_question": "删除一条记录",
+        "content_type": None, "moods": [], "time_expression": {"kind": "none"},
+        "file_query_mode": "none", "prepare_tool": "delete_record",
+        "prepare_args": {"recordId": 5},
+    })
+    monkeypatch.setattr(intent_service.loader, "render", lambda name, **kwargs: "prompt")
+
+    result = intent_service.understand("删除这条记录", _prepared(), _runtime(llm))
+
+    assert result.action_kind == "clarification"
+    assert result.prepare_tool is None
+    assert "unavailable_prepare_tool" in result.validation_issues
+
+
 def test_understand_normalizes_confirmed_glossary_alias_before_retrieval(monkeypatch):
     llm = FakeLlm({
         "action_kind": "read",

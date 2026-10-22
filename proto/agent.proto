@@ -27,6 +27,7 @@ message AgentRunRequest {
   string authorized_record_content = 16;
   repeated string allowed_write_tools = 17;
   AssistantContext assistant_context = 18;
+  repeated ToolSpec prepare_tools = 19;
 }
 message AgentText { string content = 1; }
 message AgentMeta { string route = 1; repeated string tools_used = 2; }
@@ -40,6 +41,11 @@ message AgentToolTrace {
   int64 latency_ms = 7;
   bool audited_by_java = 8;
   bool auto_backstop = 9;
+}
+message AgentPrepareAction {
+  string call_id = 1;
+  string tool = 2;
+  string args_json = 3;
 }
 message AgentVaultRef {
   int32 n = 1;
@@ -94,5 +100,6 @@ message AgentEvent {
     AgentToolTrace tool_finished = 6;
     AgentCompleted completed = 7;
     AgentFailure failed = 8;
+    AgentPrepareAction prepare_action = 9;
   }
 }

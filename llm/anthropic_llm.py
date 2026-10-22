@@ -103,7 +103,8 @@ class AnthropicLlm(BaseLlm):
                     temperature: float = 0.7,
                     thinking_budget: int | None = None, *,
                     timeout: float | None = None,
-                    max_retries: int | None = None) -> Generator[tuple[str, str], None, None]:
+                    max_retries: int | None = None,
+                    max_tokens: int | None = None) -> Generator[tuple[str, str], None, None]:
         """流式对话：每项 (kind, text)，kind ∈ {"thinking", "content"}。
 
         基于原始事件流（RawMessageStreamEvent）而非 text_stream——text_stream 只吐正文，
@@ -118,7 +119,7 @@ class AnthropicLlm(BaseLlm):
 
         base = dict(
             model=self.model,
-            max_tokens=_CHAT_MAX_TOKENS,
+            max_tokens=_CHAT_MAX_TOKENS if max_tokens is None else max_tokens,
             messages=chat_messages,
         )
         if system:
@@ -130,7 +131,7 @@ class AnthropicLlm(BaseLlm):
             thinking_kwargs = {
                 **base,
                 # anthropic 要求 max_tokens > budget_tokens（否则 400），给正文留足余量
-                "max_tokens": max(_CHAT_MAX_TOKENS, budget + 1024),
+                "max_tokens": max(base["max_tokens"], budget + 1024),
                 "thinking": {"type": "enabled", "budget_tokens": budget},
                 # 开启 thinking 时 anthropic 只接受 temperature=1，故此处不传该参数
             }
@@ -223,6 +224,7 @@ class AnthropicLlm(BaseLlm):
     def json_task(
         self, messages: list[dict], temperature: float = 0.7, *,
         timeout: float | None = None, max_retries: int | None = None,
+        max_tokens: int | None = None,
     ) -> str:
         """轻量 JSON 任务：关思考 + 小 max_tokens（实测 22.6s → 2.1s，输出 1074 → 43 token）
 
@@ -232,7 +234,7 @@ class AnthropicLlm(BaseLlm):
         system, chat_messages = self._split_system(messages)
         base = dict(
             model=self.model,
-            max_tokens=_JSON_TASK_MAX_TOKENS,
+            max_tokens=_JSON_TASK_MAX_TOKENS if max_tokens is None else max_tokens,
             messages=chat_messages,
             temperature=temperature,
         )

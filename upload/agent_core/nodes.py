@@ -60,7 +60,37 @@ def route_action(state: AgentState) -> str:
         return "clarify"
     if state.action_kind == "create_record":
         return "create_record"
+    if state.action_kind == "prepare_action":
+        return "prepare_action"
     return "synthesize"
+
+
+def prepare_action(state: AgentState, runtime: Runtime[RuntimeContext]) -> dict[str, Any]:
+    """Ask Java to create one confirmation card; never execute a business write in Python."""
+    context = runtime.context
+    check_control(context)
+    intent = state.intent
+    if (intent is None or not intent.prepare_tool or not isinstance(intent.prepare_args, dict)
+            or intent.prepare_tool not in {item.get("name") for item in context.prepare_tools}):
+        raise RuntimeError("validated prepare action is missing")
+    call_id = uuid4().hex
+    emit(
+        runtime,
+        "prepare_action",
+        call_id=call_id,
+        tool=intent.prepare_tool,
+        args_json=json.dumps(intent.prepare_args, ensure_ascii=False, sort_keys=True,
+                             separators=(",", ":"), allow_nan=False),
+    )
+    return {
+        "answer": "",
+        "sources": [],
+        "vault_refs": [],
+        "outcome": "action_prepared",
+        "stop_reason": "action_prepared",
+        "fallback": False,
+        "tool_call_count": 1,
+    }
 
 
 def retrieve_evidence(state: AgentState, runtime: Runtime[RuntimeContext]) -> dict[str, Any]:
@@ -436,7 +466,9 @@ def fallback(state: AgentState, runtime: Runtime[RuntimeContext]) -> dict[str, A
 def clarify(state: AgentState, runtime: Runtime[RuntimeContext]) -> dict[str, Any]:
     context = runtime.context
     check_control(context)
-    answer = "我还没能确定你想查的范围。可以补充时间、主题或更具体的问题吗？"
+    answer = (state.intent.clarification_question.strip()
+              if state.intent and state.intent.clarification_question.strip()
+              else "我还差一点信息，你想具体处理哪一项？")
     emit(runtime, "delta", answer)
     return {
         "answer": answer,
@@ -532,6 +564,8 @@ def finalize(state: AgentState, runtime: Runtime[RuntimeContext]) -> dict[str, A
     tools_used = list(dict.fromkeys(item.tool for item in state.observations))
     if state.action_kind == "create_record" and state.tool_call_count and "create_record" not in tools_used:
         tools_used.append("create_record")
+    if state.action_kind == "prepare_action" and state.intent and state.intent.prepare_tool:
+        tools_used.append(state.intent.prepare_tool)
     emit(runtime, "meta", route=state.route, tools_used=tools_used)
     if state.stop_reason in {"cancelled", "total_deadline", "read_error", "write_failed"}:
         emit(

@@ -96,6 +96,26 @@ def make_runtime(request: Any, dependencies: AgentDependencies, cancellation: An
     elif allowed_write_tools or command_grant or authorized_record_content:
         raise ValueError("write grant input is inconsistent")
 
+    prepare_tools: list[dict[str, str]] = []
+    seen_prepare_tools: set[str] = set()
+    requested_prepare_tools = tuple(getattr(request, "prepare_tools", ()) or ())
+    if len(requested_prepare_tools) > 16:
+        raise ValueError("prepare_tools exceeds the registry snapshot limit")
+    for spec in requested_prepare_tools:
+        name = getattr(spec, "name", "")
+        description = getattr(spec, "description", "")
+        args_schema = getattr(spec, "args_schema", "")
+        effect = getattr(spec, "effect", "")
+        if (not isinstance(name, str) or not name.startswith("prepare_")
+                or name in seen_prepare_tools or effect != "PREPARE_WRITE"
+                or not isinstance(description, str) or len(description) > 1000
+                or not isinstance(args_schema, str) or len(args_schema) > 4000):
+            raise ValueError("prepare_tools must contain unique Java PREPARE_WRITE definitions")
+        seen_prepare_tools.add(name)
+        prepare_tools.append({"name": name, "description": description, "args_schema": args_schema})
+    if getattr(request, "shadow", False) and prepare_tools:
+        raise ValueError("shadow runs cannot carry prepare tools")
+
     total_ms = _bounded_budget(
         getattr(request, "total_budget_ms", 0), dependencies.max_total_budget_ms, TOTAL_BUDGET_MS,
     )
@@ -155,6 +175,7 @@ def make_runtime(request: Any, dependencies: AgentDependencies, cancellation: An
         reference_date=reference_date,
         timezone=timezone,
         assistant_context=getattr(request, "assistant_context", None),
+        prepare_tools=tuple(prepare_tools),
         read_scope=read_scope,
         llm=llm,
         llm_config=llm_config,
@@ -198,7 +219,7 @@ def run_agent(request: Any, dependencies: AgentDependencies, cancellation: Any =
             for payload in stream:
                 check_control(runtime)
                 if not isinstance(payload, dict) or payload.get("kind") not in {
-                    "meta", "thinking", "delta", "tool_finished", "completed", "failed",
+                    "meta", "thinking", "delta", "tool_finished", "prepare_action", "completed", "failed",
                 }:
                     continue
                 kind = payload["kind"]

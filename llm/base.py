@@ -20,17 +20,20 @@ class BaseLlm(ABC):
                     temperature: float = 0.7,
                     thinking_budget: int | None = None, *,
                     timeout: float | None = None,
-                    max_retries: int | None = None) -> Generator[tuple[str, str], None, None]:
+                    max_retries: int | None = None,
+                    max_tokens: int | None = None) -> Generator[tuple[str, str], None, None]:
         """流式对话，逐块返回 (kind, text)：kind ∈ {"thinking", "content"}
 
         thinking_budget：本次调用的思考预算（token）；None = 用全局 llm.thinking_budget_tokens。
         规划器要单独传一个小预算——见 plan_service.PlanNextStep 的说明。
+        max_tokens 可为含记录正文的工具计划单独设置输出上限；None 保留厂商默认。
         """
         ...
 
     def json_task(
         self, messages: list[dict], temperature: float = 0.7, *,
         timeout: float | None = None, max_retries: int | None = None,
+        max_tokens: int | None = None,
     ) -> str:
         """轻量 JSON 任务（意图路由 / 工具规划）：**关闭思考**，只要结论。
 

@@ -16,7 +16,7 @@ from agent_data.profiles import ProfileRepository
 from agent_data.records import RecordRepository
 from agent_data.todos import TodoRepository
 from agent_data.vault import VaultRepository
-from generated import agent_pb2, agent_pb2_grpc
+from generated import agent_pb2, agent_pb2_grpc, common_pb2
 from server import build_agent_server, build_legacy_server
 from services.agent_service import AgentRunnerServicer
 from agent_tools.command_client import CommandResult
@@ -250,6 +250,45 @@ def test_authenticated_create_record_uses_java_authorized_original_content():
     assert len(tool_events) == 1
     assert tool_events[0].audited_by_java
     assert "授权的原文" not in tool_events[0].args_json
+
+
+def test_prepare_action_is_streamed_as_a_java_confirmation_card_request():
+    llm = FakeLlm(intent={
+        "action_kind": "prepare_action",
+        "route": "structured",
+        "standalone_question": "创建今天的工作记录",
+        "content_type": "work",
+        "moods": [],
+        "time_expression": {"kind": "none"},
+        "file_query_mode": "none",
+        "prepare_tool": "prepare_record",
+        "prepare_args": {"kind": "record.create", "rawContent": "今天改 bug 改到头晕。"},
+    })
+    dependencies = make_dependencies(llm, FakeRepositories())
+    servicer = AgentRunnerServicer(internal_token=TOKEN, dependencies=dependencies)
+    server, _, port = build_agent_server(port=0, servicer=servicer)
+    server.start()
+    try:
+        request = make_request(
+            run_id="cb5f44a4-e459-4a61-8a8a-a8b7587c772e",
+            question="帮我写日记，今天改 bug 改到头晕",
+            prepare_tools=[common_pb2.ToolSpec(
+                name="prepare_record", description="准备待确认记录卡",
+                args_schema="{kind:record.create,rawContent:string}", effect="PREPARE_WRITE",
+            )],
+        )
+        events = _run_channel(request, port)
+    finally:
+        server.stop(0)
+        servicer.close()
+
+    action_events = [event.prepare_action for event in events
+                     if event.WhichOneof("event") == "prepare_action"]
+    assert len(action_events) == 1
+    assert action_events[0].tool == "prepare_record"
+    assert '"kind":"record.create"' in action_events[0].args_json
+    assert events[-1].WhichOneof("event") == "completed"
+    assert events[-1].completed.answer_text == ""
 
 
 def test_unknown_create_result_is_not_a_java_write_failure_or_second_audit():

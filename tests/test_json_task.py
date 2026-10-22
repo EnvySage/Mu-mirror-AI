@@ -113,6 +113,12 @@ def _make_anthropic(script) -> tuple[AnthropicLlm, _FakeAnthropicMessages]:
 
 
 class TestAnthropicJsonTask:
+    def test_card_payload_can_request_larger_json_budget(self):
+        llm, fake = _make_anthropic(['{"ok": true}'])
+        llm.json_task([{"role": "user", "content": "prepare a diary"}], max_tokens=4096)
+        assert fake.kwargs_log[0]["max_tokens"] == 4096
+        assert fake.kwargs_log[0]["thinking"] == {"type": "disabled"}
+
     def test_disables_thinking_and_caps_tokens(self):
         """带 thinking=disabled + max_tokens=256（实测 22.6s → 2.1s 的两条硬指令）"""
         llm, fake = _make_anthropic(['{"query_type": "semantic"}'])
@@ -199,6 +205,12 @@ def _make_openai(script) -> tuple[OpenAiLlm, _FakeCompletions]:
 
 
 class TestOpenAiJsonTask:
+    def test_card_budget_survives_thinking_parameter_fallback(self):
+        err = OpenAiStatusError("unknown parameter thinking", response=_http_response(400), body=None)
+        llm, fake = _make_openai([err, '{"ok": true}'])
+        llm.json_task([{"role": "user", "content": "prepare a diary"}], max_tokens=4096)
+        assert [kw["max_tokens"] for kw in fake.kwargs_log] == [4096, 4096]
+
     def test_extra_body_disables_thinking(self):
         """OpenAI 兼容系走 extra_body.thinking=disabled + 小 max_tokens"""
         llm, fake = _make_openai(['{"calls": []}'])
@@ -240,7 +252,7 @@ class _RecordingLlm:
         self.used.append("chat")
         return self.text
 
-    def json_task(self, messages, temperature=0.7):
+    def json_task(self, messages, temperature=0.7, **kwargs):
         self.used.append("json_task")
         return self.text
 

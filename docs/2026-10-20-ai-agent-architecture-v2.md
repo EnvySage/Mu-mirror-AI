@@ -1,10 +1,12 @@
 # Mirror AI 对话架构 v2：Python 管 AI 查询与编排，Java 管接入和业务写入
 
 > 日期：2026-10-20（Asia/Shanghai）
-> 状态：实施设计，尚未实现；依据当日三个仓库代码与本次讨论制定。
+> 状态：历史实施设计；2026-10-21 的接线更新见下方说明。
 > 范围：对话助手。分类、画像生成、上传消化、审核、普通页面 CRUD 保持现有业务归属。
 > 配套实施清单：[Implementation Plan](superpowers/plans/2026-10-20-ai-agent-implementation.md)。
 > 本文取代原迁移草案作为**新版对话**的实施依据；原文 `2026-10-20-chat-agent-langgraph-migration.md` 保留作历史参考。本文中的文件、接口和表，除“现状”明确列出的以外，都是拟新增或拟修改项。
+
+> **实现更新（2026-10-21）：** graph_v2 的聊天入口现已通过 gRPC `prepare_tools` 接收 Java 注册表中的待确认工具，并用 `prepare_action` 事件请求 Java 创建一张操作卡。记录、待办、记忆候选、成长调整都走现有 `PREPARE_WRITE` 执行器和前端 `action_proposal`/`action_status` SSE；用户确认仍由 Java 卡片接口处理。普通聊天请求不再携带 `create_record` 直接写 grant。本文第10节描述的是早期设计中的直接创建路径，不是当前普通聊天路径。Java/Vue 实际联调仍需验收，legacy 仍是默认引擎。
 
 ## 1. 先读这一页：最终决定
 
