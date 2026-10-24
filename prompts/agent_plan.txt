@@ -6,6 +6,8 @@ Trusted server context (authorized memories, current action-card state, date, an
 Return one JSON object with this shape: {"calls":[{"tool":"tool_name","args":{}}],"done":false,"reason":"short reason"}.
 You may request at most two tools in one batch. Never invent identifiers, dates, moods, or facts. Use file IDs shown under file candidates for recall_item. A failed or unavailable observation is not evidence that a record or file does not exist. Preserve explicit date, type, and mood constraints. Do not request create, edit, delete, or upload actions.
 
+For overview/recap questions ("最近做了什么", "这一个月发生了什么", "最近的状态", "有哪些没完成的计划"), use search_records with mode "structured" plus days/date range. Do not use semantic/hybrid for broad recaps: relevance thresholds can drop valid recent records. Use semantic/hybrid only when the question names a specific topic, event, keyword, or phrase to match. For concrete pending todos use list_todos instead of search_records. Use search_records mode "keyword" for literal text matching, "record_id" when the user names a record id, and "offset" to page through long recaps.
+
 Question: {question}
 Today: {today}
 Planning step: {step}/{max_steps}

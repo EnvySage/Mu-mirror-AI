@@ -36,7 +36,7 @@ def test_screenshot_fake_call_is_replaced_across_arbitrary_chunks(engine, width)
     assert "<tool_call" not in result
     assert "operation_card" not in result
     assert "不应泄漏" not in result
-    assert "工具调用未完成" in result
+    assert "工具调用未完成" not in result
     assert result.startswith("草稿正文。")
     assert result.endswith("请查看。")
 
@@ -47,13 +47,20 @@ def test_unterminated_call_is_suppressed_without_buffering_entire_payload(engine
     assert result.startswith("你好")
     assert "private" not in result
     assert "<tool_call" not in result
-    assert result.count("工具调用未完成") == 1
+    assert result == "你好"
 
 
 @pytest.mark.parametrize("engine", ["legacy", "graph_v2"])
 def test_normal_text_and_fenced_protocol_examples_remain_intact(engine):
     text = '1 < 2。\n```xml\n<tool_call>示例</tool_call>\n```\n正常正文'
     assert answer(list(text), engine) == text
+
+
+@pytest.mark.parametrize("engine", ["legacy", "graph_v2"])
+def test_bracket_tool_call_placeholder_is_blocked(engine):
+    result = answer(list("[工具_call id=call_1234567890]"), engine)
+    assert "call_1234567890" not in result
+    assert "工具调用未完成" in result
 
 
 @pytest.mark.parametrize("engine", ["legacy", "graph_v2"])
@@ -71,5 +78,5 @@ def test_only_fake_call_returns_useful_message_instead_of_empty_answer(engine):
 def test_other_pseudo_call_envelopes_are_also_blocked(engine, opening, closing):
     result = answer(list("正文" + opening + "internal_payload" + closing + "结束"), engine)
     assert "internal_payload" not in result
-    assert "工具调用未完成" in result
+    assert "工具调用未完成" not in result
     assert result.startswith("正文") and result.endswith("结束")

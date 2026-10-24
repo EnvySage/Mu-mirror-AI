@@ -234,7 +234,9 @@ def _context_text(chunks, tool_results) -> str:
         if failed:
             return _CONTEXT_SEARCH_FAILED
         if has_records:
-            return _CONTEXT_EMPTY_WITH_TOOLS
+            # 把检索到的记录同时放进主上下文：只放在“工具结果”附录里时，弱模型容易忽略并回答“没翻到”。
+            rendered = _format_tool_results_with_sources(results, citation_offset=0)[0]
+            return "（本轮已检索到以下日记记录，均可作为事实依据）\n" + rendered
         return _CONTEXT_SEARCH_EMPTY
     if any(r.success for r in results):
         return _CONTEXT_EMPTY_WITH_TOOLS
@@ -451,38 +453,116 @@ def stream_answer(
     """Yield filtered thinking/delta/final events using the legacy wire semantics."""
     from services.tool_output_guard import ToolCallTextFilter
 
-    protocol_filter = ToolCallTextFilter()
     buffer: list[str] = []
+    start_buffer: list[str] = []
+    started = False
     n_files = sum(
         len(_extract_file_items(r.tool, _parse_payload(r.payload_json)))
         for r in tool_results if r.success
     )
-    fake_cites = _FakeCiteFilter(
-        (r.tool for r in tool_results),
-        max_cite=len(chunks) + len(tool_sources),
-        max_file_cite=n_files,
-    )
-    stream = llm.chat_stream(messages)
-    try:
-        for kind, text in stream:
-            if cancel is not None and cancel():
-                return
-            if kind == "thinking":
-                yield AnswerEvent(kind="thinking", content=text)
-                continue
-            text = fake_cites.feed(protocol_filter.feed(text))
-            if not text:
-                continue
-            buffer.append(text)
-            yield AnswerEvent(kind="delta", content=text)
-    finally:
-        close = getattr(stream, "close", None)
-        if callable(close):
-            close()
-    tail = fake_cites.feed(protocol_filter.flush()) + fake_cites.flush()
-    if tail:
-        buffer.append(tail)
-        yield AnswerEvent(kind="delta", content=tail)
+
+    def new_cites():
+        return _FakeCiteFilter(
+            (r.tool for r in tool_results),
+            max_cite=len(chunks) + len(tool_sources),
+            max_file_cite=n_files,
+        )
+
+    def flush_start():
+        nonlocal started
+        if not start_buffer:
+            return None
+        chunk = "".join(start_buffer)
+        start_buffer.clear()
+        started = True
+        buffer.append(chunk)
+        return AnswerEvent(kind="delta", content=chunk)
+
+    def consume_first(stream, protocol_filter, fake_cites):
+        nonlocal started
+        try:
+            for kind, text in stream:
+                if cancel is not None and cancel():
+                    return
+                if kind == "thinking":
+                    yield AnswerEvent(kind="thinking", content=text)
+                    continue
+                filtered = fake_cites.feed(protocol_filter.feed(text))
+                if not filtered:
+                    continue
+                if started:
+                    buffer.append(filtered)
+                    yield AnswerEvent(kind="delta", content=filtered)
+                    continue
+                start_buffer.append(filtered)
+                stripped = "".join(start_buffer).strip()
+                if stripped and stripped != ToolCallTextFilter.MESSAGE:
+                    event = flush_start()
+                    if event:
+                        yield event
+        finally:
+            close = getattr(stream, "close", None)
+            if callable(close):
+                close()
+        tail = fake_cites.feed(protocol_filter.flush()) + fake_cites.flush()
+        if tail:
+            if started:
+                buffer.append(tail)
+                yield AnswerEvent(kind="delta", content=tail)
+            else:
+                start_buffer.append(tail)
+                if "".join(start_buffer).strip() not in ("", ToolCallTextFilter.MESSAGE):
+                    event = flush_start()
+                    if event:
+                        yield event
+
+    protocol_filter = ToolCallTextFilter(emit_block_message=False)
+    fake_cites = new_cites()
+    yield from consume_first(llm.chat_stream(messages), protocol_filter, fake_cites)
+
+    if protocol_filter.blocked:
+        start_buffer.clear()
+        repair_messages = list(messages) + [{
+            "role": "user",
+            "content": "你刚才输出了不存在的工具调用。本轮没有工具可调用。"
+                       "请只使用已经提供的资料和工具结果，用自然语言直接回答原问题，不要输出任何标签或 JSON 工具参数。",
+        }]
+        retry_filter = ToolCallTextFilter(emit_block_message=False)
+        retry_cites = new_cites()
+        retry_buffer = []
+        stream = llm.chat_stream(repair_messages)
+        try:
+            for kind, text in stream:
+                if cancel is not None and cancel():
+                    break
+                if kind == "thinking":
+                    yield AnswerEvent(kind="thinking", content=text)
+                    continue
+                filtered = retry_cites.feed(retry_filter.feed(text))
+                if filtered:
+                    retry_buffer.append(filtered)
+        finally:
+            close = getattr(stream, "close", None)
+            if callable(close):
+                close()
+        tail = retry_cites.feed(retry_filter.flush()) + retry_cites.flush()
+        if tail:
+            retry_buffer.append(tail)
+        if not retry_filter.blocked and retry_buffer:
+            retry_text = "".join(retry_buffer)
+            existing = "".join(buffer)
+            if retry_text.startswith(existing):
+                retry_text = retry_text[len(existing):]
+            if retry_text:
+                buffer.append(retry_text)
+                yield AnswerEvent(kind="delta", content=retry_text)
+        if retry_filter.blocked and not "".join(buffer).strip():
+            buffer.append(ToolCallTextFilter.MESSAGE)
+            yield AnswerEvent(kind="delta", content=ToolCallTextFilter.MESSAGE)
+    elif not started:
+        event = flush_start()
+        if event:
+            yield event
 
     sources = _extract_sources("".join(buffer), chunks, tool_sources)
     yield AnswerEvent(kind="done", sources=sources)
@@ -646,34 +726,117 @@ def stream_agent_answer(
     """Stream graph_v2 output with per-chunk fake-citation filtering and frozen sources."""
     from services.tool_output_guard import ToolCallTextFilter
 
-    protocol_filter = ToolCallTextFilter()
     evidence = tuple(evidence)
     index = citation_index or assign_citations(evidence)
     tool_names = [observation.tool for observation in observations]
+    buffer = []
+    start_buffer = []
+    started = False
+
+    def flush_start():
+        nonlocal started
+        if not start_buffer:
+            return None
+        chunk = "".join(start_buffer)
+        start_buffer.clear()
+        started = True
+        buffer.append(chunk)
+        return AnswerEvent(kind="delta", content=chunk)
+
+    def consume_first(stream, protocol_filter, fake_cites):
+        nonlocal started
+        try:
+            for kind, text in stream:
+                if cancel is not None and cancel():
+                    return
+                if kind == "thinking":
+                    yield AnswerEvent(kind="thinking", content=text)
+                    continue
+                filtered = fake_cites.feed(protocol_filter.feed(text))
+                if not filtered:
+                    continue
+                if started:
+                    buffer.append(filtered)
+                    yield AnswerEvent(kind="delta", content=filtered)
+                    continue
+                start_buffer.append(filtered)
+                stripped = "".join(start_buffer).strip()
+                # 只在开头全是拦截提示时继续压住，等确认有没有正常正文。
+                if stripped and stripped != ToolCallTextFilter.MESSAGE:
+                    event = flush_start()
+                    if event:
+                        yield event
+        finally:
+            close = getattr(stream, "close", None)
+            if callable(close):
+                close()
+        tail = fake_cites.feed(protocol_filter.flush()) + fake_cites.flush()
+        if tail:
+            if started:
+                buffer.append(tail)
+                yield AnswerEvent(kind="delta", content=tail)
+            else:
+                start_buffer.append(tail)
+                if "".join(start_buffer).strip() not in ("", ToolCallTextFilter.MESSAGE):
+                    event = flush_start()
+                    if event:
+                        yield event
+
+    protocol_filter = ToolCallTextFilter(emit_block_message=False)
     fake_cites = _FakeCiteFilter(
         tool_names, max_cite=len(index.diary), max_file_cite=len(index.vault_items),
     )
-    buffer = []
-    stream = llm.chat_stream(messages, timeout=timeout, max_retries=0)
-    try:
-        for kind, text in stream:
-            if cancel is not None and cancel():
-                return
-            if kind == "thinking":
-                yield AnswerEvent(kind="thinking", content=text)
-                continue
-            filtered = fake_cites.feed(protocol_filter.feed(text))
-            if filtered:
-                buffer.append(filtered)
-                yield AnswerEvent(kind="delta", content=filtered)
-    finally:
-        close = getattr(stream, "close", None)
-        if callable(close):
-            close()
-    tail = fake_cites.feed(protocol_filter.flush()) + fake_cites.flush()
-    if tail:
-        buffer.append(tail)
-        yield AnswerEvent(kind="delta", content=tail)
+    yield from consume_first(llm.chat_stream(messages, timeout=timeout, max_retries=0),
+                             protocol_filter, fake_cites)
+
+    # 模型有时会在最终回答阶段继续写 <tool_call>。这里没有可执行工具：
+    # 如果整段回答只有一个拦截提示，丢弃它并重试一次，要求只用观察结果自然语言回答。
+    if protocol_filter.blocked:
+        start_buffer.clear()
+        repair_messages = list(messages) + [{
+            "role": "user",
+            "content": "你刚才输出了不存在的工具调用。本轮没有工具可调用。"
+                       "请只使用已经提供的证据和观察结果，用自然语言直接回答原问题，不要输出任何标签或 JSON 工具参数。",
+        }]
+        retry_filter = ToolCallTextFilter(emit_block_message=False)
+        retry_cites = _FakeCiteFilter(
+            tool_names, max_cite=len(index.diary), max_file_cite=len(index.vault_items),
+        )
+        retry_buffer = []
+        stream = llm.chat_stream(repair_messages, timeout=timeout, max_retries=0)
+        try:
+            for kind, text in stream:
+                if cancel is not None and cancel():
+                    break
+                if kind == "thinking":
+                    yield AnswerEvent(kind="thinking", content=text)
+                    continue
+                filtered = retry_cites.feed(retry_filter.feed(text))
+                if filtered:
+                    retry_buffer.append(filtered)
+        finally:
+            close = getattr(stream, "close", None)
+            if callable(close):
+                close()
+        tail = retry_cites.feed(retry_filter.flush()) + retry_cites.flush()
+        if tail:
+            retry_buffer.append(tail)
+        if not retry_filter.blocked and retry_buffer:
+            retry_text = "".join(retry_buffer)
+            existing = "".join(buffer)
+            if retry_text.startswith(existing):
+                retry_text = retry_text[len(existing):]
+            if retry_text:
+                buffer.append(retry_text)
+                yield AnswerEvent(kind="delta", content=retry_text)
+        if retry_filter.blocked and not "".join(buffer).strip():
+            buffer.append(ToolCallTextFilter.MESSAGE)
+            yield AnswerEvent(kind="delta", content=ToolCallTextFilter.MESSAGE)
+    elif not started:
+        event = flush_start()
+        if event:
+            yield event
+
     answer = "".join(buffer)
     yield AnswerEvent(
         kind="done",

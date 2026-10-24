@@ -80,6 +80,7 @@ class MirrorChatServicer(pb2_grpc.MirrorChatServicer):
         llm_config = request.llm_config
 
         print(f"[Chat] question: {question[:80]} | chunks={len(request.chunks)} | history={len(request.history)}")
+        print(f"[Chat] tool_results={len(request.tool_results)} payload_chars={sum(len(r.payload_json) for r in request.tool_results)}")
         print(f"[Chat] LLM: provider={llm_config.provider}, model={llm_config.model}")
 
         try:

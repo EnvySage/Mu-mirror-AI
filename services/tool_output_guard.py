@@ -10,13 +10,20 @@ class ToolCallTextFilter:
         "<tool_calls>": "</tool_calls>",
         "<function_calls>": "</function_calls>",
         "<function=": "</function>",
+        # 部分第三方模型把未执行的工具调用写成方括号占位符
+        "[工具_call": "]",
+        "[工具调用": "]",
+        "[tool_call": "]",
+        "[function_call": "]",
     }
     _FENCES = ("```", "~~~")
 
-    def __init__(self):
+    def __init__(self, emit_block_message: bool = True):
         self.pending = ""
         self.closing = ""
         self.fence = ""
+        self.blocked = False
+        self.emit_block_message = emit_block_message
 
     def feed(self, text: str) -> str:
         self.pending += text
@@ -44,8 +51,11 @@ class ToolCallTextFilter:
                     output.append(token)
                 else:
                     self.closing = self._CALLS[token]
-                    output.append(self.MESSAGE)
-                    print("[Answer] blocked model-written tool protocol in answer content")
+                    if not self.blocked:
+                        self.blocked = True
+                        if self.emit_block_message:
+                            output.append(self.MESSAGE)
+                        print("[Answer] blocked model-written tool protocol in answer content")
                 continue
 
             # A tag or fence may begin in this chunk and finish in the next one.
@@ -62,5 +72,8 @@ class ToolCallTextFilter:
             return ""
         if not self.fence and any(token.startswith(tail.lower()) and len(tail) >= 5
                                   for token in self._CALLS):
-            return self.MESSAGE
+            if self.blocked:
+                return ""
+            self.blocked = True
+            return self.MESSAGE if self.emit_block_message else ""
         return tail
