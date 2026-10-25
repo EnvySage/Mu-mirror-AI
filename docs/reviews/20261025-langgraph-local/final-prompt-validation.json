@@ -1,0 +1,20 @@
+{
+  "summary": "Validated the final native_messages transport instruction change: existing system content is preserved and appended, absent system context creates a system message, and caller message dictionaries remain unchanged; OpenAI and Anthropic native planner paths both consume the helper. No blocker found in this bounded addendum.",
+  "command": "PYTHONPATH='C:/Users/15999/AppData/Local/Temp/mirror-langgraph-audit-deps-20261025;E:/project/mirror/own/Mu-mirror-AI' .venv/Scripts/python.exe -B -m pytest tests/test_graph_planning_protocol.py -q -p no:cacheprovider",
+  "result": {
+    "exit_code": 0,
+    "tests_passed": 43,
+    "duration_seconds": 33.62,
+    "additional_replays": "3 native_messages existing-system/no-system/empty-input shape and immutability checks passed",
+    "external_calls": "None; protocol tests use mocked SDK HTTP transports"
+  },
+  "reviewed_file": "E:/project/mirror/own/Mu-mirror-AI/llm/planning.py",
+  "sha256": "3be2dab5fe9efc55e53f451eb3a3547f86a2c53befe5bc96bf27274d60eb40aa",
+  "runtime": "Python 3.12.10",
+  "base_head": "fca6ca625aa60536a3a288bae9538cf092c24c29",
+  "line_evidence": [
+    "llm/planning.py:61-66 copies caller message dictionaries and appends instruction to existing system content or prepends new system message",
+    "llm/openai_llm.py:215 passes native_messages output to native planning request",
+    "llm/anthropic_llm.py:282 splits system context after native_messages for native protocol"
+  ]
+}

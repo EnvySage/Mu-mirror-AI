@@ -44,7 +44,7 @@ def build_graph():
         },
     )
     graph.add_edge("retrieve", "plan")
-    graph.add_conditional_edges("plan", nodes.after_plan, {"act": "act", "backstop": "backstop"})
+    graph.add_conditional_edges("plan", nodes.after_plan, {"act": "act", "backstop": "backstop", "plan": "plan"})
     graph.add_edge("act", "observe")
     graph.add_conditional_edges(
         "observe",
@@ -65,7 +65,7 @@ def build_graph():
     graph.add_conditional_edges(
         "backstop",
         nodes.after_backstop,
-        {"act": "act", "synthesize": "synthesize", "fallback": "fallback", "finalize": "finalize"},
+        {"act": "act", "synthesize": "synthesize", "fallback": "fallback", "finalize": "finalize", "clarify": "clarify"},
     )
     for node_name in ("synthesize", "fallback", "clarify", "write_disabled", "create_record", "prepare_action"):
         graph.add_edge(node_name, "finalize")

@@ -16,6 +16,8 @@ agent:
   loop_budget_ms: 180000
   answer_budget_ms: 180000
   max_plan_rounds: 4
+  # auto: native tool calls, capability-error fallback to text_json; or native/json_schema/text_json.
+  planning_protocol: auto
   half_life_days: 30
 
 # Prompt 模板路径

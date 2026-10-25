@@ -178,6 +178,69 @@ def test_todo_stats_use_separate_todo_approval(agent_pool, read_scope):
     assert stats.by_status == {"not_started": 0, "in_progress": 1, "completed": 0}
 
 
+def test_ordered_body_pages_and_query_excerpts_keep_authorization(agent_pool, read_scope):
+    repository = VaultRepository(agent_pool)
+    first = repository.recall(read_scope, 303, None, None, limit=1)
+    assert [snippet.chunk_id for snippet in first.snippets] == [4002]
+    assert (first.next_offset, first.complete, first.content_scope) == (1, False, "partial")
+    last = repository.recall(read_scope, 303, None, None, offset=1, limit=1)
+    assert [snippet.chunk_id for snippet in last.snippets] == [4003]
+    assert (last.next_offset, last.complete, last.content_scope) == (None, True, "full")
+    assert [snippet.text for snippet in (*first.snippets, *last.snippets)] == [
+        "approved vault body segment alpha", "approved vault body segment beta",
+    ]
+    excerpts = repository.recall(read_scope, 303, "query", _FixedEmbedder(), limit=1)
+    assert excerpts.content_scope == "excerpt" and not excerpts.complete
+    assert excerpts.next_offset == 1
+    pending = repository.recall(read_scope, 301, None, None, offset=1, limit=1)
+    assert pending.snippets == () and not pending.complete
+    assert repository.recall(read_scope, 302, None, None, offset=1, limit=1) is None
+
+
+def test_record_fragment_and_todo_pages_use_only_scoped_views(agent_pool, read_scope):
+    repository = RecordRepository(agent_pool)
+    assert [chunk.chunk_id for chunk in repository.search(read_scope, record_id=101, limit=1)] == [1001]
+    assert [chunk.chunk_id for chunk in repository.search(read_scope, record_id=101, offset=1, limit=1)] == [1010]
+    assert repository.search(read_scope, record_id=101, offset=2) == []
+    for record_id in (102, 103, 104, 105, 106, 107, 108, 201, 401):
+        assert repository.search(read_scope, record_id=record_id) == []
+    for kwargs in ({"offset": -1}, {"offset": True}, {"record_id": False}):
+        with pytest.raises(ValueError):
+            repository.search(read_scope, **kwargs)
+
+    todos = TodoRepository(agent_pool)
+    assert [(todo.id, todo.title, todo.record_id) for todo in todos.list(read_scope)] == [
+        (601, "independently approved todo", 106),
+    ]
+    assert [todo.id for todo in todos.list(read_scope, status="in_progress")] == [601]
+    assert todos.list(read_scope, status="completed") == []
+    assert todos.list(read_scope, offset=1, limit=1) == []
+
+
+def test_body_and_todo_tools_run_against_real_authorized_repositories(agent_pool, read_scope):
+    from datetime import date
+    from agent_core.types import RuntimeContext, ToolCall
+    from agent_tools.read_tools import execute_read_tool
+
+    runtime = RuntimeContext(read_scope.user_id, read_scope.session_id, "pages-test", read_scope.user_message_id,
+                             date(2026, 10, 20), "Asia/Shanghai", read_scope, read_pool=agent_pool)
+    first = execute_read_tool(ToolCall("r1", "read_record", {"record_id": 101, "limit": 1}), runtime)
+    assert first.success and first.data["record_id"] == 101
+    assert first.data["next_offset"] == 1 and not first.data["complete"]
+    last = execute_read_tool(ToolCall("r2", "read_record", {"record_id": 101, "offset": 1, "limit": 1}), runtime)
+    assert last.success and last.data["offset"] == 1
+    assert last.data["next_offset"] is None and last.data["complete"]
+    assert [piece["text"] for piece in first.data["snippets"] + last.data["snippets"]] == [
+        "approved coverage phrase one", "approved coverage phrase two",
+    ]
+    forbidden = execute_read_tool(ToolCall("r3", "read_record", {"record_id": 201}), runtime)
+    assert forbidden.code == "EMPTY" and not forbidden.has_material and not forbidden.data["body_available"]
+    listed = execute_read_tool(ToolCall("t1", "list_todos", {"status": "in_progress", "limit": 1}), runtime)
+    assert listed.success and listed.data["complete"]
+    assert [todo["id"] for todo in listed.data["todos"]] == [601]
+    assert listed.evidence[0].record_id == 106
+
+
 def test_read_role_cannot_write_or_read_private_base_tables(read_dsn):
     statements = (
         "UPDATE public.records SET content = 'not allowed' WHERE id = 101",

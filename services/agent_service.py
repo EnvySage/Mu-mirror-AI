@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import hmac
+import json
 import os
 import threading
 from types import SimpleNamespace
 from typing import Any, Callable, Iterator
 
 import grpc
+from loguru import logger
 
 from agent_core.runner import AgentDependencies, run_agent
 from agent_core.types import AgentEvent
@@ -97,6 +99,13 @@ class AgentRunnerServicer(agent_grpc.AgentRunnerServicer):
     def _to_proto_event(self, run_id: str, event: AgentEvent, sequence: int, vault_metadata):
         output = pb2.AgentEvent(run_id=run_id, seq=sequence)
         metadata = event.metadata if isinstance(event.metadata, dict) else {}
+        if event.kind in {"completed", "failed"}:
+            logger.info("graph_v2 {}", json.dumps({
+                "run_id": run_id, "terminal": event.kind, "stop_reason": metadata.get("stop_reason"),
+                "outcome": metadata.get("outcome"), "metrics": metadata.get("metrics", {}),
+                "build_version": os.getenv("MIRROR_AI_BUILD_VERSION", "unknown"),
+                "runtime_directory": os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            }, ensure_ascii=False))
         if event.kind == "meta":
             output.meta.route = str(metadata.get("route", ""))
             output.meta.tools_used.extend(str(value) for value in metadata.get("tools_used", ()) or ())
@@ -209,4 +218,6 @@ def _create_default_dependencies() -> AgentDependencies:
     )
     command_base_url = os.getenv("MIRROR_AGENT_COMMAND_BASE_URL", "").strip()
     command_client = CommandClient(command_base_url) if command_base_url else None
-    return AgentDependencies(repositories=repositories, command_client=command_client)
+    from config import CONFIG
+    return AgentDependencies(repositories=repositories, command_client=command_client,
+                             planning_protocol=CONFIG.get("agent", {}).get("planning_protocol", "auto"))

@@ -1,0 +1,22 @@
+{
+  "verdicts": [
+    {
+      "#": 1,
+      "status": "rejected",
+      "protected_subject": null,
+      "reason": "Original reproduced defect was fixed before validation: current agent_core/evidence.py:102-106 replaces same-identity evidence when the incoming text is a strictly longer prefix extension; independently running current ai working tree over HEAD fca6ca625aa60536a3a288bae9538cf092c24c29 with Python 3.12.10 and supplied local PYTHONPATH (no DB/model calls) passed test_ordered_body_read_replaces_earlier_excerpt_of_the_same_chunk, which first reads a 500-character excerpt then the same ordered chunk and asserts its tail beyond 4000 characters reaches the actual compiled-graph answer prompt and material_status remains sufficient."
+    },
+    {
+      "#": 2,
+      "status": "rejected",
+      "protected_subject": "public-contract",
+      "reason": "Original reproduced defect was fixed before validation: current services/answer_service.py:797-832 catches translated AiServiceError/TimeoutError during stream construction and iteration and yields typed failure; on current ai working tree over HEAD fca6ca625aa60536a3a288bae9538cf092c24c29, Python 3.12.10 with supplied local PYTHONPATH, independently passed compiled-graph test_answer_transport_failure_preserves_visible_partial_status asserting visible delta followed by failed/OUTPUT_UNAVAILABLE/output_error/has_partial_answer=True, plus four direct pre-output/post-output LlmUnavailableError/LlmTimeoutError replays asserting exactly one generation, no done and the correct typed code."
+    },
+    {
+      "#": 3,
+      "status": "rejected",
+      "protected_subject": "public-contract",
+      "reason": "Original reproduced defect was fixed before validation: current services/tool_output_guard.py:14-30 and92-98 recognizes calls arrays, nested function envelopes and tool_use/invoke openers before release; on current ai working tree over HEAD fca6ca625aa60536a3a288bae9538cf092c24c29, Python 3.12.10 with supplied local PYTHONPATH, independently passed all 12 test_graph_planning_json_envelope_cannot_be_published_as_an_answer variants at chunk widths1/7/1000 asserting no delta/done and OUTPUT_PROTOCOL_BLOCKED, plus two syntactically valid calls/function JSON replays through native answer_stream with finish=stop and one-character chunks; nearby explicit-example/ordinary-JSON/retry checks also passed within122 tests in3.91s."
+    }
+  ]
+}

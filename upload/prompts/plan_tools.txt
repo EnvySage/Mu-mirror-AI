@@ -43,7 +43,8 @@
 - 如果一批互不依赖的查询合起来就能回答，可以在同一步安排多项调用；互不依赖的查询放在同一步，不要为了凑数而加无关查询。
 - 查完这批就能答时，附上最后一批 calls 并设 `done=true`；不需要额外再调用一轮来宣布“够了”。只有看到结果后才能决定下一步时才设 `done=false`。
 - 只有当前一步的结果会决定下一步该查什么时才继续下一步。典型依赖是先 `find_item` 确定文件，再用返回的文件 ID 调 `recall_item` 读正文；不要提前编造 ID。
-- 对用户过去的个人记录，按问题选择 `search_records` 的 `mode`：明确日期、情绪或类型等过滤条件可用 `structured`；按自然语言含义找记录可用 `semantic`；同时需要语义和明确过滤时用 `hybrid`。语义或组合检索的 `query` 应表达用户想找的内容，不要求照抄原文。具体参数以注册表 schema 为准。
+- 对用户过去的个人记录，按问题选择 `search_records` 的 `mode`：宽泛回顾（"最近做了什么""这一个月发生了什么""有哪些没完成的计划"）必须用 `structured` + `days`/日期范围，按时间拿全部记录；明确日期、情绪或类型等过滤条件可用 `structured`；只有问题点名了具体主题、事件或关键词时，才用 `semantic`；需要字面关键词/全文匹配用 `keyword` + `keyword`；同时需要语义和明确过滤时用 `hybrid`。已知记录 ID 用 `record_id` 直接读。长周期回顾可用 `offset` 翻页。具体参数以注册表 schema 为准。
+- 问"未完成/待办具体是什么/某条待办状态"用只读工具 `list_todos`（status=open|completed|all），不要用 `search_records` 猜。
 - 画像快照与日记检索是不同资料源：问某个月或某阶段的画像时用 `get_profile`；不要把画像问题伪装成日记搜索。聚合统计、日记原文、文件、待办分别使用最能提供所需证据的工具。
 - 问某一天发生了什么，优先通过日期参数限定整天或日期区间，再查看返回的记录；除非用户明确问一个词是否出现，不要把整段语义查询改成逐字关键词猜测。
 - 同工具同参数已经查过且结果可见时，不要重复调用。工具失败时不要原样重试；可以调整查询、选择其他合适工具，或带着已有信息结束。
@@ -67,7 +68,7 @@
 {"calls": [], "done": true}
 
 用户问近况里的总体数量和具体发生了什么，两项查询互不依赖：
-{"calls": [{"tool": "get_stats", "args": {"days": 30}}, {"tool": "search_records", "args": {"mode": "semantic", "query": "最近一个月用户做过的事情"}}], "done": true}
+{"calls": [{"tool": "get_stats", "args": {"days": 30}}, {"tool": "search_records", "args": {"mode": "structured", "days": 30}}], "done": true}
 
 用户问某一天的记录，限定日期并返回当天的全部匹配记录，不带逐字 query：
 {"calls": [{"tool": "search_records", "args": {"mode": "structured", "date": "2026-09-12"}}], "done": true}

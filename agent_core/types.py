@@ -141,10 +141,19 @@ class AgentState:
     prepared_context: PreparedContext | None = None
     retrieval_summary: str = ""
     plan_done: bool = False
+    retry_plan: bool = False
     pending_auto_backstop: list[bool] = field(default_factory=list)
     backstop_attempted: bool = False
     error_code: str = ""
     degraded_reasons: list[str] = field(default_factory=list)
+    planning_protocol: str = "text_json"
+    plan_finish_reason: str = ""
+    answer_finish_reason: str = ""
+    answer_repair_count: int = 0
+    material_status: str = ""
+    material_note: str = ""
+    error_message: str = ""
+    prompt_hashes: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -180,3 +189,4 @@ class RuntimeContext:
     total_deadline: float | None = None
     assistant_context: Any = None
     prepare_tools: tuple[dict[str, str], ...] = ()
+    planning_protocol: str = "auto"

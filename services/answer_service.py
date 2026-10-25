@@ -409,6 +409,7 @@ class AnswerEvent:
     content: str = ""
     sources: list = field(default_factory=list)
     vault_refs: list = field(default_factory=list)
+    metadata: dict = field(default_factory=dict)
 
 
 def build_answer_bundle(
@@ -722,124 +723,147 @@ def stream_agent_answer(
     citation_index: CitationIndex | None = None,
     cancel: Callable[[], bool] | None = None,
     timeout: float | None = None,
+    deadline: float | None = None,
+    clock: Callable[[], float] | None = None,
+    allow_protocol_examples: bool | None = None,
 ):
-    """Stream graph_v2 output with per-chunk fake-citation filtering and frozen sources."""
-    from services.tool_output_guard import ToolCallTextFilter
+    """Publish one answer generation; only accepted output receives a done event."""
+    import re
+    import time
+    from services.tool_output_guard import GraphToolCallTextFilter
+    from mirror_core.errors import AiServiceError, LlmTimeoutError
 
-    evidence = tuple(evidence)
-    index = citation_index or assign_citations(evidence)
+    now = clock or time.monotonic
+    started_at = now()
+    budget_deadline = started_at + timeout if timeout is not None else None
+    bounds = [bound for bound in (deadline, budget_deadline) if bound is not None]
+    effective_deadline = min(bounds) if bounds else None
+    index = citation_index or assign_citations(tuple(evidence))
     tool_names = [observation.tool for observation in observations]
+    if allow_protocol_examples is None:
+        question = next((message.get("content", "") for message in reversed(messages)
+                         if message.get("role") == "user"), "")
+        protocol = re.search(r"tool_calls?|function_calls?|工具调用|工具协议|tool calling|tool protocol",
+                             question, re.IGNORECASE)
+        example = re.search(r"示例|例子|样例|语法|解释|讲解|展示|给出|example|syntax|explain|show|format",
+                            question, re.IGNORECASE)
+        allow_protocol_examples = bool(protocol and example)
+
     buffer = []
-    start_buffer = []
-    started = False
+    repair_count = 0
+    finish_reason = None
 
-    def flush_start():
-        nonlocal started
-        if not start_buffer:
-            return None
-        chunk = "".join(start_buffer)
-        start_buffer.clear()
-        started = True
-        buffer.append(chunk)
-        return AnswerEvent(kind="delta", content=chunk)
+    def failure(code, message):
+        return AnswerEvent(kind="failed", metadata={
+            "code": code, "message": message,
+            "finish_reason": finish_reason, "repair_count": repair_count,
+        })
 
-    def consume_first(stream, protocol_filter, fake_cites):
-        nonlocal started
+    def control_failure():
+        if cancel is not None and cancel():
+            return failure("CANCELLED", "回答已取消。")
+        if effective_deadline is not None and now() >= effective_deadline:
+            return failure("DEADLINE_EXCEEDED", "回答生成超过时间预算。")
+        return None
+
+    for attempt in range(2):
+        failed = control_failure()
+        if failed:
+            yield failed
+            return
+        remaining = timeout
+        if effective_deadline is not None:
+            # Preserve the first legacy timeout argument while sharing its budget.
+            remaining = timeout if attempt == 0 and deadline is None else effective_deadline - now()
+            if remaining <= 0:
+                yield failure("DEADLINE_EXCEEDED", "回答生成超过时间预算。")
+                return
+        attempt_messages = messages
+        if attempt:
+            repair_count = 1
+            attempt_messages = list(messages) + [{
+                "role": "user",
+                "content": "你刚才输出了不存在的工具调用。本轮没有工具可调用。"
+                           "请只使用已经提供的证据和观察结果，用自然语言直接回答原问题，不要输出任何标签或 JSON 工具参数。",
+            }]
+        protocol_filter = GraphToolCallTextFilter(allow_protocol_examples=allow_protocol_examples)
+        fake_cites = _FakeCiteFilter(tool_names, max_cite=len(index.diary),
+                                    max_file_cite=len(index.vault_items))
+        leading = []
+        finish_reason = None
+        native_stream_method = getattr(llm, "answer_stream", None)
+        stream_method = native_stream_method or llm.chat_stream
+        stream = None
         try:
-            for kind, text in stream:
-                if cancel is not None and cancel():
-                    return
-                if kind == "thinking":
-                    yield AnswerEvent(kind="thinking", content=text)
-                    continue
-                filtered = fake_cites.feed(protocol_filter.feed(text))
-                if not filtered:
-                    continue
-                if started:
-                    buffer.append(filtered)
-                    yield AnswerEvent(kind="delta", content=filtered)
-                    continue
-                start_buffer.append(filtered)
-                stripped = "".join(start_buffer).strip()
-                # 只在开头全是拦截提示时继续压住，等确认有没有正常正文。
-                if stripped and stripped != ToolCallTextFilter.MESSAGE:
-                    event = flush_start()
-                    if event:
-                        yield event
-        finally:
-            close = getattr(stream, "close", None)
-            if callable(close):
-                close()
-        tail = fake_cites.feed(protocol_filter.flush()) + fake_cites.flush()
-        if tail:
-            if started:
-                buffer.append(tail)
-                yield AnswerEvent(kind="delta", content=tail)
-            else:
-                start_buffer.append(tail)
-                if "".join(start_buffer).strip() not in ("", ToolCallTextFilter.MESSAGE):
-                    event = flush_start()
-                    if event:
-                        yield event
-
-    protocol_filter = ToolCallTextFilter(emit_block_message=False)
-    fake_cites = _FakeCiteFilter(
-        tool_names, max_cite=len(index.diary), max_file_cite=len(index.vault_items),
-    )
-    yield from consume_first(llm.chat_stream(messages, timeout=timeout, max_retries=0),
-                             protocol_filter, fake_cites)
-
-    # 模型有时会在最终回答阶段继续写 <tool_call>。这里没有可执行工具：
-    # 如果整段回答只有一个拦截提示，丢弃它并重试一次，要求只用观察结果自然语言回答。
-    if protocol_filter.blocked:
-        start_buffer.clear()
-        repair_messages = list(messages) + [{
-            "role": "user",
-            "content": "你刚才输出了不存在的工具调用。本轮没有工具可调用。"
-                       "请只使用已经提供的证据和观察结果，用自然语言直接回答原问题，不要输出任何标签或 JSON 工具参数。",
-        }]
-        retry_filter = ToolCallTextFilter(emit_block_message=False)
-        retry_cites = _FakeCiteFilter(
-            tool_names, max_cite=len(index.diary), max_file_cite=len(index.vault_items),
-        )
-        retry_buffer = []
-        stream = llm.chat_stream(repair_messages, timeout=timeout, max_retries=0)
-        try:
-            for kind, text in stream:
-                if cancel is not None and cancel():
+            stream = stream_method(attempt_messages, timeout=remaining, max_retries=0)
+            for kind, content in stream:
+                failed = control_failure()
+                if failed:
+                    break
+                if kind == "finish":
+                    finish_reason = content
                     break
                 if kind == "thinking":
-                    yield AnswerEvent(kind="thinking", content=text)
+                    yield AnswerEvent(kind="thinking", content=content)
                     continue
-                filtered = retry_cites.feed(retry_filter.feed(text))
+                if kind not in {"content", "text"}:
+                    continue
+                filtered = fake_cites.feed(protocol_filter.feed(content))
                 if filtered:
-                    retry_buffer.append(filtered)
+                    leading.append(filtered)
+                    if buffer or "".join(leading).strip():
+                        chunk = "".join(leading)
+                        leading.clear()
+                        buffer.append(chunk)
+                        yield AnswerEvent(kind="delta", content=chunk)
+                if protocol_filter.blocked:
+                    break
+        except (AiServiceError, TimeoutError) as exc:
+            timed_out = isinstance(exc, (LlmTimeoutError, TimeoutError))
+            failed = failure("OUTPUT_TIMEOUT" if timed_out else "OUTPUT_UNAVAILABLE",
+                             "回答生成超时。" if timed_out else "回答生成连接中断或模型暂不可用。")
         finally:
             close = getattr(stream, "close", None)
             if callable(close):
                 close()
-        tail = retry_cites.feed(retry_filter.flush()) + retry_cites.flush()
-        if tail:
-            retry_buffer.append(tail)
-        if not retry_filter.blocked and retry_buffer:
-            retry_text = "".join(retry_buffer)
-            existing = "".join(buffer)
-            if retry_text.startswith(existing):
-                retry_text = retry_text[len(existing):]
-            if retry_text:
-                buffer.append(retry_text)
-                yield AnswerEvent(kind="delta", content=retry_text)
-        if retry_filter.blocked and not "".join(buffer).strip():
-            buffer.append(ToolCallTextFilter.MESSAGE)
-            yield AnswerEvent(kind="delta", content=ToolCallTextFilter.MESSAGE)
-    elif not started:
-        event = flush_start()
-        if event:
-            yield event
-
-    answer = "".join(buffer)
-    yield AnswerEvent(
-        kind="done",
-        sources=index.sources_for(answer),
-        vault_refs=index.vault_refs_for(answer),
-    )
+        failed = control_failure() or failed
+        if failed:
+            yield failed
+            return
+        tail = fake_cites.feed(protocol_filter.flush()) + fake_cites.flush()
+        if not protocol_filter.blocked and tail:
+            leading.append(tail)
+        if finish_reason in {"tool_calls", "function_call", "tool_use"}:
+            protocol_filter.blocked = True
+        if protocol_filter.blocked:
+            if not buffer and attempt == 0:
+                continue
+            yield failure("OUTPUT_PROTOCOL_BLOCKED", "回答包含未执行的工具调用，请重试。")
+            return
+        if leading and (buffer or "".join(leading).strip()):
+            chunk = "".join(leading)
+            buffer.append(chunk)
+            yield AnswerEvent(kind="delta", content=chunk)
+        failed = control_failure()
+        if failed:
+            yield failed
+            return
+        if finish_reason in {"length", "max_tokens", "max_output_tokens"}:
+            yield failure("OUTPUT_TRUNCATED", "回答因输出长度限制而中断，请重试。")
+            return
+        if finish_reason in {"content_filter", "refusal"}:
+            yield failure("OUTPUT_BLOCKED", "回答被模型服务拦截，未生成可用答案。")
+            return
+        if finish_reason not in {"stop", "end_turn", "stop_sequence"} and (
+            native_stream_method is not None or finish_reason is not None
+        ):
+            yield failure("OUTPUT_INCOMPLETE", "模型未确认回答完整结束，请重试。")
+            return
+        answer = "".join(buffer)
+        if not answer.strip():
+            yield failure("OUTPUT_EMPTY", "未生成有效回答，请重试。")
+            return
+        yield AnswerEvent(kind="done", sources=index.sources_for(answer),
+                          vault_refs=index.vault_refs_for(answer),
+                          metadata={"finish_reason": finish_reason, "repair_count": repair_count})
+        return

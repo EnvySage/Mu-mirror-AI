@@ -167,12 +167,21 @@ class RecordRepository:
         filters: RecordFilters | Mapping[str, object] | None = None,
         *,
         limit: int = 20,
+        record_id: int | None = None,
+        offset: int = 0,
     ) -> list[RecordChunk]:
         scope = require_scope(scope)
         limit = bounded_limit(limit, maximum=MAX_SEARCH_LIMIT, default=20)
+        if record_id is not None and (isinstance(record_id, bool) or not isinstance(record_id, int) or record_id < 1):
+            raise ValueError("record_id must be a positive integer")
+        if isinstance(offset, bool) or not isinstance(offset, int) or offset < 0:
+            raise ValueError("offset must be a non-negative integer")
         normalized = _normalize_filters(filters)
         conditions = ["user_id = %s"]
         params: list[object] = [scope.user_id]
+        if record_id is not None:
+            conditions.append("record_id = %s")
+            params.append(record_id)
         if normalized.keyword:
             conditions.append("strpos(lower(segment), lower(%s)) > 0")
             params.append(normalized.keyword)
@@ -186,13 +195,14 @@ class RecordRepository:
             )
             params.append(list(normalized.moods))
         _append_range(conditions, params, normalized.start_at, normalized.end_at)
-        params.append(limit)
+        params.extend((limit, offset))
 
+        order = "chunk_id ASC" if record_id is not None else "created_at DESC, record_id DESC, chunk_id DESC"
         sql = (
             "SELECT chunk_id, record_id, user_id, segment, metadata, embedding, created_at "
             "FROM mirror_ai.record_chunks WHERE "
             + " AND ".join(conditions)
-            + " ORDER BY created_at DESC, record_id DESC, chunk_id DESC LIMIT %s"
+            + " ORDER BY " + order + " LIMIT %s OFFSET %s"
         )
         with read_transaction(self._pool, scope) as connection:
             rows = connection.execute(sql, params).fetchall()

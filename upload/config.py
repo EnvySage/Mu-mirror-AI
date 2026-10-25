@@ -20,6 +20,7 @@ _defaults = {
         "loop_budget_ms": 180000,
         "answer_budget_ms": 180000,
         "max_plan_rounds": 4,
+        "planning_protocol": "auto",
         "half_life_days": 30,
     },
     "llm": {

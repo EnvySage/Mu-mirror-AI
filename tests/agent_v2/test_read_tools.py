@@ -94,13 +94,14 @@ def call(tool, args=None):
     return ToolCall("c1", tool, args or {})
 
 
-def test_registry_has_exactly_nine_read_only_tools_and_rejects_scope_fields():
+def test_registry_has_exactly_eleven_read_only_tools_and_rejects_scope_fields():
     assert set(READ_TOOL_REGISTRY) == {
         "search_records", "get_stats", "get_profile", "get_coverage", "get_glossary",
         "compare_snapshots", "find_item", "recall_item", "save_item",
+        "read_record", "list_todos",
     }
     specs = get_read_tool_specs()
-    assert len(specs) == 9
+    assert len(specs) == 11
     assert {spec["effect"] for spec in specs} == {"read"}
     rejected = execute_read_tool(call("search_records", {"user_id": str(UUID(int=9))}), runtime(repositories()))
     assert rejected.code == "INVALID_ARGS"

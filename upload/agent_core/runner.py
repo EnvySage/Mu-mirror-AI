@@ -41,6 +41,7 @@ class AgentDependencies:
     max_loop_budget_ms: int = LOOP_BUDGET_MS
     answer_budget_ms: int = ANSWER_BUDGET_MS
     command_client: Any = None
+    planning_protocol: str = "auto"
 
 
 def canonical_tool_args(args: dict[str, Any]) -> str:
@@ -131,6 +132,8 @@ def make_runtime(request: Any, dependencies: AgentDependencies, cancellation: An
         raise ValueError("half_life_days must be positive")
 
     start = dependencies.clock()
+    if dependencies.planning_protocol not in {"auto", "native", "json_schema", "text_json"}:
+        raise ValueError("planning_protocol is unsupported")
     total_deadline = start + total_ms / 1000.0
     loop_deadline = min(total_deadline, start + loop_ms / 1000.0)
     answer_budget_ms = min(dependencies.answer_budget_ms, ANSWER_BUDGET_MS)
@@ -176,6 +179,7 @@ def make_runtime(request: Any, dependencies: AgentDependencies, cancellation: An
         timezone=timezone,
         assistant_context=getattr(request, "assistant_context", None),
         prepare_tools=tuple(prepare_tools),
+        planning_protocol=dependencies.planning_protocol,
         read_scope=read_scope,
         llm=llm,
         llm_config=llm_config,

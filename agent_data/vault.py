@@ -18,6 +18,7 @@ from agent_data.scope import ReadScope, bounded_limit, reject_scope_overrides, r
 VECTOR_DIMENSION = 1024
 MAX_FIND_LIMIT = 10
 MAX_RECALL_SEGMENTS = 3
+MAX_RECALL_LIMIT = 20
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,6 +57,9 @@ class VaultSnippet:
 class VaultRecall:
     item: VaultItem
     snippets: tuple[VaultSnippet, ...]
+    next_offset: int | None = None
+    complete: bool = False
+    content_scope: str = "excerpt"
 
 
 def _normalize_filters(filters: VaultFilters | Mapping[str, object] | None) -> VaultFilters:
@@ -348,6 +352,8 @@ class VaultRepository:
         query: str | None,
         embedder: Callable[[str], Sequence[float]] | object | None,
         *,
+        offset: int = 0,
+        limit: int = MAX_RECALL_SEGMENTS,
         timeout: float | None = None,
         max_retries: int | None = None,
     ) -> VaultRecall | None:
@@ -356,6 +362,9 @@ class VaultRepository:
             raise TypeError("item_id must be an integer")
         if item_id < 1:
             raise ValueError("item_id must be positive")
+        if isinstance(offset, bool) or not isinstance(offset, int) or offset < 0:
+            raise ValueError("offset must be a non-negative integer")
+        limit = bounded_limit(limit, maximum=MAX_RECALL_LIMIT, default=MAX_RECALL_SEGMENTS)
         query = _query_text(query)
         with read_transaction(self._pool, scope) as connection:
             row = connection.execute(
@@ -376,19 +385,22 @@ class VaultRepository:
                     "SELECT chunk_id, record_id, segment, created_at "
                     "FROM mirror_ai.vault_content "
                     "WHERE user_id = %s AND vault_item_id = %s "
-                    "ORDER BY chunk_id ASC LIMIT %s",
-                    (scope.user_id, item_id, MAX_RECALL_SEGMENTS),
+                    "ORDER BY chunk_id ASC LIMIT %s OFFSET %s",
+                    (scope.user_id, item_id, limit + 1, offset),
                 ).fetchall()
                 snippets = tuple(
                     VaultSnippet(
                         chunk_id=result["chunk_id"],
                         record_id=result["record_id"],
-                        text=result["segment"][:300],
+                        text=result["segment"],
                         created_at=result["created_at"],
                     )
-                    for result in rows
+                    for result in rows[:limit]
                 )
-            return VaultRecall(item=item, snippets=snippets)
+            has_more = len(rows) > limit
+            return VaultRecall(item=item, snippets=snippets,
+                               next_offset=offset + limit if has_more else None,
+                               complete=not has_more, content_scope="partial" if has_more else "full")
 
         if embedder is None:
             raise ValueError("an embedder is required for query-based vault recall")
@@ -399,8 +411,8 @@ class VaultRepository:
                 "(embedding OPERATOR(public.<=>) %s::public.vector) AS distance "
                 "FROM mirror_ai.vault_content "
                 "WHERE user_id = %s AND vault_item_id = %s AND embedding IS NOT NULL "
-                "ORDER BY distance ASC, chunk_id ASC LIMIT %s",
-                (vector_literal, scope.user_id, item_id, MAX_RECALL_SEGMENTS),
+                "ORDER BY distance ASC, chunk_id ASC LIMIT %s OFFSET %s",
+                (vector_literal, scope.user_id, item_id, limit + 1, offset),
             ).fetchall()
         snippets = tuple(
             VaultSnippet(
@@ -410,9 +422,10 @@ class VaultRepository:
                 created_at=result["created_at"],
                 distance=float(result["distance"]),
             )
-            for result in rows
+            for result in rows[:limit]
         )
-        return VaultRecall(item=item, snippets=snippets)
+        return VaultRecall(item=item, snippets=snippets,
+                           next_offset=offset + limit if len(rows) > limit else None)
 
     def metadata(self, scope: ReadScope, item_id: int) -> VaultItem | None:
         """Return scoped file metadata without reading extracted body content."""

@@ -1,25 +1,23 @@
-"""Execution adapters for the nine graph_v2 read-only tools."""
+"""Execution adapters for graph_v2 read-only tools."""
 
 from __future__ import annotations
 
-import re
 import time
 from datetime import date, datetime, time as day_time, timedelta
-from typing import Any, Mapping
+from typing import Any
 from zoneinfo import ZoneInfo
 
 from agent_core.types import Evidence, RuntimeContext, ToolCall, ToolObservation
 from agent_data.glossary import GlossaryRepository
 from agent_data.history import HistoryRepository
 from agent_data.profiles import ProfileRepository
-from agent_data.records import CONTENT_TYPES, MOODS, RecordFilters, RecordRepository, RecordWindow
-from agent_data.scope import ReadScope, bounded_limit, reject_scope_overrides, require_scope
+from agent_data.records import RecordFilters, RecordRepository, RecordWindow
+from agent_data.scope import ReadScope, bounded_limit, require_scope
 from agent_data.todos import TodoRepository
 from agent_data.vault import VaultFilters, VaultRepository
-from agent_tools.registry import READ_TOOL_REGISTRY
+from agent_tools.registry import READ_TOOL_REGISTRY, validate_read_tool_args
 
 
-_MONTH = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
 _DIMENSIONS = (
     ("mood", "mood_analysis"),
     ("learning", "learning_analysis"),
@@ -41,7 +39,7 @@ def execute_read_tool(call: ToolCall, runtime: RuntimeContext) -> ToolObservatio
         spec = READ_TOOL_REGISTRY.get(call.tool)
         if spec is None:
             return _observation(call_id, tool, False, "UNKNOWN", "未知或未授权的只读工具", latency=started)
-        args = _validate_args(call.args)
+        args = validate_read_tool_args(call.tool, call.args)
         repos = _repositories(runtime)
         scope = require_scope(runtime.read_scope)
         handler = _HANDLERS[call.tool]
@@ -57,15 +55,6 @@ def execute_read_tool(call: ToolCall, runtime: RuntimeContext) -> ToolObservatio
         )
 
 
-def _validate_args(args: Any) -> dict[str, Any]:
-    if args is None:
-        args = {}
-    if not isinstance(args, Mapping):
-        raise ValueError("tool arguments must be an object")
-    reject_scope_overrides(args)
-    return dict(args)
-
-
 def _repositories(runtime: RuntimeContext):
     repos = getattr(runtime, "repositories", None)
     if repos is not None:
@@ -78,13 +67,6 @@ def _repositories(runtime: RuntimeContext):
         records=RecordRepository(pool), todos=TodoRepository(pool), profiles=ProfileRepository(pool),
         glossary=GlossaryRepository(pool), history=HistoryRepository(pool), vault=VaultRepository(pool),
     )
-
-
-def _common(args: dict[str, Any], runtime: RuntimeContext, *, allow: set[str]) -> dict[str, Any]:
-    unknown = set(args) - allow
-    if unknown:
-        raise ValueError(f"unsupported argument(s): {', '.join(sorted(unknown))}")
-    return args
 
 
 def _date_bounds(args: dict[str, Any], runtime: RuntimeContext) -> tuple[datetime | None, datetime | None]:
@@ -137,20 +119,10 @@ def _positive_int(value: Any, name: str, *, maximum: int = 2_147_483_647) -> int
 
 
 def _search_records(args, runtime, scope, repos):
-    _common(args, runtime, allow={"date", "date_from", "date_to", "days", "moods", "content_type", "query", "limit"})
     start_at, end_at = _date_bounds(args, runtime)
     content_type = args.get("content_type")
-    if content_type is not None and content_type not in CONTENT_TYPES:
-        raise ValueError("content_type is not supported")
-    moods = args.get("moods", ())
-    if not isinstance(moods, (list, tuple)) or isinstance(moods, str):
-        raise ValueError("moods must be an array")
-    moods = tuple(dict.fromkeys(moods))
-    if any(not isinstance(mood, str) or mood not in MOODS for mood in moods):
-        raise ValueError("moods contains an unsupported value")
+    moods = tuple(dict.fromkeys(args.get("moods", ())))
     query = args.get("query")
-    if query is not None and (not isinstance(query, str) or len(query.strip()) > 256):
-        raise ValueError("query must contain at most 256 characters")
     limit = bounded_limit(args.get("limit", 20), maximum=20, default=20)
     filters = RecordFilters(
         keyword=query.strip() if isinstance(query, str) and query.strip() else None,
@@ -159,7 +131,8 @@ def _search_records(args, runtime, scope, repos):
         start_at=start_at,
         end_at=end_at,
     )
-    chunks = repos.records.search(scope, filters, limit=limit)
+    paging = {key: args[key] for key in ("record_id", "offset") if key in args}
+    chunks = repos.records.search(scope, filters, limit=limit, **paging)
     evidence = tuple(_chunk_evidence(chunk, "search_records") for chunk in chunks)
     records = [
         {
@@ -173,12 +146,51 @@ def _search_records(args, runtime, scope, repos):
         }
         for chunk in chunks
     ]
-    summary = f"找到 {len(records)} 段已授权日记片段" + ("（结果可能截断）" if len(records) == 20 else "")
-    return True, "OK" if records else "EMPTY", summary, {"records": records, "truncated": len(records) == 20}, evidence, bool(records)
+    truncated = len(records) == limit
+    summary = f"找到 {len(records)} 段已授权日记片段" + ("（结果可能截断）" if truncated else "")
+    return True, "OK" if records else "EMPTY", summary, {
+        "records": records, "truncated": truncated, "offset": args.get("offset", 0),
+        "next_offset": args.get("offset", 0) + len(records) if truncated else None,
+    }, evidence, bool(records)
+
+
+def _read_record(args, runtime, scope, repos):
+    record_id = args["record_id"]
+    offset, limit = args.get("offset", 0), args.get("limit", 20)
+    chunks = repos.records.search(scope, record_id=record_id, offset=offset, limit=limit)
+    has_more = bool(chunks) and len(chunks) == limit and bool(repos.records.search(
+        scope, record_id=record_id, offset=offset + len(chunks), limit=1,
+    ))
+    data = {
+        "record_id": record_id, "offset": offset,
+        "snippets": [{"chunk_id": chunk.chunk_id, "record_id": chunk.record_id,
+                      "date": _iso(chunk.created_at), "text": chunk.segment} for chunk in chunks],
+        "next_offset": offset + len(chunks) if has_more else None,
+        "complete": not has_more, "body_available": bool(chunks),
+        "content_scope": "partial" if has_more else "full",
+    }
+    evidence = tuple(_chunk_evidence(chunk, "read_record") for chunk in chunks)
+    return True, "OK" if chunks else "EMPTY", f"已读取 {len(chunks)} 个已授权记录片段", data, evidence, bool(chunks)
+
+
+def _list_todos(args, runtime, scope, repos):
+    limit, offset = args.get("limit", 20), args.get("offset", 0)
+    todos = repos.todos.list(scope, status=args.get("status"), limit=limit, offset=offset)
+    has_more = len(todos) == limit and bool(repos.todos.list(
+        scope, status=args.get("status"), limit=1, offset=offset + len(todos),
+    ))
+    data = {"todos": [{"id": todo.id, "title": todo.title, "status": todo.current_status,
+                       "source_chunk_id": todo.source_chunk_id, "record_id": todo.record_id,
+                       "created_at": _iso(todo.created_at)} for todo in todos],
+            "offset": offset, "next_offset": offset + len(todos) if has_more else None,
+            "complete": not has_more}
+    evidence = tuple(Evidence(evidence_id=f"todo:{todo.id}", kind="todo", record_id=todo.record_id,
+                              chunk_id=todo.source_chunk_id, text=f"{todo.title} ({todo.current_status})",
+                              date=_iso(todo.created_at), origin="list_todos") for todo in todos)
+    return True, "OK" if todos else "EMPTY", f"找到 {len(todos)} 项已授权待办", data, evidence, bool(todos)
 
 
 def _get_stats(args, runtime, scope, repos):
-    _common(args, runtime, allow={"date", "date_from", "date_to", "days"})
     start_at, end_at = _date_bounds(args, runtime)
     window = RecordWindow(start_at, end_at)
     stats = repos.records.stats(scope, window)
@@ -193,10 +205,7 @@ def _get_stats(args, runtime, scope, repos):
 
 
 def _get_profile(args, runtime, scope, repos):
-    _common(args, runtime, allow={"month"})
     month = args.get("month")
-    if month is not None and (not isinstance(month, str) or not _MONTH.fullmatch(month)):
-        raise ValueError("month must use YYYY-MM")
     profiles = repos.profiles.recent(scope, limit=2, month=month)
     if not profiles:
         return True, "EMPTY", "没有可用的画像快照", {"available": False, "month": month}, (), False
@@ -207,10 +216,9 @@ def _get_profile(args, runtime, scope, repos):
 
 
 def _get_coverage(args, runtime, scope, repos):
-    _common(args, runtime, allow={"keyword"})
-    keyword = args.get("keyword")
-    if not isinstance(keyword, str) or not keyword.strip() or len(keyword.strip()) > 256:
-        raise ValueError("keyword must contain 1 to 256 characters")
+    keyword = args["keyword"]
+    if not keyword.strip():
+        raise ValueError("keyword must contain non-whitespace text")
     coverage = repos.records.coverage(scope, keyword.strip())
     data = {
         "keyword": keyword.strip(),
@@ -223,7 +231,6 @@ def _get_coverage(args, runtime, scope, repos):
 
 
 def _get_glossary(args, runtime, scope, repos):
-    _common(args, runtime, allow=set())
     terms = list(repos.glossary.top_confirmed(scope, limit=30))
     data = {"terms": [
         {"id": term.id, "term": term.term, "aliases": list(term.aliases), "description": term.description,
@@ -234,7 +241,6 @@ def _get_glossary(args, runtime, scope, repos):
 
 
 def _compare_snapshots(args, runtime, scope, repos):
-    _common(args, runtime, allow={"first_id", "second_id"})
     first_id = _positive_int(args.get("first_id"), "first_id")
     second_id = _positive_int(args.get("second_id"), "second_id")
     if first_id == second_id:
@@ -249,14 +255,9 @@ def _compare_snapshots(args, runtime, scope, repos):
 
 
 def _find_item(args, runtime, scope, repos):
-    _common(args, runtime, allow={"query", "category", "date_from", "date_to", "limit"})
     query = args.get("query")
-    if query is not None and (not isinstance(query, str) or len(query.strip()) > 256):
-        raise ValueError("query must contain at most 256 characters")
     normalized_query = query.strip() if isinstance(query, str) and query.strip() else None
     category = args.get("category")
-    if category is not None and category not in CONTENT_TYPES:
-        raise ValueError("category is not supported")
     start_at, end_at = _date_bounds({k: v for k, v in args.items() if k in {"date_from", "date_to"}}, runtime)
     limit = bounded_limit(args.get("limit", 10), maximum=10, default=10)
     aliases = ()
@@ -295,15 +296,13 @@ def _find_item(args, runtime, scope, repos):
 
 
 def _recall_item(args, runtime, scope, repos):
-    _common(args, runtime, allow={"vault_item_id", "query"})
     item_id = _positive_int(args.get("vault_item_id"), "vault_item_id")
     query = args.get("query")
-    if query is not None and (not isinstance(query, str) or len(query.strip()) > 256):
-        raise ValueError("query must contain at most 256 characters")
     timeout = _remaining_timeout(runtime.deadline, runtime)
     recalled = repos.vault.recall(
         scope, item_id, query.strip() if isinstance(query, str) and query.strip() else None,
-        runtime.embedding_client, timeout=timeout, max_retries=0,
+        runtime.embedding_client, offset=args.get("offset", 0), limit=args.get("limit", 3),
+        timeout=timeout, max_retries=0,
     )
     if recalled is None:
         return False, "NOT_FOUND", "文件不存在或不属于当前用户", None, (), False
@@ -317,6 +316,8 @@ def _recall_item(args, runtime, scope, repos):
             for snippet in snippets
         ],
         "body_available": item.digest_status == "confirmed",
+        "offset": args.get("offset", 0), "next_offset": recalled.next_offset,
+        "complete": recalled.complete, "content_scope": recalled.content_scope,
     }
     evidence = tuple(_vault_snippet_evidence(item, snippet) for snippet in snippets)
     if item.digest_status != "confirmed":
@@ -325,7 +326,6 @@ def _recall_item(args, runtime, scope, repos):
 
 
 def _save_item(args, runtime, scope, repos):
-    _common(args, runtime, allow={"vault_item_id"})
     item_id = _positive_int(args.get("vault_item_id"), "vault_item_id")
     item = repos.vault.metadata(scope, item_id)
     if item is None:
@@ -337,6 +337,8 @@ def _save_item(args, runtime, scope, repos):
 
 _HANDLERS = {
     "search_records": _search_records,
+    "read_record": _read_record,
+    "list_todos": _list_todos,
     "get_stats": _get_stats,
     "get_profile": _get_profile,
     "get_coverage": _get_coverage,

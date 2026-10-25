@@ -120,13 +120,15 @@ class FakeRecords:
         self.search_calls = []
         self.vector_calls = []
 
-    def search(self, scope, filters=None, *, limit=20):
+    def search(self, scope, filters=None, *, limit=20, record_id=None, offset=0):
         self.search_calls.append((scope, filters, limit))
         rows = self.chunks
+        if record_id is not None:
+            rows = [row for row in rows if row.record_id == record_id]
         keyword = getattr(filters, "keyword", None)
         if keyword:
             rows = [row for row in rows if keyword.casefold() in row.segment.casefold()]
-        return list(rows[:limit])
+        return list(rows[offset:offset + limit])
 
     def search_vector(self, scope, vector, filters=None, **kwargs):
         self.vector_calls.append((scope, vector, filters, kwargs))
@@ -226,7 +228,7 @@ def make_recall(item=None):
         created_at=item.created_at,
         distance=0.1,
     )
-    return VaultRecall(item=item, snippets=(snippet,))
+    return VaultRecall(item=item, snippets=(snippet,), complete=True, content_scope="full")
 
 
 def make_request(*, run_id="run-1", question="查一下我的记录", intent=None, embedding=True, **kwargs):

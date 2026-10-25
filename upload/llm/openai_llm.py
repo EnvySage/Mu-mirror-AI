@@ -7,6 +7,7 @@ from openai import APIConnectionError, APIStatusError, APITimeoutError, OpenAI, 
 from config import CONFIG
 from mirror_core.errors import (
     AiServiceError,
+    ContentInvalidError,
     LlmTimeoutError,
     LlmUnavailableError,
     require_config,
@@ -196,3 +197,75 @@ class OpenAiLlm(BaseLlm):
         except APIConnectionError as e:
             raise LlmUnavailableError("LLM 连接失败（openai APIConnectionError）") from e
         return response.choices[0].message.content
+
+    def plan(
+        self, messages: list[dict], tools: list[dict], *, protocol: str = "auto",
+        timeout: float | None = None, max_retries: int = 0,
+    ) -> dict:
+        """Graph planning with native tools or explicitly selected strict JSON."""
+        from llm.planning import run_plan
+        return run_plan(
+            self._plan_request, messages, tools, protocol=protocol, timeout=timeout,
+            max_retries=max_retries, default_timeout=self._default_timeout,
+        )
+
+    def _plan_request(self, messages, tools, protocol, timeout, max_retries):
+        import json
+        from llm.planning import PLAN_MAX_TOKENS, native_messages, native_plan, plan_schema, planning_messages, text_plan
+        kwargs = dict(model=self.model, messages=native_messages(messages), max_tokens=PLAN_MAX_TOKENS)
+        if protocol == "native":
+            if tools:
+                kwargs["tools"] = [{"type": "function", "function": {
+                    "name": tool["name"], "description": tool.get("description", ""), "parameters": tool["parameters"],
+                }} for tool in tools]
+                kwargs["tool_choice"] = "auto"
+        else:
+            kwargs["messages"] = planning_messages(messages, tools, protocol)
+            if protocol == "json_schema":
+                kwargs["response_format"] = {"type": "json_schema", "json_schema": {
+                    "name": "graph_plan", "strict": True, "schema": plan_schema(tools),
+                }}
+        response = self._client_for(timeout, max_retries).chat.completions.create(**kwargs)
+        choice = response.choices[0]
+        message = choice.message
+        if protocol != "native":
+            return text_plan(message.content or "", protocol, choice.finish_reason)
+        try:
+            calls = [{"tool": call.function.name, "args": json.loads(call.function.arguments)} for call in (message.tool_calls or [])]
+        except (ValueError, TypeError) as exc:
+            raise ContentInvalidError("Native plan arguments must be valid JSON") from exc
+        return native_plan(calls, message.content or "", choice.finish_reason)
+
+    def answer_stream(
+        self, messages: list[dict], temperature: float = 0.7,
+        thinking_budget: int | None = None, *, timeout: float | None = None,
+        max_retries: int | None = None, max_tokens: int | None = None,
+    ) -> Generator[tuple[str, str], None, None]:
+        """Graph answer events include the upstream terminal finish reason."""
+        stream = None
+        finish = None
+        try:
+            stream = self._client_for(None, max_retries).chat.completions.create(
+                model=self.model, messages=messages, temperature=temperature, stream=True,
+                timeout=_STREAM_TIMEOUT if timeout is None else timeout,
+                **({"max_tokens": max_tokens} if max_tokens is not None else {}),
+            )
+            for chunk in stream:
+                if not chunk.choices:
+                    continue
+                choice = chunk.choices[0]
+                if choice.finish_reason is not None:
+                    finish = choice.finish_reason
+                delta = choice.delta
+                if delta is not None:
+                    reasoning = getattr(delta, "reasoning_content", None)
+                    if reasoning:
+                        yield ("thinking", reasoning)
+                    if delta.content:
+                        yield ("content", delta.content)
+        except (APITimeoutError, APIConnectionError, APIStatusError) as exc:
+            raise _translate(exc) from exc
+        finally:
+            if stream is not None:
+                stream.close()
+        yield ("finish", finish or "unknown")

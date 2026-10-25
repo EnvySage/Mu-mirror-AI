@@ -113,7 +113,8 @@ def test_malformed_or_missing_planner_final_keeps_initial_retrieval_evidence():
     terminal = _terminal(_run(llm, repos))
 
     assert terminal.kind == "completed"
-    assert terminal.metadata["stop_reason"] == "planner_error"
+    assert terminal.metadata["stop_reason"] == "empty_calls"
+    assert llm.plan_calls == 2  # Invalid JSON is reported back for one bounded correction.
     assert terminal.metadata["sources"][0].record_id == 10
     assert terminal.metadata["answer_text"] == "记录里有这条事实[1]。"
 

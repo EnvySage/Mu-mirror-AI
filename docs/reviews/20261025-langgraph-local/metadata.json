@@ -1,0 +1,84 @@
+{
+  "branch": "ai",
+  "completed_at": "2026-10-25T15:06:42.357455+00:00",
+  "cost": {
+    "host": "codex",
+    "scope": {
+      "changed_lines": 1271,
+      "deleted_band": "none",
+      "depth": "full",
+      "exec_nontest_lines": 1102,
+      "size_band": "large",
+      "unclassified_lines": {
+        ".txt": 4,
+        ".yml": 2
+      }
+    },
+    "stages": [
+      {
+        "elapsed_seconds": 0.088,
+        "ended_at": "2026-10-25T14:54:52.733059+00:00",
+        "facts": {
+          "changed_lines": 1271,
+          "deleted_band": "none",
+          "depth": "full",
+          "exec_nontest_lines": 1102,
+          "size_band": "large",
+          "unclassified_lines": {
+            ".txt": 4,
+            ".yml": 2
+          }
+        },
+        "stage": "scope",
+        "started_at": "2026-10-25T14:54:52.644657+00:00"
+      },
+      {
+        "elapsed_seconds": 0.089,
+        "ended_at": "2026-10-25T14:54:52.821955+00:00",
+        "reviewers": 8,
+        "stage": "select",
+        "started_at": "2026-10-25T14:54:52.733059+00:00"
+      },
+      {
+        "candidates": 4,
+        "elapsed_seconds": 238.572,
+        "ended_at": "2026-10-25T14:58:51.394153+00:00",
+        "stage": "dispatch",
+        "started_at": "2026-10-25T14:54:52.821955+00:00"
+      },
+      {
+        "candidates": 3,
+        "elapsed_seconds": 44.113,
+        "ended_at": "2026-10-25T15:00:15.042352+00:00",
+        "stage": "merge",
+        "started_at": "2026-10-25T14:59:30.929420+00:00"
+      },
+      {
+        "elapsed_seconds": 139.305,
+        "ended_at": "2026-10-25T15:02:53.797154+00:00",
+        "stage": "validate",
+        "started_at": "2026-10-25T15:00:34.491865+00:00"
+      },
+      {
+        "elapsed_seconds": 93.323,
+        "ended_at": "2026-10-25T15:06:42.429973+00:00",
+        "facts": {
+          "actual_reviewer_count": 2
+        },
+        "stage": "report",
+        "started_at": "2026-10-25T15:05:09.107160+00:00"
+      }
+    ],
+    "status": "complete",
+    "totals": {
+      "artifact_bytes": 293417,
+      "candidates": 4,
+      "elapsed_seconds": 515.49,
+      "reviewers": 8
+    },
+    "truncated_events": 0
+  },
+  "head_sha": "fca6ca625aa60536a3a288bae9538cf092c24c29",
+  "run_id": "20261025-langgraph-local",
+  "verdict": "Ready to merge"
+}

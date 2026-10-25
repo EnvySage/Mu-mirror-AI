@@ -265,3 +265,84 @@ class AnthropicLlm(BaseLlm):
         except APIConnectionError as e:
             raise LlmUnavailableError("LLM 连接失败（anthropic APIConnectionError）") from e
         return response.content[0].text
+
+    def plan(
+        self, messages: list[dict], tools: list[dict], *, protocol: str = "auto",
+        timeout: float | None = None, max_retries: int = 0,
+    ) -> dict:
+        """Graph planning with native tools or explicit strict JSON outputs."""
+        from llm.planning import run_plan
+        return run_plan(
+            self._plan_request, messages, tools, protocol=protocol, timeout=timeout,
+            max_retries=max_retries, default_timeout=self._default_timeout,
+        )
+
+    def _plan_request(self, messages, tools, protocol, timeout, max_retries):
+        from llm.planning import PLAN_MAX_TOKENS, native_messages, native_plan, plan_schema, planning_messages, text_plan
+        system, chat_messages = self._split_system(native_messages(messages) if protocol == "native" else planning_messages(messages, tools, protocol))
+        kwargs = dict(model=self.model, messages=chat_messages, max_tokens=PLAN_MAX_TOKENS)
+        if system:
+            kwargs["system"] = system
+        if protocol == "native":
+            if tools:
+                kwargs["tools"] = [{"name": tool["name"], "description": tool.get("description", ""), "input_schema": tool["parameters"]} for tool in tools]
+                kwargs["tool_choice"] = {"type": "auto"}
+        elif protocol == "json_schema":
+            # extra_body also supports SDK versions preceding output_config's typed argument.
+            kwargs["extra_body"] = {"output_config": {"format": {"type": "json_schema", "schema": plan_schema(tools)}}}
+        response = self._client_for(timeout, max_retries).messages.create(**kwargs)
+        text = "".join(block.text for block in response.content if block.type == "text")
+        if protocol != "native":
+            return text_plan(text, protocol, response.stop_reason)
+        calls = [{"tool": block.name, "args": block.input} for block in response.content if block.type == "tool_use"]
+        return native_plan(calls, text, response.stop_reason)
+
+    def answer_stream(
+        self, messages: list[dict], temperature: float = 0.7,
+        thinking_budget: int | None = None, *, timeout: float | None = None,
+        max_retries: int | None = None, max_tokens: int | None = None,
+    ) -> Generator[tuple[str, str], None, None]:
+        """Graph answer stream preserving thinking and the upstream stop reason."""
+        system, chat_messages = self._split_system(messages)
+        kwargs = dict(model=self.model, messages=chat_messages, max_tokens=_CHAT_MAX_TOKENS if max_tokens is None else max_tokens)
+        if system:
+            kwargs["system"] = system
+        budget = _THINKING_BUDGET if thinking_budget is None else int(thinking_budget)
+        if budget > 0:
+            kwargs.update(thinking={"type": "enabled", "budget_tokens": budget}, max_tokens=max(kwargs["max_tokens"], budget + 1024))
+        else:
+            kwargs["temperature"] = temperature
+        yielded = False
+        try:
+            for item in self._answer_events(kwargs, timeout, max_retries):
+                yielded = True
+                yield item
+            return
+        except APIStatusError as exc:
+            if yielded or budget <= 0 or not self._thinking_unsupported(exc):
+                raise self._from_status(exc) from exc
+        kwargs.pop("thinking")
+        kwargs["temperature"] = temperature
+        try:
+            yield from self._answer_events(kwargs, timeout, max_retries)
+        except APIStatusError as exc:
+            raise self._from_status(exc) from exc
+
+    def _answer_events(self, kwargs, timeout, max_retries):
+        finish = None
+        try:
+            with self._client_for(None, max_retries).messages.stream(
+                **kwargs, timeout=_STREAM_TIMEOUT if timeout is None else timeout,
+            ) as stream:
+                for event in stream:
+                    if event.type == "message_delta":
+                        finish = event.delta.stop_reason or finish
+                    elif event.type == "content_block_delta":
+                        delta = event.delta
+                        if delta.type == "thinking_delta" and delta.thinking:
+                            yield ("thinking", delta.thinking)
+                        elif delta.type == "text_delta" and delta.text:
+                            yield ("content", delta.text)
+        except (APITimeoutError, APIConnectionError) as exc:
+            raise translate_llm_sdk_exception(exc) from exc
+        yield ("finish", finish or "unknown")

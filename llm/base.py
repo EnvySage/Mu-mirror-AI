@@ -50,3 +50,29 @@ class BaseLlm(ABC):
         if max_retries is not None:
             options["max_retries"] = max_retries
         return self.chat(messages, temperature=temperature, **options)
+
+    def plan(
+        self, messages: list[dict], tools: list[dict], *, protocol: str = "auto",
+        timeout: float | None = None, max_retries: int = 0,
+    ) -> dict:
+        """Graph-only text planning default for adapters without native tools."""
+        from llm.planning import PLAN_MAX_TOKENS, PlanningProtocolUnsupported, planning_messages, text_plan
+        if protocol not in ("auto", "text_json"):
+            raise PlanningProtocolUnsupported(f"Planning protocol {protocol} is not supported by this adapter")
+        text = "".join(part for kind, part in self.chat_stream(
+            planning_messages(messages, tools), thinking_budget=0, timeout=timeout,
+            max_retries=max_retries, max_tokens=PLAN_MAX_TOKENS,
+        ) if kind == "content")
+        return text_plan(text, "text_json", None)
+
+    def answer_stream(
+        self, messages: list[dict], temperature: float = 0.7,
+        thinking_budget: int | None = None, *, timeout: float | None = None,
+        max_retries: int | None = None, max_tokens: int | None = None,
+    ) -> Generator[tuple[str, str], None, None]:
+        """Graph-only answer stream; SDK adapters expose the actual finish reason."""
+        yield from self.chat_stream(
+            messages, temperature, thinking_budget, timeout=timeout,
+            max_retries=max_retries, max_tokens=max_tokens,
+        )
+        yield ("finish", "unknown")

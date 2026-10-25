@@ -99,7 +99,10 @@ def merge_evidence(existing: Iterable[Evidence], incoming: Iterable[Evidence]) -
         if position is None:
             positions[key] = len(merged)
             merged.append(evidence)
-        elif not merged[position].text and evidence.text:
+        elif evidence.text and (
+            not merged[position].text
+            or (len(evidence.text) > len(merged[position].text) and evidence.text.startswith(merged[position].text))
+        ):
             merged[position] = evidence
     return merged
 
