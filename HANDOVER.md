@@ -18,7 +18,7 @@
 
 1. **无状态**：不连数据库、不存任何会话状态。用户 LLM/embedding 配置随**每次 gRPC 请求**到达（LLMConfig/EmbeddingConfig 消息），用完即弃。
 2. **不做业务闸门**：镜子回看档位的条数/字符闸在 Java 侧（四道防洪闸），本仓只做渲染层截断防线（config.yml mirror 段三个 max_chars）。
-3. **失败隔离**：LLM 超时/解析失败走 errors.py 统一映射 gRPC 状态码（abort_with_mapped），Java 侧降级不崩。
+3. **失败隔离**：LLM 超时/解析失败走 mirror_core/errors.py 统一映射 gRPC 状态码（abort_with_mapped），Java 侧降级不崩。
 4. **不改存量向量语义**：1024 维硬约束（裁决 #18）。
 
 ## 3. 目录导航
@@ -33,11 +33,10 @@ services/
   embedding_service.py  Embed（api/local 双模式，factory 选择）
 llm/                    openai_llm / anthropic_llm + factory（用户配置驱动）
 embedding/              api_embedder（qwen3.7-text-embedding 阿里云 MaaS）/ local_embedder（BGE-m3，本机无 torch 不可用）
-glossary_render.py      词典 prompt 渲染（固定软约束话术：词表仅供参考，与近期记录矛盾以记录为准）
-prompts/                8 套 prompt：classify / classify-single / intent / chat / profile / inspiration / extract_terms / plan_tools
-prompts_loader.py       占位符渲染 + _ALIASES 别名通道（todos→stats_facts、learnings→records，旧调用名不破坏）
-errors.py / llm_json.py / config.py（config.yml）
-tests/                  按轮次：test_round9~12 + e2e_round9~12
+mirror_core/            业务辅助层：errors / llm_json / prompts_loader / *_render / time_substitution
+prompts/                prompt 模板：classify / classify-single / intent / chat / profile / inspiration / extract_terms / plan_tools / agent_*
+config.py / config.yml  服务级配置加载
+tests/                  按功能：legacy 回归（test_round9~12 等）+ agent_v2 图/工具/数据访问测试
 ```
 
 ## 4. 近两轮大改动
@@ -51,10 +50,10 @@ tests/                  按轮次：test_round9~12 + e2e_round9~12
 ## 5. 测试
 
 ```
-单测：test_round9~12 共 143 项        → .venv/Scripts/python.exe -m pytest tests/test_round12.py（逐文件跑）
-冒烟：test_client.py --stub 18 项     → 需桩 LLM 18080 在线
-E2E：e2e_round9~12                    → 需 server 10003 + 桩 18080 都在线
-环境自检：test_environment.py
+单测：tests/ 共 563 项（552 通过 / 11 跳过） → .venv/Scripts/python.exe -m pytest tests -q
+冒烟：scripts/smoke_client.py --stub 18 项     → 需桩 LLM 18080 在线
+E2E：tests/agent_v2/e2e_create_record.py → 需隔离测试库与 Java 命令接口
+环境自检：scripts/check_environment.py
 ```
 
 ⚠️ 改桩 LLM 后**必须重启 18080 进程**才生效（曾因旧桩残留导致 E2E genesis 场景假失败）。
@@ -72,4 +71,4 @@ E2E：e2e_round9~12                    → 需 server 10003 + 桩 18080 都在�
 
 - 服务启动顺序无强依赖；但**改了 services/ 或 prompts/ 必须重启 10003**
 - Java 侧 gRPC 超时 15s，本端 LLM timeout 20s——Java 会先放弃，本端不应白跑
-- 词典轮 dev 要点：glossary_render 空词条不留孤儿话术（B 未传 glossary 时 prompt 与旧版完全一致，零回归）
+- 词典轮 dev 要点：mirror_core/glossary_render 空词条不留孤儿话术（B 未传 glossary 时 prompt 与旧版完全一致，零回归）

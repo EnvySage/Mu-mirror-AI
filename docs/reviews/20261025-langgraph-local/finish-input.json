@@ -1,0 +1,135 @@
+{
+  "run_id": "20261025-langgraph-local",
+  "run_dir": "C:/Users/15999/AppData/Local/Temp/compound-engineering-15999/ce-code-review/20261025-langgraph-local",
+  "skill_dir": "C:/Users/15999/.codex/plugins/cache/compound-engineering-plugin/compound-engineering/3.32.1/skills/ce-code-review",
+  "docs_root": "docs",
+  "mode": {
+    "agent": true,
+    "apply_local": false,
+    "grouping": "auto",
+    "depth": "auto"
+  },
+  "invocation": {
+    "arguments": "mode:agent base:HEAD plan:docs/superpowers/plans/2026-10-25-langgraph-chat-reliability.md",
+    "constraints": [
+      "Native local review only; no external-model egress/jobs.",
+      "No index/commits/production edits.",
+      "Scope runtime changes plus new tests/plan, exclude upload mirror.",
+      "All test files in current scope are proof tests; do not propose weakening them.",
+      "Explicitly include untracked runtime source and tests and plan listed in files.txt.",
+      "Bounded64k chars /12 pages with explicit partial status is chosen accepted behavior.",
+      "Parent completing U5 upload synchronization and verification; do not count not-yet-completed upload mirror as code review defect.",
+      "Parent explicitly authorizes combining persona lenses within the two reviewer slots rather than dispatching eight serial jobs; bounded actionable-defect review; no architecture expansion."
+    ]
+  },
+  "scope": {
+    "mode": "standalone",
+    "base": "HEAD",
+    "diff_a": "fca6ca625aa60536a3a288bae9538cf092c24c29",
+    "diff_b": null,
+    "pr": {
+      "number": null,
+      "url": null,
+      "title": null,
+      "body": null,
+      "base_ref_name": null,
+      "head_ref_oid": null,
+      "head_ref": null,
+      "base_ref": null,
+      "has_prior_comments": false
+    },
+    "branch": "ai",
+    "head_sha": "fca6ca625aa60536a3a288bae9538cf092c24c29",
+    "files": "C:\\Users\\15999\\AppData\\Local\\Temp\\compound-engineering-15999\\ce-code-review\\20261025-langgraph-local\\files.txt",
+    "diff": "C:\\Users\\15999\\AppData\\Local\\Temp\\compound-engineering-15999\\ce-code-review\\20261025-langgraph-local\\full.diff",
+    "tree_is_reviewed_head": true,
+    "untracked_excluded": []
+  },
+  "intent": {
+    "summary": "Make graph_v2 distinguish valid native/JSON tool planning, sufficient authorized task material, and accepted final answers. Complete scoped content paging, preserve evidence after optional failures, reject empty/truncated/pseudo-tool output and avoid concatenating retries, while preserving legacy behavior and Java authorization.",
+    "confidence": "explicit"
+  },
+  "plan": {
+    "path": "docs/superpowers/plans/2026-10-25-langgraph-chat-reliability.md",
+    "source": "explicit",
+    "requirements": [],
+    "implementation_units": [
+      {
+        "id": "U1",
+        "title": "Model protocol adapters"
+      },
+      {
+        "id": "U2",
+        "title": "Accepted answer streaming"
+      },
+      {
+        "id": "U3",
+        "title": "Content contracts and scoped pagination"
+      },
+      {
+        "id": "U4",
+        "title": "Graph integration"
+      },
+      {
+        "id": "U5",
+        "title": "Integration and completion"
+      }
+    ],
+    "settled_decisions": []
+  },
+  "roster": {
+    "selected": [
+      {
+        "reviewer": "correctness",
+        "tier": "session",
+        "reason": "Correctness combined with testing/reliability/maintainability per explicit caller direction."
+      },
+      {
+        "reviewer": "adversarial",
+        "tier": "session",
+        "reason": "Local adversarial combined with security/performance/agent-native per explicit caller direction."
+      }
+    ],
+    "standards": {
+      "criteria": [],
+      "fallback_named": false,
+      "not_run_reason": "No applicable AGENTS.md, CLAUDE.md, or CODING_STANDARDS.md files found in successful repo search."
+    },
+    "packs": {
+      "roots": [],
+      "errors": [],
+      "warnings": []
+    }
+  },
+  "collection": {
+    "returns": "C:\\Users\\15999\\AppData\\Local\\Temp\\compound-engineering-15999\\ce-code-review\\20261025-langgraph-local\\raw-returns.json",
+    "unstructured_returns": [],
+    "failed_reviewers": [],
+    "bound_exceeded": [],
+    "fast_pass": {
+      "emitted_preliminary": false,
+      "candidates": []
+    }
+  },
+  "peer": {
+    "selected": true,
+    "target": null,
+    "route": null,
+    "preference_source": "user",
+    "outcome": "in-process-fallback",
+    "artifact": null,
+    "coverage": "Cross-model adversarial review was not run: the invoking user prohibits external-model egress/jobs. The adversarial lens used an in-process reviewer."
+  },
+  "coverage_notes": [
+    "Scope: local working tree versus HEAD, including explicitly requested untracked source/tests/plan.",
+    "Project standards: not run (no applicable standards files).",
+    "No external model or production database calls; no upload mirror reviewed.",
+    "U5 publication/sync verification belongs to parent workflow and remains pending at dispatch.",
+    "Preliminary fast pass found no urgent P0/P1 candidates.",
+    "Caller explicitly requested two combined reviewer passes: correctness/testing/reliability/maintainability; adversarial/security/performance/agent-native. These are two independent reviewers, not eight independent personas.",
+    "Parent fixed all three reproduced findings before independent validation; full.diff/files.txt refreshed to corrected current tree. Original evidence remains preserved in reviewer artifacts and synthesized findings.",
+    "Parent-reported final validation after final native_messages system-instruction adjustment (not independently rerun by this review): 727 passed in41.02s across tests/, no skipped, using disposable Docker PostgreSQL reader; upload resynced/check clean, upload imports/build_graph compilation passed with 11 read tools; git diff --check clean except informational LF normalization warnings. No configured lint command.",
+    "Independent fresh validator ran 122 focused tests in3.91s and extra pre/post-output transport replays; all three originally reproduced defects were fixed before validation, with discriminating proof for each. See validator-verdicts.json.",
+    "Independent final adapter addendum: 43 protocol tests passed plus 3 input-shape/immutability checks; both adapters use updated native_messages system-priority helper. See final-prompt-validation.json."
+  ]
+}

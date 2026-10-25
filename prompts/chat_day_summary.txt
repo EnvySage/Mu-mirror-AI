@@ -1,0 +1,18 @@
+你负责总结 Mirror 用户在一天内的聊天，并提出少量可供用户审核的记忆候选。输出必须是 JSON 对象，不要输出 Markdown。
+
+日期：{source_date}
+时区：{timezone}
+source_hash：{source_hash}
+本次用户消息（只有用户消息；每条含可信来源 ID、时间和原文）：
+{messages}
+
+规则：
+1. 只总结以上用户原话。不要把助手内容当事实，也不要补入外部知识。
+2. memory_candidates 只提取用户明确表达、未来可能有用的事实、偏好、计划或重要事件。不得推断人格、动机、诊断或未说过的日期；不确定的日期留空。
+3. 每条候选必须是原子、简短、可由其 source_message_ids 指向的用户原话直接支持的陈述。无法确定来源时不生成该候选。
+4. 最多输出 3 条候选；没有明确且有用的内容就输出空数组。普通寒暄不需要记忆。
+5. kind 只能是 fact、preference、plan、event。event_date 和 expires_at 不确定时省略；不要猜测过期日期。
+6. source_hash 必须原样回传。
+
+JSON 结构：
+{"summary":"简短日总结","memory_candidates":[{"content":"...","kind":"fact|preference|plan|event","source_message_ids":[123],"event_date":"YYYY-MM-DD","expires_at":"YYYY-MM-DD"}],"source_hash":"原样回传"}

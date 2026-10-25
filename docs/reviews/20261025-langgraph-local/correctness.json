@@ -1,0 +1,47 @@
+{
+  "reviewer": "correctness",
+  "findings": [
+    {
+      "title": "Preserve partial output when model streaming raises",
+      "severity": "P2",
+      "file": "services/answer_service.py",
+      "line": 797,
+      "why_it_matters": "A model transport error after a visible answer prefix bypasses the new typed answer failure contract. Replaying the compiled graph with answer_stream yielding VISIBLE_PARTIAL_ANSWER and then raising LlmUnavailableError emits that delta followed by AGENT_ERROR with stop_reason=read_error and has_partial_answer=false, losing the actual output state and diagnostics. Catching model service exceptions inside the answer generator lets synthesize retain the published prefix and report an output failure without retrying or concatenating another generation.",
+      "autofix_class": "gated_auto",
+      "owner": "downstream-resolver",
+      "requires_verification": true,
+      "suggested_fix": "Wrap model stream creation and iteration in handling for translated model service/transport errors, close the stream, and emit one typed failed AnswerEvent with an output-specific code instead of allowing the exception to escape. Do not catch GeneratorExit or the graph's cancellation/deadline control exceptions. Verify both pre-output and post-output transport failures through the compiled graph, including truthful has_partial_answer and no repair after visible output.",
+      "confidence": 100,
+      "evidence": [
+        "services/answer_service.py:797 -- for kind, content in stream:",
+        "services/answer_service.py:819-822 -- finally: close = getattr(stream, \"close\", None); if callable(close): close() (there is no exception-to-AnswerEvent handler)",
+        "agent_core/nodes.py:synthesize publishes deltas and stores accumulated answer only in its return; an exception from the stream skips that return.",
+        "Read-only reproduction: subclass tests.agent_v2.agent_fakes.FakeLlm; answer_stream yields ('content', 'VISIBLE_PARTIAL_ANSWER') then raises mirror_core.errors.LlmUnavailableError; invoke tests.agent_v2.test_material_flow.run with FakeRepositories([make_chunk()]). Observed delta VISIBLE_PARTIAL_ANSWER, then failed {'code':'AGENT_ERROR','stop_reason':'read_error','has_partial_answer':false}.",
+        "Plan U2 requires graph answer generation to emit kind='failed' with code/message; U4 requires preservation of partial status. This error path bypasses both newly implemented contracts."
+      ],
+      "pre_existing": false
+    },
+    {
+      "title": "Block the planner's JSON calls envelope in answers",
+      "severity": "P2",
+      "file": "services/tool_output_guard.py",
+      "line": 92,
+      "why_it_matters": "The exact JSON envelope used by the graph planner can still appear as a successful user-visible answer. The filter checks only top-level tool/tool_calls fields and then skips the entire decoded object, so a calls array containing tool/args objects escapes. Feeding {\"calls\":[{\"tool\":\"recall_item\",\"args\":{\"vault_item_id\":7}}],\"done\":false,\"reason\":\"read body\"} one character at a time followed by finish=stop publishes it unchanged and emits done with repair_count=0, violating the promised protocol filtering.",
+      "autofix_class": "gated_auto",
+      "owner": "downstream-resolver",
+      "requires_verification": true,
+      "suggested_fix": "Recognize the graph's actual nonempty calls envelope and supported nested function-call envelopes while the JSON object is still buffered; use bounded shape checking so ordinary JSON continues to pass. Add whole-chunk and byte-chunk regression cases for calls arrays, nested function name/arguments objects, and their fenced forms, with both initial repair and post-visible-output failure cases. Keep explicit protocol-example allowance.",
+      "confidence": 100,
+      "evidence": [
+        "services/tool_output_guard.py:92 -- start = self.pending.find(\"{\", start + end)",
+        "services/tool_output_guard.py:86-89 -- if isinstance(value, dict) and (any(key in value for key in (\"tool_calls\", \"tool_call\", \"function_calls\", \"function_call\")) or (any(key in value for key in (\"tool\", \"name\")) and any(key in value for key in (\"args\", \"arguments\", \"parameters\")))):",
+        "llm/planning.py:planning_messages explicitly requests one object with calls as an array of {tool:name,args:object}; this is an in-scope protocol rather than an invented envelope.",
+        "Read-only reproduction: use tests.agent_v2.test_answer_acceptance.ScriptedAnswer([('text',c) for c in the calls envelope] + [('finish','stop')]); list(stream_agent_answer([],[],[],llm)). Observed identical JSON delta output and terminal done {'finish_reason':'stop','repair_count':0}.",
+        "A second reproduced bypass is {\"function\":{\"name\":\"recall_item\",\"arguments\":\"{\\\"vault_item_id\\\":7}\"}}, also published unchanged and accepted."
+      ],
+      "pre_existing": false
+    }
+  ],
+  "residual_risks": [],
+  "testing_gaps": []
+}

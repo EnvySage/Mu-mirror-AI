@@ -7,7 +7,7 @@ import httpx  # anthropic SDK 自身依赖，非新增依赖
 from anthropic import APIConnectionError, APIStatusError, APITimeoutError
 
 from config import CONFIG
-from errors import (
+from mirror_core.errors import (
     AiServiceError,
     LlmTimeoutError,
     LlmUnavailableError,
@@ -48,20 +48,36 @@ _THINKING_BUDGET = int(CONFIG["llm"].get("thinking_budget_tokens", 0))
 class AnthropicLlm(BaseLlm):
     """Anthropic 协议 LLM（支持非 Claude 模型）"""
 
-    def __init__(self, api_key: str, base_url: str = "", model: str = ""):
+    def __init__(
+        self, api_key: str, base_url: str = "", model: str = "", *,
+        timeout: float | None = None, max_retries: int | None = None,
+    ):
         # 不兜底默认模型（原为写死的 claude-sonnet-4-20250514）：没配就报错，
         # 否则"未配置"会被静默替换成另一个模型真实计费
         require_config({"API Key": api_key, "模型名称": model})
         self.model = model
+        self._default_timeout = _LLM_ATTEMPT_TIMEOUT if timeout is None else timeout
+        self._default_max_retries = _LLM_MAX_RETRIES if max_retries is None else max_retries
         self.client = anthropic.Anthropic(
             api_key=api_key,
             base_url=base_url if base_url else None,
-            timeout=_LLM_ATTEMPT_TIMEOUT,
-            max_retries=_LLM_MAX_RETRIES,
+            timeout=self._default_timeout,
+            max_retries=self._default_max_retries,
         )
         self.model = model
 
-    def chat(self, messages: list[dict], temperature: float = 0.7) -> str:
+    def _client_for(self, timeout: float | None, max_retries: int | None):
+        options = {}
+        if timeout is not None:
+            options["timeout"] = timeout
+        if max_retries is not None:
+            options["max_retries"] = max_retries
+        return self.client.with_options(**options) if options else self.client
+
+    def chat(
+        self, messages: list[dict], temperature: float = 0.7, *,
+        timeout: float | None = None, max_retries: int | None = None,
+    ) -> str:
         system, chat_messages = self._split_system(messages)
 
         kwargs = dict(
@@ -74,7 +90,7 @@ class AnthropicLlm(BaseLlm):
             kwargs["system"] = system
 
         try:
-            response = self.client.messages.create(**kwargs)
+            response = self._client_for(timeout, max_retries).messages.create(**kwargs)
         except APITimeoutError as e:
             raise LlmTimeoutError(f"LLM 请求超时（>{_LLM_TIMEOUT:.0f}s）") from e
         except APIConnectionError as e:
@@ -85,7 +101,10 @@ class AnthropicLlm(BaseLlm):
 
     def chat_stream(self, messages: list[dict],
                     temperature: float = 0.7,
-                    thinking_budget: int | None = None) -> Generator[tuple[str, str], None, None]:
+                    thinking_budget: int | None = None, *,
+                    timeout: float | None = None,
+                    max_retries: int | None = None,
+                    max_tokens: int | None = None) -> Generator[tuple[str, str], None, None]:
         """流式对话：每项 (kind, text)，kind ∈ {"thinking", "content"}。
 
         基于原始事件流（RawMessageStreamEvent）而非 text_stream——text_stream 只吐正文，
@@ -100,7 +119,7 @@ class AnthropicLlm(BaseLlm):
 
         base = dict(
             model=self.model,
-            max_tokens=_CHAT_MAX_TOKENS,
+            max_tokens=_CHAT_MAX_TOKENS if max_tokens is None else max_tokens,
             messages=chat_messages,
         )
         if system:
@@ -112,13 +131,13 @@ class AnthropicLlm(BaseLlm):
             thinking_kwargs = {
                 **base,
                 # anthropic 要求 max_tokens > budget_tokens（否则 400），给正文留足余量
-                "max_tokens": max(_CHAT_MAX_TOKENS, budget + 1024),
+                "max_tokens": max(base["max_tokens"], budget + 1024),
                 "thinking": {"type": "enabled", "budget_tokens": budget},
                 # 开启 thinking 时 anthropic 只接受 temperature=1，故此处不传该参数
             }
             try:
                 yielded = False
-                for item in self._iter_stream(thinking_kwargs):
+                for item in self._iter_stream(thinking_kwargs, timeout=timeout, max_retries=max_retries):
                     yielded = True
                     yield item
                 return
@@ -129,19 +148,24 @@ class AnthropicLlm(BaseLlm):
                     raise self._from_status(e) from e
 
         try:
-            yield from self._iter_stream({**base, "temperature": temperature})
+            yield from self._iter_stream(
+                {**base, "temperature": temperature}, timeout=timeout, max_retries=max_retries,
+            )
         except APIStatusError as e:
             # 普通路径也要按状态码翻译（401/429/5xx → AiServiceError），与旧行为一致
             raise self._from_status(e) from e
 
-    def _iter_stream(self, kwargs: dict) -> Generator[tuple[str, str], None, None]:
+    def _iter_stream(
+        self, kwargs: dict, *, timeout: float | None = None, max_retries: int | None = None,
+    ) -> Generator[tuple[str, str], None, None]:
         """单次流式调用的事件翻译。
 
         参数/鉴权类错误（APIStatusError）在首个事件前原样抛出、不翻译——
         上层据此决定是否降级重试；超时/断连在此翻译为 AiServiceError。
         """
         try:
-            stream_ctx = self.client.messages.stream(**kwargs, timeout=_STREAM_TIMEOUT)
+            request_timeout = _STREAM_TIMEOUT if timeout is None else timeout
+            stream_ctx = self._client_for(None, max_retries).messages.stream(**kwargs, timeout=request_timeout)
         except APITimeoutError as e:
             raise LlmTimeoutError(f"LLM 流式连接超时（>{_STREAM_READ_TIMEOUT:.0f}s）") from e
         except APIConnectionError as e:
@@ -197,7 +221,11 @@ class AnthropicLlm(BaseLlm):
             return LlmUnavailableError(f"LLM 服务端错误（HTTP {code}）")
         return translate_llm_sdk_exception(exc)
 
-    def json_task(self, messages: list[dict], temperature: float = 0.7) -> str:
+    def json_task(
+        self, messages: list[dict], temperature: float = 0.7, *,
+        timeout: float | None = None, max_retries: int | None = None,
+        max_tokens: int | None = None,
+    ) -> str:
         """轻量 JSON 任务：关思考 + 小 max_tokens（实测 22.6s → 2.1s，输出 1074 → 43 token）
 
         thinking={"type": "disabled"} 是 anthropic 协议标准写法，mimo 等兼容端点同样接受。
@@ -206,7 +234,7 @@ class AnthropicLlm(BaseLlm):
         system, chat_messages = self._split_system(messages)
         base = dict(
             model=self.model,
-            max_tokens=_JSON_TASK_MAX_TOKENS,
+            max_tokens=_JSON_TASK_MAX_TOKENS if max_tokens is None else max_tokens,
             messages=chat_messages,
             temperature=temperature,
         )
@@ -214,22 +242,107 @@ class AnthropicLlm(BaseLlm):
             base["system"] = system
 
         try:
-            return self._create_text({**base, "thinking": {"type": "disabled"}})
+            return self._create_text(
+                {**base, "thinking": {"type": "disabled"}}, timeout=timeout, max_retries=max_retries,
+            )
         except APIStatusError as e:
             # 只对"参数不被支持"这一种 400 降级；其余 400（如请求本身非法）照常报错
             if self._thinking_unsupported(e):
-                return self._create_text(base)
+                return self._create_text(base, timeout=timeout, max_retries=max_retries)
             raise self._from_status(e) from e
 
-    def _create_text(self, kwargs: dict) -> str:
+    def _create_text(
+        self, kwargs: dict, *, timeout: float | None = None, max_retries: int | None = None,
+    ) -> str:
         """messages.create 的异常翻译 + 取正文（chat / json_task 共用）
 
         APIStatusError 原样上抛（不翻译）：json_task 需要按 status_code 决定是否降级。
         """
         try:
-            response = self.client.messages.create(**kwargs)
+            response = self._client_for(timeout, max_retries).messages.create(**kwargs)
         except APITimeoutError as e:
             raise LlmTimeoutError(f"LLM 请求超时（>{_LLM_TIMEOUT:.0f}s）") from e
         except APIConnectionError as e:
             raise LlmUnavailableError("LLM 连接失败（anthropic APIConnectionError）") from e
         return response.content[0].text
+
+    def plan(
+        self, messages: list[dict], tools: list[dict], *, protocol: str = "auto",
+        timeout: float | None = None, max_retries: int = 0,
+    ) -> dict:
+        """Graph planning with native tools or explicit strict JSON outputs."""
+        from llm.planning import run_plan
+        return run_plan(
+            self._plan_request, messages, tools, protocol=protocol, timeout=timeout,
+            max_retries=max_retries, default_timeout=self._default_timeout,
+        )
+
+    def _plan_request(self, messages, tools, protocol, timeout, max_retries):
+        from llm.planning import PLAN_MAX_TOKENS, native_messages, native_plan, plan_schema, planning_messages, text_plan
+        system, chat_messages = self._split_system(native_messages(messages) if protocol == "native" else planning_messages(messages, tools, protocol))
+        kwargs = dict(model=self.model, messages=chat_messages, max_tokens=PLAN_MAX_TOKENS)
+        if system:
+            kwargs["system"] = system
+        if protocol == "native":
+            if tools:
+                kwargs["tools"] = [{"name": tool["name"], "description": tool.get("description", ""), "input_schema": tool["parameters"]} for tool in tools]
+                kwargs["tool_choice"] = {"type": "auto"}
+        elif protocol == "json_schema":
+            # extra_body also supports SDK versions preceding output_config's typed argument.
+            kwargs["extra_body"] = {"output_config": {"format": {"type": "json_schema", "schema": plan_schema(tools)}}}
+        response = self._client_for(timeout, max_retries).messages.create(**kwargs)
+        text = "".join(block.text for block in response.content if block.type == "text")
+        if protocol != "native":
+            return text_plan(text, protocol, response.stop_reason)
+        calls = [{"tool": block.name, "args": block.input} for block in response.content if block.type == "tool_use"]
+        return native_plan(calls, text, response.stop_reason)
+
+    def answer_stream(
+        self, messages: list[dict], temperature: float = 0.7,
+        thinking_budget: int | None = None, *, timeout: float | None = None,
+        max_retries: int | None = None, max_tokens: int | None = None,
+    ) -> Generator[tuple[str, str], None, None]:
+        """Graph answer stream preserving thinking and the upstream stop reason."""
+        system, chat_messages = self._split_system(messages)
+        kwargs = dict(model=self.model, messages=chat_messages, max_tokens=_CHAT_MAX_TOKENS if max_tokens is None else max_tokens)
+        if system:
+            kwargs["system"] = system
+        budget = _THINKING_BUDGET if thinking_budget is None else int(thinking_budget)
+        if budget > 0:
+            kwargs.update(thinking={"type": "enabled", "budget_tokens": budget}, max_tokens=max(kwargs["max_tokens"], budget + 1024))
+        else:
+            kwargs["temperature"] = temperature
+        yielded = False
+        try:
+            for item in self._answer_events(kwargs, timeout, max_retries):
+                yielded = True
+                yield item
+            return
+        except APIStatusError as exc:
+            if yielded or budget <= 0 or not self._thinking_unsupported(exc):
+                raise self._from_status(exc) from exc
+        kwargs.pop("thinking")
+        kwargs["temperature"] = temperature
+        try:
+            yield from self._answer_events(kwargs, timeout, max_retries)
+        except APIStatusError as exc:
+            raise self._from_status(exc) from exc
+
+    def _answer_events(self, kwargs, timeout, max_retries):
+        finish = None
+        try:
+            with self._client_for(None, max_retries).messages.stream(
+                **kwargs, timeout=_STREAM_TIMEOUT if timeout is None else timeout,
+            ) as stream:
+                for event in stream:
+                    if event.type == "message_delta":
+                        finish = event.delta.stop_reason or finish
+                    elif event.type == "content_block_delta":
+                        delta = event.delta
+                        if delta.type == "thinking_delta" and delta.thinking:
+                            yield ("thinking", delta.thinking)
+                        elif delta.type == "text_delta" and delta.text:
+                            yield ("content", delta.text)
+        except (APITimeoutError, APIConnectionError) as exc:
+            raise translate_llm_sdk_exception(exc) from exc
+        yield ("finish", finish or "unknown")

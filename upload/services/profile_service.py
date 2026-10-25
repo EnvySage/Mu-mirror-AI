@@ -1,6 +1,6 @@
 """MirrorProfile 服务实现 — 画像生成（协作清单 #6 + 第十二轮累计镜子）
 
-输入：五维统计（todos/learnings/mood_stats/keywords/active_time）+ recent_chats + glossary
+输入：五维统计（todos/learnings/mood_stats/keywords/active_time）+ 用户授权的聊天记忆 + glossary
      + 累计镜子四块新输入（rolling-mirror-design.md §1）：
        ① prev_mirror      上一份镜子全文（空 = 首份镜子 genesis）
        ② records          本月原始记录（按回看深度档位由 B 侧闸门限流后传入）
@@ -15,11 +15,11 @@ from generated import mirror_profile_pb2 as pb2
 from generated import mirror_profile_pb2_grpc as pb2_grpc
 
 from config import CONFIG
-from errors import abort_with_mapped
-from glossary_render import format_glossary
+from mirror_core.errors import abort_with_mapped
+from mirror_core.glossary_render import format_glossary
 from llm.factory import create_llm
-from llm_json import parse_json
-from prompts_loader import loader
+from mirror_core.llm_json import parse_json
+from mirror_core.prompts_loader import loader
 
 VALID_TAGS_MIN = 1
 
@@ -125,13 +125,13 @@ def _fmt_active_time(active) -> str:
     return "\n".join(parts) if parts else "（无活跃时段数据）"
 
 
-def _fmt_recent_chats(chats) -> str:
-    if not chats:
-        return "（无对话记录）"
-    lines = []
-    for c in chats:
-        lines.append(f"- [{c.created_at}] {c.role}: {c.content[:120]}")
-    return "\n".join(lines)
+def _fmt_assistant_memories(memories) -> str:
+    if not memories:
+        return "（无已授权记忆）"
+    return "\n".join(
+        f"- [{memory.source_date or '日期未知'}] {memory.kind or 'fact'}：{memory.content}"
+        for memory in memories[:5] if memory.content
+    ) or "（无已授权记忆）"
 
 
 class MirrorProfileServicer(pb2_grpc.MirrorProfileServicer):
@@ -143,7 +143,7 @@ class MirrorProfileServicer(pb2_grpc.MirrorProfileServicer):
         lookback = request.mirror_lookback if request.HasField("mirror_lookback") else None
         print(f"[GenerateProfile] records: {request.total_records}, range: {request.time_range}, "
               f"todos={len(request.todos)}, learnings={len(request.learnings)}, "
-              f"chats={len(request.recent_chats)}, prev_mirror={'有' if request.prev_mirror else '无(genesis)'}, "
+              f"memories={len(request.assistant_context.memories)}, prev_mirror={'有' if request.prev_mirror else '无(genesis)'}, "
               f"correction_index={'有' if request.correction_index else '无'}, "
               f"lookback={lookback if lookback is not None else '未传'}")
         print(f"[GenerateProfile] LLM: provider={llm_config.provider}, model={llm_config.model}, "
@@ -162,13 +162,14 @@ class MirrorProfileServicer(pb2_grpc.MirrorProfileServicer):
                 "profile",
                 prev_mirror=_fmt_prev_mirror(request.prev_mirror),
                 correction_index=_fmt_correction_index(request.correction_index),
-                stats_facts=_fmt_stats_facts(request.todos, request.total_records),
+                stats_facts=request.stats_facts or _fmt_stats_facts(request.todos, request.total_records),
                 records=_fmt_learnings(request.learnings),
                 mood_stats=_fmt_mood_stats(request.mood_stats),
                 keywords=_fmt_keywords(request.keywords),
                 active_time=_fmt_active_time(request.active_time),
                 time_range=request.time_range or "（未指定）",
-                recent_chats=_fmt_recent_chats(request.recent_chats),
+                recent_chats="",
+                assistant_memories=_fmt_assistant_memories(request.assistant_context.memories),
                 glossary=format_glossary(request.glossary),
             )
 

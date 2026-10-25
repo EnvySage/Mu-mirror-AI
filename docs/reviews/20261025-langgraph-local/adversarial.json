@@ -1,0 +1,49 @@
+{
+  "reviewer": "adversarial",
+  "findings": [
+    {
+      "title": "Excerpt-first recall silently loses subsequently fetched full body",
+      "severity": "P1",
+      "file": "agent_core/material.py",
+      "line": 100,
+      "why_it_matters": "A full-article analysis can be accepted as sufficient while the answer model receives only the initial 500-character vector excerpt. A query-based recall followed by the new deterministic full-body backstop produces the same vault/chunk evidence identity; merge_evidence keeps the first nonempty excerpt, and observation rendering truncates the later full body to 2,000 characters. In a compiled-graph replay with a 4,019-character segment and a decisive tail, the tail is absent from the answer prompt, yet completion reports material_status=sufficient, evidence_chars=500, body_pages=2 and outcome=answer.",
+      "autofix_class": "manual",
+      "owner": "downstream-resolver",
+      "requires_verification": true,
+      "confidence": 100,
+      "pre_existing": false,
+      "suggested_fix": "When ordered body pages supersede vector excerpts for the same vault/chunk, upgrade the retained Evidence to the complete authorized segment (carry content_scope/provenance if needed) before deciding material sufficiency. Preserve deduplication and cite identity. Add a compiled-graph regression that performs query recall first, then ordered recall of the same chunk, and verifies a tail beyond both the 500-character excerpt and 2,000-character observation cap appears in the final model prompt.",
+      "evidence": [
+        "agent_core/material.py:100 --     return MaterialDecision(\"sufficient\")",
+        "agent_core/material.py:82 --             if page.data.get(\"complete\") is True:",
+        "agent_core/nodes.py:306 --         evidence = merge_evidence(evidence, observation.evidence)",
+        "agent_core/evidence.py:102 --         elif not merged[position].text and evidence.text:",
+        "agent_core/evidence.py:128 -- def render_observations(observations: Iterable[ToolObservation], max_chars: int = 2000) -> str:",
+        "Replay used real run_agent/compiled graph, FakeLlm body intent and a repository transport returning VaultRecall(excerpt, text=full[:500]) for query recall and VaultRecall(full, complete=True, text=full) for ordered recall, same chunk_id=55. full=\"START_\" + \"a\"*4000 + \"_TAIL_FAILURE\". After planning recall_item(vault_item_id=31, query=\"key\"), actual tool_call_count=2 but answer prompt contains no _TAIL_FAILURE. Terminal: completed, outcome=answer, material_status=sufficient, evidence_chars=500, body_pages=2. No network or database used.",
+        "This is newly exposed by the new full-coverage backstop/sufficiency contract, rather than an unrelated pre-existing deduplication issue."
+      ]
+    },
+    {
+      "title": "Planning envelopes bypass the final answer protocol guard",
+      "severity": "P2",
+      "file": "services/tool_output_guard.py",
+      "line": 87,
+      "why_it_matters": "Final answers can still publish the exact text-JSON planning envelope as visible content and be marked successful. The filter checks tool_calls/function_calls and direct tool/args objects, but a decoded outer calls array is accepted and its nested call object is skipped; the planner itself uses this calls envelope. A second replay also accepts <tool_use name=\"recall_item\">...</tool_use>, although native_plan already recognizes tool_use as a forbidden textual call. Both ordinary article-analysis requests emitted the raw protocol followed by done with repair_count=0.",
+      "autofix_class": "manual",
+      "owner": "downstream-resolver",
+      "requires_verification": true,
+      "confidence": 100,
+      "pre_existing": false,
+      "suggested_fix": "Recognize nonempty calls arrays with tool/args entries as planning pseudo-calls, including when nested in a decoded object, and align XML opener coverage with the protocol forms recognized by native_plan (including tool_use/invoke). Keep the explicit current-question protocol-example exemption and bounded streaming buffering. Add chunk-split answer-service tests for these actual envelopes and require repair before visible output or typed failure afterward.",
+      "evidence": [
+        "services/tool_output_guard.py:87 --                 any(key in value for key in (\"tool_calls\", \"tool_call\", \"function_calls\", \"function_call\"))",
+        "services/tool_output_guard.py:92 --             start = self.pending.find(\"{\", start + end)",
+        "services/tool_output_guard.py:17 --         r\"<(?:tool_calls?|function_calls?)(?=[\\s>/])|<function(?=[\\s=/>])\"",
+        "Replay invoked real stream_agent_answer([{role:user,content:analyze article}], [], [], scripted answer_stream yielding text then finish=stop). Payload {\"calls\":[{\"tool\":\"recall_item\",\"args\":{\"vault_item_id\":31}}],\"done\":true} emitted unchanged delta and done; payload <tool_use name=\"recall_item\">{\"vault_item_id\":31}</tool_use> also emitted unchanged delta and done.",
+        "llm/planning.py native_plan already rejects textual tool_use/invoke and nonempty calls arrays, demonstrating that these are recognized protocol variants in the same newly added adapter boundary."
+      ]
+    }
+  ],
+  "residual_risks": [],
+  "testing_gaps": []
+}

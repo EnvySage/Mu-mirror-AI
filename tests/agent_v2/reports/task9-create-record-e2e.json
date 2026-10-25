@@ -1,0 +1,48 @@
+{
+  "created_at_utc": "2026-10-20T12:47:43.590306+00:00",
+  "execution": "real Java HTTP/SSE + real Python gRPC + real PostgreSQL command transaction; no LLM call",
+  "database": "mirror_ai_agent_v2_task9_20261020_test",
+  "user": "task9 test account (identifier omitted)",
+  "model": "not invoked; Java grant selected deterministic create path",
+  "initial_record": {
+    "content_exact": true,
+    "source": "user",
+    "status": "record_only",
+    "ai_processing_authorized": false,
+    "chunks_created": 0,
+    "approved_chunks_created": 0,
+    "todos_created": 0
+  },
+  "scenario_results": [
+    {
+      "name": "explicit_create_original_record_only",
+      "status": "passed"
+    },
+    {
+      "name": "same_request_id_replay",
+      "status": "passed"
+    },
+    {
+      "name": "concurrent_same_request_id",
+      "status": "passed"
+    },
+    {
+      "name": "response_lost_then_same_id_replay",
+      "status": "passed"
+    },
+    {
+      "name": "cancel_disconnect_and_idempotent_replay",
+      "status": "passed"
+    },
+    {
+      "name": "deleted_session_replay_is_gone",
+      "status": "passed"
+    },
+    {
+      "name": "new_request_id_allows_same_original_text",
+      "status": "passed"
+    }
+  ],
+  "record_count_after_suite": 5,
+  "report_kind": "real business-write E2E; cancellation and transport loss are client disconnect simulations, not browser clicks"
+}

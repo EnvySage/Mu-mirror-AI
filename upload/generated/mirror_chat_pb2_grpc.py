@@ -54,6 +54,11 @@ class MirrorChatStub:
                 request_serializer=mirror__chat__pb2.PlanNextStepRequest.SerializeToString,
                 response_deserializer=mirror__chat__pb2.PlanStepChunk.FromString,
                 _registered_method=True)
+        self.SummarizeDay = channel.unary_unary(
+                '/mirror.MirrorChat/SummarizeDay',
+                request_serializer=mirror__chat__pb2.SummarizeDayRequest.SerializeToString,
+                response_deserializer=mirror__chat__pb2.SummarizeDayResponse.FromString,
+                _registered_method=True)
 
 
 class MirrorChatServicer:
@@ -87,6 +92,13 @@ class MirrorChatServicer:
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def SummarizeDay(self, request, context):
+        """Summarize one ended chat day and propose (never activate) user memories.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_MirrorChatServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -109,6 +121,11 @@ def add_MirrorChatServicer_to_server(servicer, server):
                     servicer.PlanNextStep,
                     request_deserializer=mirror__chat__pb2.PlanNextStepRequest.FromString,
                     response_serializer=mirror__chat__pb2.PlanStepChunk.SerializeToString,
+            ),
+            'SummarizeDay': grpc.unary_unary_rpc_method_handler(
+                    servicer.SummarizeDay,
+                    request_deserializer=mirror__chat__pb2.SummarizeDayRequest.FromString,
+                    response_serializer=mirror__chat__pb2.SummarizeDayResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -219,6 +236,33 @@ class MirrorChat:
             '/mirror.MirrorChat/PlanNextStep',
             mirror__chat__pb2.PlanNextStepRequest.SerializeToString,
             mirror__chat__pb2.PlanStepChunk.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def SummarizeDay(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/mirror.MirrorChat/SummarizeDay',
+            mirror__chat__pb2.SummarizeDayRequest.SerializeToString,
+            mirror__chat__pb2.SummarizeDayResponse.FromString,
             options,
             channel_credentials,
             insecure,

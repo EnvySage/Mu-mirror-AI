@@ -1,0 +1,16 @@
+{
+  "source": "parent-reported",
+  "tests": {
+    "passed": 727,
+    "skipped": 0,
+    "elapsed_seconds": 41.02,
+    "command": ".venv/Scripts/python.exe -B -m pytest tests/ -q -p no:cacheprovider",
+    "database": "disposable Docker PostgreSQL reader",
+    "note": "Final authoritative rerun after native_messages system-instruction change"
+  },
+  "upload_sync": "clean",
+  "upload_import_and_graph_compile": "passed",
+  "read_tools": 11,
+  "diff_check": "clean except LF normalization warnings",
+  "lint": "no configured command"
+}

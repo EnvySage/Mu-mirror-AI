@@ -2,12 +2,12 @@
 
 from typing import Generator
 
-import httpx  # openai SDK 自身依赖，非新增依赖
-from openai import APIConnectionError, APIStatusError, APITimeoutError, OpenAI
+from openai import APIConnectionError, APIStatusError, APITimeoutError, OpenAI, Timeout as OpenAITimeout
 
 from config import CONFIG
-from errors import (
+from mirror_core.errors import (
     AiServiceError,
+    ContentInvalidError,
     LlmTimeoutError,
     LlmUnavailableError,
     require_config,
@@ -32,7 +32,7 @@ _LLM_ATTEMPT_TIMEOUT = max(1.0, round(_LLM_TIMEOUT / (1 + _LLM_MAX_RETRIES)))
 # 流式调用单独的超时（同 anthropic_llm）：read = 两块数据之间最多等多久。联调实测推理模型
 # 思考中途会停顿十几秒，沿用单 attempt 超时会直接断流、整段答案作废。connect 保持短。
 _STREAM_READ_TIMEOUT = float(CONFIG["llm"].get("stream_read_timeout_seconds", 60))
-_STREAM_TIMEOUT = httpx.Timeout(_STREAM_READ_TIMEOUT, connect=10.0)
+_STREAM_TIMEOUT = OpenAITimeout(_STREAM_READ_TIMEOUT, connect=10.0)
 
 # 轻量 JSON 任务的 max_tokens（关思考后实测只吐 40~50 token，256 足够且留足余量）
 _JSON_TASK_MAX_TOKENS = 256
@@ -49,21 +49,37 @@ def _translate(exc: Exception) -> AiServiceError:
 class OpenAiLlm(BaseLlm):
     """通用实现 — 只要兼容 OpenAI API 就能用"""
 
-    def __init__(self, api_key: str, base_url: str = "", model: str = "", provider: str = ""):
+    def __init__(
+        self, api_key: str, base_url: str = "", model: str = "", provider: str = "", *,
+        timeout: float | None = None, max_retries: int | None = None,
+    ):
         # 不做厂商兜底：三项缺任一直接报错，避免"没配"被静默换成别的模型计费
         require_config({"API Key": api_key, "API 地址": base_url, "模型名称": model})
         self.model = model
+        self._default_timeout = _LLM_ATTEMPT_TIMEOUT if timeout is None else timeout
+        self._default_max_retries = _LLM_MAX_RETRIES if max_retries is None else max_retries
 
         self.client = OpenAI(
             api_key=api_key,
             base_url=base_url,
-            timeout=_LLM_ATTEMPT_TIMEOUT,
-            max_retries=_LLM_MAX_RETRIES,
+            timeout=self._default_timeout,
+            max_retries=self._default_max_retries,
         )
 
-    def chat(self, messages: list[dict], temperature: float = 0.7) -> str:
+    def _client_for(self, timeout: float | None, max_retries: int | None):
+        options = {}
+        if timeout is not None:
+            options["timeout"] = timeout
+        if max_retries is not None:
+            options["max_retries"] = max_retries
+        return self.client.with_options(**options) if options else self.client
+
+    def chat(
+        self, messages: list[dict], temperature: float = 0.7, *,
+        timeout: float | None = None, max_retries: int | None = None,
+    ) -> str:
         try:
-            response = self.client.chat.completions.create(
+            response = self._client_for(timeout, max_retries).chat.completions.create(
                 model=self.model,
                 messages=messages,
                 temperature=temperature,
@@ -78,7 +94,10 @@ class OpenAiLlm(BaseLlm):
 
     def chat_stream(self, messages: list[dict],
                     temperature: float = 0.7,
-                    thinking_budget: int | None = None) -> Generator[tuple[str, str], None, None]:
+                    thinking_budget: int | None = None, *,
+                    timeout: float | None = None,
+                    max_retries: int | None = None,
+                    max_tokens: int | None = None) -> Generator[tuple[str, str], None, None]:
         """流式对话：每项 (kind, text)，kind ∈ {"thinking", "content"}。
 
         thinking_budget 仅为与 base 签名对齐而接收，本实现**不生效**：OpenAI 兼容系
@@ -89,12 +108,14 @@ class OpenAiLlm(BaseLlm):
         SDK 未带该属性的 chunk 直接得 None，零影响。
         """
         try:
-            stream = self.client.chat.completions.create(
+            request_timeout = _STREAM_TIMEOUT if timeout is None else timeout
+            stream = self._client_for(None, max_retries).chat.completions.create(
                 model=self.model,
                 messages=messages,
                 temperature=temperature,
                 stream=True,
-                timeout=_STREAM_TIMEOUT,
+                timeout=request_timeout,
+                **({"max_tokens": max_tokens} if max_tokens is not None else {}),
             )
         except APITimeoutError as e:
             raise LlmTimeoutError(f"LLM 流式连接超时（>{_STREAM_READ_TIMEOUT:.0f}s）") from e
@@ -116,6 +137,10 @@ class OpenAiLlm(BaseLlm):
         except APIConnectionError as e:
             # 流中途断连（网络抖动/网关超时）
             raise LlmUnavailableError("LLM 流式传输中断（openai APIConnectionError）") from e
+        finally:
+            close = getattr(stream, "close", None)
+            if callable(close):
+                close()
 
     @staticmethod
     def _from_status(exc: APIStatusError) -> AiServiceError:
@@ -129,7 +154,11 @@ class OpenAiLlm(BaseLlm):
             return LlmUnavailableError(f"LLM 服务端错误（HTTP {code}）")
         return translate_llm_sdk_exception(exc)  # 其他 4xx 走统一规则
 
-    def json_task(self, messages: list[dict], temperature: float = 0.7) -> str:
+    def json_task(
+        self, messages: list[dict], temperature: float = 0.7, *,
+        timeout: float | None = None, max_retries: int | None = None,
+        max_tokens: int | None = None,
+    ) -> str:
         """轻量 JSON 任务：关思考 + 小 max_tokens（意图路由 / 工具规划）
 
         OpenAI 兼容系的思考开关没有统一字段名，这里按常见的 thinking 走 extra_body；
@@ -139,27 +168,104 @@ class OpenAiLlm(BaseLlm):
             model=self.model,
             messages=messages,
             temperature=temperature,
-            max_tokens=_JSON_TASK_MAX_TOKENS,
+            max_tokens=_JSON_TASK_MAX_TOKENS if max_tokens is None else max_tokens,
         )
         try:
-            return self._create_text({**base, "extra_body": {"thinking": {"type": "disabled"}}})
+            return self._create_text(
+                {**base, "extra_body": {"thinking": {"type": "disabled"}}},
+                timeout=timeout, max_retries=max_retries,
+            )
         except APIStatusError as e:
             # 只对"参数不被支持"这一种 400 降级；其余 400（如请求本身非法）照常报错
             if e.status_code == 400 and any(
                     h in str(getattr(e, "message", "") or e).lower()
                     for h in _THINKING_UNSUPPORTED_HINTS):
-                return self._create_text(base)
+                return self._create_text(base, timeout=timeout, max_retries=max_retries)
             raise self._from_status(e) from e
 
-    def _create_text(self, kwargs: dict) -> str:
+    def _create_text(
+        self, kwargs: dict, *, timeout: float | None = None, max_retries: int | None = None,
+    ) -> str:
         """chat.completions.create 的异常翻译 + 取正文（chat / json_task 共用）
 
         APIStatusError 原样上抛（不翻译）：json_task 需要按 status_code 决定是否降级。
         """
         try:
-            response = self.client.chat.completions.create(**kwargs)
+            response = self._client_for(timeout, max_retries).chat.completions.create(**kwargs)
         except APITimeoutError as e:
             raise LlmTimeoutError(f"LLM 请求超时（>{_LLM_TIMEOUT:.0f}s）") from e
         except APIConnectionError as e:
             raise LlmUnavailableError("LLM 连接失败（openai APIConnectionError）") from e
         return response.choices[0].message.content
+
+    def plan(
+        self, messages: list[dict], tools: list[dict], *, protocol: str = "auto",
+        timeout: float | None = None, max_retries: int = 0,
+    ) -> dict:
+        """Graph planning with native tools or explicitly selected strict JSON."""
+        from llm.planning import run_plan
+        return run_plan(
+            self._plan_request, messages, tools, protocol=protocol, timeout=timeout,
+            max_retries=max_retries, default_timeout=self._default_timeout,
+        )
+
+    def _plan_request(self, messages, tools, protocol, timeout, max_retries):
+        import json
+        from llm.planning import PLAN_MAX_TOKENS, native_messages, native_plan, plan_schema, planning_messages, text_plan
+        kwargs = dict(model=self.model, messages=native_messages(messages), max_tokens=PLAN_MAX_TOKENS)
+        if protocol == "native":
+            if tools:
+                kwargs["tools"] = [{"type": "function", "function": {
+                    "name": tool["name"], "description": tool.get("description", ""), "parameters": tool["parameters"],
+                }} for tool in tools]
+                kwargs["tool_choice"] = "auto"
+        else:
+            kwargs["messages"] = planning_messages(messages, tools, protocol)
+            if protocol == "json_schema":
+                kwargs["response_format"] = {"type": "json_schema", "json_schema": {
+                    "name": "graph_plan", "strict": True, "schema": plan_schema(tools),
+                }}
+        response = self._client_for(timeout, max_retries).chat.completions.create(**kwargs)
+        choice = response.choices[0]
+        message = choice.message
+        if protocol != "native":
+            return text_plan(message.content or "", protocol, choice.finish_reason)
+        try:
+            calls = [{"tool": call.function.name, "args": json.loads(call.function.arguments)} for call in (message.tool_calls or [])]
+        except (ValueError, TypeError) as exc:
+            raise ContentInvalidError("Native plan arguments must be valid JSON") from exc
+        return native_plan(calls, message.content or "", choice.finish_reason)
+
+    def answer_stream(
+        self, messages: list[dict], temperature: float = 0.7,
+        thinking_budget: int | None = None, *, timeout: float | None = None,
+        max_retries: int | None = None, max_tokens: int | None = None,
+    ) -> Generator[tuple[str, str], None, None]:
+        """Graph answer events include the upstream terminal finish reason."""
+        stream = None
+        finish = None
+        try:
+            stream = self._client_for(None, max_retries).chat.completions.create(
+                model=self.model, messages=messages, temperature=temperature, stream=True,
+                timeout=_STREAM_TIMEOUT if timeout is None else timeout,
+                **({"max_tokens": max_tokens} if max_tokens is not None else {}),
+            )
+            for chunk in stream:
+                if not chunk.choices:
+                    continue
+                choice = chunk.choices[0]
+                if choice.finish_reason is not None:
+                    finish = choice.finish_reason
+                delta = choice.delta
+                if delta is not None:
+                    reasoning = getattr(delta, "reasoning_content", None)
+                    if reasoning:
+                        yield ("thinking", reasoning)
+                    if delta.content:
+                        yield ("content", delta.content)
+        except (APITimeoutError, APIConnectionError, APIStatusError) as exc:
+            raise _translate(exc) from exc
+        finally:
+            if stream is not None:
+                stream.close()
+        yield ("finish", finish or "unknown")

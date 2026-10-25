@@ -22,9 +22,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from generated import common_pb2 as common  # noqa: E402
 from generated import record_processor_pb2 as rp_pb2  # noqa: E402
 
-from prompts_loader import loader  # noqa: E402
+from mirror_core.prompts_loader import loader  # noqa: E402
 from services import record_processor as rps  # noqa: E402
-from time_substitution import (  # noqa: E402
+from mirror_core.time_substitution import (  # noqa: E402
     MAX_SUBSTITUTIONS,
     format_time_rule,
     parse_reference_date,

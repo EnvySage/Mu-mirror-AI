@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from generated import common_pb2 as common  # noqa: E402
 from generated import record_processor_pb2 as rp_pb2  # noqa: E402
 
-from glossary_render import (  # noqa: E402
+from mirror_core.glossary_render import (  # noqa: E402
     GLOSSARY_SOFT_CONSTRAINT,
     format_glossary,
     glossary_lines,
@@ -312,7 +312,7 @@ class TestChunkTruncation:
 # ---------------------------------------------------------------------------
 class TestPromptWiring:
     def test_extract_terms_template_renders(self):
-        from prompts_loader import loader
+        from mirror_core.prompts_loader import loader
         p = loader.render("extract_terms",
                           chunks="[1] 2026-09-01 chunk_id=1：语料",
                           existing_terms="- 论文：x")
@@ -321,14 +321,14 @@ class TestPromptWiring:
         assert "{chunks}" not in p and "{existing_terms}" not in p
 
     def test_classify_glossary_placeholder(self):
-        from prompts_loader import loader
+        from mirror_core.prompts_loader import loader
         p = loader.render("classify", content="正文", glossary=format_glossary([_term("论文")]))
         assert "论文" in p and "{glossary}" not in p
         p_empty = loader.render("classify", content="正文", glossary="")
         assert "仅供参考" not in p_empty  # 空词条不留孤儿话术
 
     def test_intent_chat_profile_glossary_placeholder(self):
-        from prompts_loader import loader
+        from mirror_core.prompts_loader import loader
         g = format_glossary([_term("论文", description="毕设")])
         assert "毕设" in loader.render("intent", query="q", glossary=g)
         assert "毕设" in loader.render("chat", question="q", history="h", context="c", glossary=g)

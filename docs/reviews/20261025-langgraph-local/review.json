@@ -1,0 +1,142 @@
+{
+  "status": "complete",
+  "verdict": "Ready to merge",
+  "scope": {
+    "base": "HEAD",
+    "branch": "ai",
+    "head_sha": "fca6ca625aa60536a3a288bae9538cf092c24c29",
+    "pr_url": null,
+    "files_changed": 34
+  },
+  "intent": "Make graph_v2 distinguish valid native/JSON tool planning, sufficient authorized task material, and accepted final answers. Complete scoped content paging, preserve evidence after optional failures, reject empty/truncated/pseudo-tool output and avoid concatenating retries, while preserving legacy behavior and Java authorization.",
+  "intent_confidence": "explicit",
+  "reviewers": [
+    "correctness",
+    "adversarial"
+  ],
+  "findings": [],
+  "actionable_findings": [],
+  "triage_groups": [],
+  "pre_existing_findings": [],
+  "requirements_completeness": {
+    "plan": "docs/superpowers/plans/2026-10-25-langgraph-chat-reliability.md",
+    "source": "explicit",
+    "requirements": [],
+    "implementation_units": [
+      {
+        "id": "U1",
+        "status": "met",
+        "evidence": "Native/schema/text planning adapters and shared deadlines; independent final protocol tests passed."
+      },
+      {
+        "id": "U2",
+        "status": "met",
+        "evidence": "Typed answer acceptance, protocol filtering and bounded repair; independently validated corrected output failures and protocol variants."
+      },
+      {
+        "id": "U3",
+        "status": "met",
+        "evidence": "Authorized scoped paging, record/todo tools and registry validation; repository boundaries reviewed; parent full suite includes disposable PostgreSQL integration."
+      },
+      {
+        "id": "U4",
+        "status": "met",
+        "evidence": "Task material checks, deterministic body refill and partial-state propagation; independent compiled-graph regressions passed after fixes."
+      },
+      {
+        "id": "U5",
+        "status": "met",
+        "evidence": "Independent review and fix validation complete; parent reports final 727 tests passing, upload sync/import/compile and diff checks clean, with implementation notes saved."
+      }
+    ],
+    "unrequested_behavior_rules": []
+  },
+  "learnings": [],
+  "agent_native_gaps": [],
+  "deployment_notes": [],
+  "residual_risks": [],
+  "testing_gaps": [],
+  "coverage": {
+    "depth": "full",
+    "scope": "Local working tree versus HEAD, including explicitly requested untracked source/tests/plan; upload mirror excluded.",
+    "reviewer_lenses": {
+      "correctness": [
+        "correctness",
+        "testing",
+        "reliability",
+        "maintainability"
+      ],
+      "adversarial": [
+        "adversarial",
+        "security",
+        "performance",
+        "agent-native"
+      ]
+    },
+    "reviewer_note": "Caller explicitly authorized two combined passes; two independent reviewers, not eight independent personas. Same-model agreement did not promote confidence.",
+    "project_standards": "Not run: successful repository search found no applicable standards files.",
+    "validation": {
+      "batch_outcome": "verdicts",
+      "confirmed": 0,
+      "rejected": 3,
+      "unresolved": 0,
+      "malformed": 0,
+      "failed": 0,
+      "shortcut_skipped": 0,
+      "protected_subject_reclassifications": 0,
+      "rejection_reason": "All three originally reproduced defects were fixed by the parent before fresh independent validation; discriminating tests and current source refute them as remaining defects.",
+      "fixed_before_validation": [
+        {
+          "#": 1,
+          "issue": "Full body lost after an earlier excerpt of the same chunk",
+          "evidence": "agent_core/evidence.py:102-106 upgrades a matching strictly longer prefix; compiled-graph test confirms tail beyond 4000 characters reaches the answer prompt."
+        },
+        {
+          "#": 2,
+          "issue": "Visible partial output lost on model transport failure",
+          "evidence": "services/answer_service.py:797-832 emits typed failures; compiled graph and pre/post-output replays confirm truthful partial status, correct codes and no retry."
+        },
+        {
+          "#": 3,
+          "issue": "Planner JSON/XML leaked into accepted answers",
+          "evidence": "services/tool_output_guard.py:14-30 and92-98 covers calls/function and tool_use/invoke; 12 chunk-width variants and valid native JSON replays confirm blocking while examples remain accepted."
+        }
+      ]
+    },
+    "independent_validation": [
+      "122 focused tests passed in3.91s, plus explicit pre/post-output transport-failure replays.",
+      "Final adapter addendum: 43 protocol tests passed plus 3 input-shape/immutability checks; both adapters use the system-priority helper.",
+      "Report writer inspected refuting current lines and regression assertions; all 34 reviewed-file SHA256 fingerprints match."
+    ],
+    "parent_reported_validation": {
+      "tests_passed": 727,
+      "tests_skipped": 0,
+      "elapsed_seconds": 41.02,
+      "database": "Disposable Docker PostgreSQL reader",
+      "upload": "Resynced/check clean; imports/build_graph compilation passed with 11 read tools",
+      "diff_check": "Clean except informational LF normalization warnings",
+      "lint": "No configured lint command"
+    },
+    "limits": [
+      "No real-model or production-database calls. Upload and full-suite results are parent-reported, not independently rerun by this review.",
+      "U5 sync/verification was pending at dispatch and subsequently completed by the parent."
+    ],
+    "failed_reviewers": [],
+    "timed_out_reviewers": [],
+    "suppressed_by_confidence": {},
+    "first_evidence_backfilled": 0,
+    "quote_demotions": 0,
+    "mode_aware_demotions": 0,
+    "semantic_duplicates_merged": 1,
+    "preliminary_fast_pass": "No urgent P0/P1 candidates.",
+    "cross_model": "Cross-model adversarial review was not run: the invoking user prohibits external-model egress/jobs. The adversarial lens used an in-process reviewer.",
+    "reviewed_tree_fingerprints": "reviewed-tree-sha256.json"
+  },
+  "peer": {
+    "outcome": "in-process-fallback",
+    "coverage": "Cross-model adversarial review was not run: the invoking user prohibits external-model egress/jobs. The adversarial lens used an in-process reviewer."
+  },
+  "artifact_path": "C:/Users/15999/AppData/Local/Temp/compound-engineering-15999/ce-code-review/20261025-langgraph-local",
+  "run_id": "20261025-langgraph-local",
+  "verdict_reason": "No current actionable findings remain after independent validation of all three fixes and the final adapter adjustment."
+}

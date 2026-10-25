@@ -13,6 +13,36 @@ service MirrorChat {
   // 对话 Agent 循环（chat-loop-design.md §3）：Java 驱动，每步调一次，带上已执行结果；
   // 服务端流式，先吐 thinking 增量（B 透传 SSE thinking，等待可感知），终帧给 calls/done
   rpc PlanNextStep(PlanNextStepRequest) returns (stream PlanStepChunk);
+  // Summarize one ended chat day and propose (never activate) user memories.
+  rpc SummarizeDay(SummarizeDayRequest) returns (SummarizeDayResponse);
+}
+
+message ChatDayMessage {
+  int64 message_id = 1;
+  string content = 2;
+  string created_at = 3;
+}
+
+message SummarizeDayRequest {
+  repeated ChatDayMessage messages = 1;
+  string source_hash = 2;
+  string source_date = 3;
+  string timezone = 4;
+  LlmConfig llm_config = 5;
+}
+
+message MemoryCandidate {
+  string content = 1;
+  string kind = 2;
+  repeated int64 source_message_ids = 3;
+  optional string event_date = 4;
+  optional string expires_at = 5;
+}
+
+message SummarizeDayResponse {
+  string summary = 1;
+  repeated MemoryCandidate memory_candidates = 2;
+  string source_hash = 3;
 }
 
 message ExtractIntentRequest {
@@ -38,6 +68,7 @@ message ChatRequest {
   LlmConfig llm_config = 4;
   repeated GlossaryTerm glossary = 5;  // 用户个人词汇表（confirmed top30），软约束注入
   repeated ToolResult tool_results = 6; // PlanTools 计划的执行结果（B 执行工具后回传）；空列表零影响
+  AssistantContext assistant_context = 7;
 }
 
 message ChatMessage {
@@ -79,6 +110,7 @@ message PlanToolsRequest {
   repeated GlossaryTerm glossary = 2; // 个人词汇表（工具参数里的"论文"等指代依赖它）
   repeated ToolSpec tools = 3;        // Java 侧注册表快照（Python 不硬编码工具清单）
   LlmConfig llm_config = 4;
+  AssistantContext assistant_context = 5;
 }
 
 message PlanToolsReply {
@@ -102,7 +134,8 @@ message PlanNextStepRequest {
   repeated ToolResult previous_results = 6;  // 已执行步骤的结果（首步为空）→ prompt 渲染成"已知材料"
   int32 step = 7;                            // 第几步（1-based）
   int32 max_steps = 8;                       // 步数预算 → prompt 里告知"还剩几步"
-  bool has_retrieval = 9;                    // RAG 是否有命中（false = 检索空，规划要据此换策略）
+  bool has_retrieval = 9;                    // Deprecated：保留 wire 兼容，当前 planner 忽略；根据工具结果判断检索状态
+  AssistantContext assistant_context = 10;
 }
 
 message PlanStepChunk {

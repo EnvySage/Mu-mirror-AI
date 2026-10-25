@@ -27,7 +27,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from generated import mirror_chat_pb2 as chat_pb2  # noqa: E402
 
-from errors import AiServiceError  # noqa: E402
+from mirror_core.errors import AiServiceError  # noqa: E402
 from llm.anthropic_llm import AnthropicLlm  # noqa: E402
 from llm.openai_llm import OpenAiLlm  # noqa: E402
 from services.chat_service import MirrorChatServicer  # noqa: E402

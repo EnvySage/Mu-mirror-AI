@@ -38,7 +38,9 @@ enum TaskStatus {
 }
 
 enum AiProtocol {
+  option allow_alias = true;
   AI_PROTOCOL_UNKNOWN = 0;
+  PROTOCOL_UNKNOWN = 0;
   OPENAI = 1;
   ANTHROPIC = 2;
 }
@@ -74,6 +76,39 @@ message LlmConfig {
   string model = 5;
 }
 
+message AssistantContext {
+  string role_tone = 1;
+  string current_date = 2;
+  string timezone = 3;
+  string action_status_summary = 4;
+  repeated ChatMemoryContext memories = 5;
+  DivinationContext divination = 6;
+}
+
+message ChatMemoryContext {
+  string memory_id = 1;
+  string content = 2;
+  string kind = 3;
+  string source_date = 4;
+  repeated int64 source_message_ids = 5;
+  optional string event_date = 6;
+  optional string expires_at = 7;
+}
+
+message DivinationCard {
+  string card_name = 1;
+  string orientation = 2;
+  string interpretation = 3;
+}
+
+message DivinationContext {
+  string draw_id = 1;
+  string drawn_at = 2;
+  string question = 3;
+  repeated DivinationCard cards = 4;
+  bool entertainment_only = 5;
+}
+
 message EmbeddingConfig {
   string source = 1;
   string local_model = 2;
@@ -83,6 +118,23 @@ message EmbeddingConfig {
   string base_url = 6;
 }
 
+message GrowthAxis {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  int64 definition_version = 4;
+}
+
+message GrowthContext {
+  repeated GrowthAxis axes = 1;
+}
+
+message GrowthSuggestion {
+  string dimension_id = 1;
+  int32 points = 2;
+  string reason = 3;
+}
+
 // ── 工具规划契约（toolcalling-vault-design.md 第 2/6 节，2026-09-06）──
 
 // 工具注册表条目：Java 侧注册表快照随 PlanToolsRequest 传入，Python 不硬编码工具清单
@@ -90,6 +142,7 @@ message ToolSpec {
   string name = 1;         // 工具名（如 search_records，B 侧执行时的查找键）
   string description = 2;  // 用途描述（prompt 逐条渲染）
   string args_schema = 3;  // 参数说明（字段清单/JSON Schema 文本，prompt 逐条渲染）
+  string effect = 4;       // READ | PREPARE_WRITE; submission tools are not available
 }
 
 // 工具执行结果：Java 执行后随 ChatRequest.tool_results 回传，Python 渲染成上下文块

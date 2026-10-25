@@ -9,14 +9,14 @@ from generated import common_pb2 as common
 from generated import record_processor_pb2 as pb2
 from generated import record_processor_pb2_grpc as pb2_grpc
 
-from errors import abort_with_mapped
-from glossary_render import format_glossary
+from mirror_core.errors import abort_with_mapped
+from mirror_core.glossary_render import format_glossary
 from llm.factory import create_llm
-from llm_json import parse_json
-from prompts_loader import loader
-from recent_context_render import format_recent_context
-from time_substitution import format_time_rule, parse_reference_date, resolve_substitutions
-from todo_render import format_open_todos
+from mirror_core.llm_json import parse_json
+from mirror_core.prompts_loader import loader
+from mirror_core.recent_context_render import format_recent_context
+from mirror_core.time_substitution import format_time_rule, parse_reference_date, resolve_substitutions
+from mirror_core.todo_render import format_open_todos
 
 # 枚举映射表（proto 枚举名大写）
 CONTENT_TYPE_MAP = {
@@ -57,6 +57,32 @@ VALID_STATUS = {common.TaskStatus.NOT_STARTED, common.TaskStatus.IN_PROGRESS, co
 
 # TodoRef.suggested_status 白名单（LLM JSON 里的字符串状态 → 只透传三态，脏值丢弃）
 VALID_SUGGESTED_STATUS = {"NOT_STARTED", "IN_PROGRESS", "COMPLETED"}
+
+
+def _parse_growth_suggestions(result: dict, axes) -> list[common.GrowthSuggestion]:
+    """Validate aggregate per-record growth suggestions against the request's exact axes."""
+    axes_by_id = {axis.id: axis for axis in axes if axis.id}
+    raw = result.get("growth_suggestions", [])
+    raw_by_id = {}
+    if isinstance(raw, list):
+        for candidate in raw:
+            if not isinstance(candidate, dict):
+                continue
+            axis_id = candidate.get("dimension_id")
+            points = candidate.get("points")
+            if not isinstance(axis_id, str) or axis_id not in axes_by_id:
+                continue
+            if isinstance(points, bool) or not isinstance(points, int):
+                continue
+            if not 0 <= points <= 5:
+                continue
+            raw_by_id.setdefault(axis_id, candidate)
+    # Missing/invalid suggestions mean no evidenced contribution, never a guessed score.
+    return [common.GrowthSuggestion(
+        dimension_id=axis.id,
+        points=raw_by_id[axis.id]["points"] if axis.id in raw_by_id else 0,
+        reason=str(raw_by_id[axis.id].get("reason", ""))[:500] if axis.id in raw_by_id else "",
+    ) for axis in axes if axis.id]
 
 
 def _parse_todo_ref(item: dict) -> pb2.TodoRef | None:
@@ -132,11 +158,14 @@ class RecordProcessorServicer(pb2_grpc.RecordProcessorServicer):
             if ref_date:
                 print(f"[Classify] reference_date={ref_date.isoformat()}（相对时间消解开启）")
 
+            growth_context_text = self._format_growth_context(request.growth_context.axes)
             if single:
                 return self._classify_single(llm, content, glossary_text, todos_text, recent_text,
-                                             format_time_rule(ref_date, single=True), ref_date)
+                                             format_time_rule(ref_date, single=True), ref_date,
+                                             request.growth_context.axes, growth_context_text)
             return self._classify_split(llm, content, glossary_text, todos_text, recent_text,
-                                        format_time_rule(ref_date), ref_date)
+                                        format_time_rule(ref_date), ref_date,
+                                        request.growth_context.axes, growth_context_text)
 
         except Exception as e:
             print(f"[Classify] 错误: {e}")
@@ -146,9 +175,11 @@ class RecordProcessorServicer(pb2_grpc.RecordProcessorServicer):
     # 单段模式：用户确认过边界的完整片段，禁止拆分，恰好 1 条 ClassifyItem
     # ------------------------------------------------------------------
     def _classify_single(self, llm, content: str, glossary_text: str = "", todos_text: str = "",
-                         recent_text: str = "", time_rule: str = "", ref_date=None):
+                         recent_text: str = "", time_rule: str = "", ref_date=None,
+                         growth_axes=(), growth_context_text=""):
         prompt = loader.render("classify_single", content=content, glossary=glossary_text,
-                               open_todos=todos_text, recent_context=recent_text, time_rule=time_rule)
+                               open_todos=todos_text, recent_context=recent_text, time_rule=time_rule,
+                               growth_context=growth_context_text)
         response_text = llm.chat([{"role": "user", "content": prompt}])
         print(f"[Classify/single] LLM 响应: {response_text[:200]}")
 
@@ -170,15 +201,18 @@ class RecordProcessorServicer(pb2_grpc.RecordProcessorServicer):
         item = self._build_item(item_data[0], fallback_content=content, ref_date=ref_date,
                                 subs_text=content, outer_subs=result.get("time_substitutions"))
         print(f"[Classify/single] 返回 1 条: {item.title}")
-        return pb2.ClassifyResponse(skip=False, skip_reason="", items=[item])
+        return pb2.ClassifyResponse(skip=False, skip_reason="", items=[item],
+                                    growth_suggestions=_parse_growth_suggestions(result, growth_axes))
 
     # ------------------------------------------------------------------
     # 拆分模式：一次 LLM 调用完成拆分+分类
     # ------------------------------------------------------------------
     def _classify_split(self, llm, content: str, glossary_text: str = "", todos_text: str = "",
-                        recent_text: str = "", time_rule: str = "", ref_date=None):
+                        recent_text: str = "", time_rule: str = "", ref_date=None,
+                        growth_axes=(), growth_context_text=""):
         prompt = loader.render("classify", content=content, glossary=glossary_text,
-                               open_todos=todos_text, recent_context=recent_text, time_rule=time_rule)
+                               open_todos=todos_text, recent_context=recent_text, time_rule=time_rule,
+                               growth_context=growth_context_text)
         response_text = llm.chat([{"role": "user", "content": prompt}])
         print(f"[Classify] LLM 响应: {response_text[:200]}")
 
@@ -217,7 +251,23 @@ class RecordProcessorServicer(pb2_grpc.RecordProcessorServicer):
             items.append(self._build_item(item, fallback_content=original_content, ref_date=ref_date,
                                           outer_subs=outer_subs))
         print(f"[Classify] 返回 {len(items)} 条记录")
-        return pb2.ClassifyResponse(skip=False, skip_reason="", items=items)
+        return pb2.ClassifyResponse(skip=False, skip_reason="", items=items,
+                                    growth_suggestions=_parse_growth_suggestions(result, growth_axes))
+
+    @staticmethod
+    def _format_growth_context(axes) -> str:
+        if not axes:
+            return ""
+        rendered = "\n".join(
+            f"- id={axis.id}; name={axis.name}; description={axis.description}; "
+            f"definition_version={axis.definition_version}"
+            for axis in axes
+        )
+        return ("## 成长贡献评估（仅评本条记录）\n"
+                "根据下方 Java 传入的成长维度原样评估这条记录体现的具体活动贡献。"
+                "评价本条活动证据，不评价用户人格；every axis can be zero。"
+                "仅有明确证据时给 0..5 的整数分，无证据为 0，不得编造贡献。\n"
+                f"轴定义（ID 必须逐字使用）：\n{rendered}\n")
 
     # ------------------------------------------------------------------
     def _build_item(self, item: dict, fallback_content: str, ref_date=None,
@@ -250,6 +300,9 @@ class RecordProcessorServicer(pb2_grpc.RecordProcessorServicer):
         if subs:
             print(f"[Classify] 时间词替换 {len(subs)} 处: {subs}")
 
+        raw_tags = item.get("user_tags", [])
+        user_tags = ([tag.strip() for tag in raw_tags if isinstance(tag, str) and tag.strip()][:20]
+                     if isinstance(raw_tags, list) else [])
         return pb2.ClassifyItem(
             title=item.get("title", ""),
             summary=item.get("summary", ""),
@@ -258,6 +311,7 @@ class RecordProcessorServicer(pb2_grpc.RecordProcessorServicer):
             moods=moods,
             status=status,
             keywords=item.get("keywords", []),
+            user_tags=user_tags,
             **({"refers_to_todo": ref} if (ref := _parse_todo_ref(item)) else {}),
             time_substitutions=[pb2.TimeSubstitution(original=o, resolved=r) for o, r in subs],
         )

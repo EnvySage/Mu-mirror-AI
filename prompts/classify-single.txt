@@ -51,7 +51,7 @@ HAPPY、EXCITED、SATISFIED、GRATEFUL、EXPECTING、CALM、BORED、CONFUSED、A
 - COMPLETED（已完成）
 - content_type 不是 TODO/PLAN 时用 STATUS_UNKNOWN；是 TODO/PLAN 时必须从上面三个里选，不许用 STATUS_UNKNOWN
 
-{open_todos}{recent_context}
+{open_todos}{recent_context}{growth_context}
 ## 输出格式
 
 只输出 JSON（不要多余解释）：
@@ -64,9 +64,12 @@ HAPPY、EXCITED、SATISFIED、GRATEFUL、EXPECTING、CALM、BORED、CONFUSED、A
   "moods": ["情绪（大写）"],
   "status": "状态（大写）",
   "keywords": ["关键词1", "关键词2", "关键词3"],
+  "user_tags": ["自由标签"],
   "refers_to_todo": {"todo_id": 0, "suggested_status": "STATUS_UNKNOWN"},
   "todo_confidence": 0.0
 }
+
+还需返回顶层 `growth_suggestions` 数组，每个元素为 `{"dimension_id":"请求中的原样 ID","points":0,"reason":"本条活动证据"}`。仅能使用上方请求轴 ID，points 必须是 0..5 整数。只评这条记录的活动证据，不评人格；every axis can be zero。没有明确证据就给 0，不得推测或编造贡献。自由标签 `user_tags` 与分类关键词 `keywords` 分开填写。
 
 {time_rule}
 

@@ -18,7 +18,8 @@ Mu-mirror-AI 是一个基于 gRPC 的 AI 服务框架，提供以下功能：
 ```
 Mu-mirror-AI/
 ├── server.py                 # gRPC 服务器入口
-├── test_client.py            # 测试客户端
+├── mirror_core/              # 业务辅助层（errors / llm_json / prompts_loader / render / time）
+├── scripts/                  # 工具脚本（smoke_client / check_environment / stub_llm）
 ├── generate_proto.py         # Proto 编译脚本
 ├── requirements.txt          # Python 依赖
 ├── config.example.yml        # 配置示例

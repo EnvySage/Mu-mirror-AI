@@ -17,7 +17,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))  # 仓库根，import errors/llm_json/...
 
-from errors import (  # noqa: E402
+from mirror_core.errors import (  # noqa: E402
     AiServiceError,
     ContentInvalidError,
     LlmTimeoutError,
@@ -26,7 +26,7 @@ from errors import (  # noqa: E402
     safe_details,
     translate_llm_sdk_exception,
 )
-from llm_json import parse_json  # noqa: E402
+from mirror_core.llm_json import parse_json  # noqa: E402
 from services import chat_service  # noqa: E402
 
 import grpc  # noqa: E402
@@ -91,13 +91,24 @@ class TestParseJson:
 # ---------------------------------------------------------------------------
 # 3. SDK 异常翻译映射
 # ---------------------------------------------------------------------------
+def _openai_http_module():
+    """Use the transport module imported by the installed OpenAI SDK."""
+    from openai import _base_client
+
+    for name in ("httpx2", "httpx"):
+        module = getattr(_base_client, name, None)
+        if module is not None:
+            return module
+    raise AssertionError("Installed OpenAI SDK exposes no HTTP transport module")
+
+
 def _mk_openai_status_error(status_code: int) -> Exception:
     """构造 openai.APIStatusError（不发起真实网络请求）"""
     from openai import APIStatusError
-    import httpx2
+    http = _openai_http_module()
 
-    request = httpx2.Request("POST", "https://api.test/v1/chat/completions")
-    response = httpx2.Response(status_code, request=request, json={"error": {"message": "x"}})
+    request = http.Request("POST", "https://api.test/v1/chat/completions")
+    response = http.Response(status_code, request=request, json={"error": {"message": "x"}})
     return APIStatusError("boom", response=response, body=None)
 
 
@@ -165,19 +176,19 @@ class TestSdkExceptionTranslation:
 
     def test_openai_real_timeout_class(self):
         from openai import APITimeoutError
-        import httpx2
+        http = _openai_http_module()
 
         err = translate_llm_sdk_exception(
-            APITimeoutError(httpx2.Request("POST", "https://api.test")))
+            APITimeoutError(http.Request("POST", "https://api.test")))
         assert isinstance(err, LlmTimeoutError)
         assert err.code == grpc.StatusCode.DEADLINE_EXCEEDED
 
     def test_openai_real_connection_error(self):
         from openai import APIConnectionError
-        import httpx2
+        http = _openai_http_module()
 
         err = translate_llm_sdk_exception(
-            APIConnectionError(message="conn fail", request=httpx2.Request("POST", "https://x")))
+            APIConnectionError(message="conn fail", request=http.Request("POST", "https://x")))
         assert isinstance(err, LlmUnavailableError)
 
     def test_non_sdk_exception_falls_through(self):
@@ -299,7 +310,7 @@ class TestSafeDetails:
             def abort(self, code, details):
                 self.aborted = (code, details)
 
-        from errors import abort_with_mapped
+        from mirror_core.errors import abort_with_mapped
         ctx = Ctx()
         abort_with_mapped(ctx, RuntimeError("connection refused to 10.0.0.5:5432"))
         code, details = ctx.aborted

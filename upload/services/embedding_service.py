@@ -4,7 +4,7 @@ from generated import embedding_pb2 as pb2
 from generated import embedding_pb2_grpc as pb2_grpc
 
 from embedding.factory import create_embedder
-from errors import abort_with_mapped
+from mirror_core.errors import abort_with_mapped
 
 
 class EmbeddingServiceServicer(pb2_grpc.EmbeddingServiceServicer):

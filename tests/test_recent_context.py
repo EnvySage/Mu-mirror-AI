@@ -23,8 +23,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from generated import common_pb2 as common  # noqa: E402
 from generated import record_processor_pb2 as rp_pb2  # noqa: E402
 
-from prompts_loader import loader  # noqa: E402
-from recent_context_render import format_recent_context  # noqa: E402
+from mirror_core.prompts_loader import loader  # noqa: E402
+from mirror_core.recent_context_render import format_recent_context  # noqa: E402
 from services import record_processor as rps  # noqa: E402
 
 
@@ -52,7 +52,7 @@ class TestProtoContract:
         assert {n: f.number for n, f in fields.items()} == {
             "content": 1, "llm_config": 2, "single": 3, "glossary": 4,
             "open_todos": 5, "recent_context": 6, "reference_date": 7,
-            "processing_authorized": 8,
+            "processing_authorized": 8, "growth_context": 9,
         }
 
     def test_recent_hint_fields(self):
@@ -148,7 +148,7 @@ class TestFormatRecentContext:
         assert "- 9-11 " in out
 
     def test_cap_at_max_items(self):
-        from recent_context_render import _MAX_ITEMS
+        from mirror_core.recent_context_render import _MAX_ITEMS
         hints = [_hint(title=f"t{i}") for i in range(_MAX_ITEMS + 5)]
         out = format_recent_context(hints)
         assert f"t{_MAX_ITEMS - 1}" in out
@@ -291,5 +291,5 @@ class TestConfig:
         assert CONFIG["recent_context"]["max_keywords"] == 5
 
     def test_render_limits_follow_config(self):
-        from recent_context_render import _MAX_ITEMS, _MAX_KEYWORDS, _MAX_TITLE_CHARS
+        from mirror_core.recent_context_render import _MAX_ITEMS, _MAX_KEYWORDS, _MAX_TITLE_CHARS
         assert _MAX_ITEMS == 20 and _MAX_TITLE_CHARS == 40 and _MAX_KEYWORDS == 5

@@ -24,6 +24,7 @@ message ClassifyRequest {
   // Java 仅在用户主动请求本次整理或明确确认片段时设置；缺省 false 一律拒绝分类。
   // 服务端在创建 LLM 前执行 fail-closed 检查。
   bool processing_authorized = 8;
+  GrowthContext growth_context = 9;
 }
 
 // 时间词替换项：把片段里的相对时间词替换成绝对日期。
@@ -82,6 +83,7 @@ message ClassifyResponse {
   bool skip = 1;
   string skip_reason = 2;
   repeated ClassifyItem items = 3;
+  repeated GrowthSuggestion growth_suggestions = 4;
 }
 
 message ClassifyItem {
@@ -94,4 +96,5 @@ message ClassifyItem {
   repeated string keywords = 7;
   TodoRef refers_to_todo = 8;       // 待办引用（todo-registry 判别期；无引用不设值）
   repeated TimeSubstitution time_substitutions = 9;  // 本片段内的时间词替换（无参照日期 / 无相对时间词时为空）
+  repeated string user_tags = 10;
 }

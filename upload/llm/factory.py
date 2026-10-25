@@ -7,7 +7,16 @@ from llm.anthropic_llm import AnthropicLlm
 from generated import common_pb2 as common
 
 
-def create_llm(provider: str, api_key: str, base_url: str = "", model: str = "", protocol: int = 0) -> BaseLlm:
+def create_llm(
+    provider: str,
+    api_key: str,
+    base_url: str = "",
+    model: str = "",
+    protocol: int = 0,
+    *,
+    timeout: float | None = None,
+    max_retries: int | None = None,
+) -> BaseLlm:
     """
     创建 LLM 实例
 
@@ -20,7 +29,12 @@ def create_llm(provider: str, api_key: str, base_url: str = "", model: str = "",
     """
     if protocol == common.AiProtocol.ANTHROPIC:
         # 不兜底默认模型：model 为空由 AnthropicLlm 报"配置缺失"
-        return AnthropicLlm(api_key=api_key, base_url=base_url, model=model)
+        return AnthropicLlm(
+            api_key=api_key, base_url=base_url, model=model, timeout=timeout, max_retries=max_retries,
+        )
 
     # 默认 OpenAI 兼容
-    return OpenAiLlm(api_key=api_key, base_url=base_url, model=model, provider=provider)
+    return OpenAiLlm(
+        api_key=api_key, base_url=base_url, model=model, provider=provider,
+        timeout=timeout, max_retries=max_retries,
+    )

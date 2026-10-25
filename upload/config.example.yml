@@ -1,0 +1,35 @@
+# Mirror AI 服务配置
+# 仅服务级配置，不涉及用户数据（用户配置由 Java 端管理）
+
+server:
+  port: 10003              # gRPC 端口
+  workers: 4               # 线程池大小
+
+# 独立只读 Agent gRPC；默认关闭，启用时另监听 10004。
+# MIRROR_AGENT_INTERNAL_TOKEN 和 MIRROR_AI_READ_DSN 只通过环境变量注入，不写入本文件。
+agent:
+  enabled: false
+  port: 10004
+  workers: 2
+  maximum_concurrent_rpcs: 2
+  total_budget_ms: 480000
+  loop_budget_ms: 180000
+  answer_budget_ms: 180000
+  max_plan_rounds: 4
+  # auto: native tool calls, capability-error fallback to text_json; or native/json_schema/text_json.
+  planning_protocol: auto
+  half_life_days: 30
+
+# Prompt 模板路径
+prompts:
+  classify: "prompts/classify.txt"
+  chat: "prompts/chat.txt"
+  intent: "prompts/intent.txt"
+  agent_intent: "prompts/agent_intent.txt"
+  profile: "prompts/profile.txt"
+
+# 本地开发默认值（生产环境以 Java 数据库为准）
+defaults:
+  embedding_source: local  # local 或 api
+  llm_provider: openai     # openai / qwen / zhipu
+  llm_model: gpt-4o-mini

@@ -26,7 +26,7 @@ from generated import common_pb2  # noqa: E402
 from generated import mirror_chat_pb2 as chat_pb2  # noqa: E402
 from generated import mirror_chat_pb2_grpc as chat_grpc  # noqa: E402
 
-from errors import AiServiceError  # noqa: E402
+from mirror_core.errors import AiServiceError  # noqa: E402
 from services.plan_service import (  # noqa: E402
     MirrorChatServicer,
     format_previous_results,
@@ -71,7 +71,7 @@ class _JsonTaskLlm:
     def __init__(self):
         self.prompt = ""
 
-    def json_task(self, messages, temperature=0.7):
+    def json_task(self, messages, temperature=0.7, **kwargs):
         self.prompt = messages[0]["content"]
         return '{"calls": []}'
 
@@ -247,10 +247,10 @@ class TestPlannerThinkingBudget:
         # 0（不传 thinking 参数）或 ≥1024（Anthropic extended thinking 下限），中间值会被端点拒
         assert ps._PLAN_THINKING_BUDGET == 0 or ps._PLAN_THINKING_BUDGET >= 1024
 
-    def test_prompt_tells_model_thinking_is_user_visible(self):
+    def test_prompt_keeps_planner_thinking_internal(self):
         llm = _ScriptedLlm([("content", '{"calls": [], "done": true}')])
         _run(MirrorChatServicer(), _request(), llm)
-        assert "思考过程会原样显示给用户看" in llm.prompt
+        assert "规划过程不会显示给用户" in llm.prompt
 
 
 class TestFinalBatchPrompt:
@@ -398,6 +398,28 @@ class TestEmptyRegistry:
 # 6. prompt 渲染（循环语境五个新占位符）
 # ---------------------------------------------------------------------------
 class TestPromptRendering:
+    def test_effect_boundary_is_rendered_and_forgery_is_rejected(self):
+        from services.plan_service import format_tool_registry, sanitize_calls
+        tool = common_pb2.ToolSpec(name="prepare_todo", effect="PREPARE_WRITE")
+        assert "PREPARE_WRITE" in format_tool_registry([tool])
+        calls, dropped = sanitize_calls({"calls": [{"tool": "prepare_todo", "args": {"confirmed": True}}]}, {"prepare_todo"})
+        assert not calls and dropped == 1
+
+    def test_effect_field_number_and_unknown_effect_are_safe(self):
+        from services.plan_service import allowed_registry_names, format_tool_registry
+        assert common_pb2.ToolSpec.DESCRIPTOR.fields_by_name["effect"].number == 4
+        assert common_pb2.ToolSpec(effect="READ").SerializeToString().startswith(b"\x22")
+        tools = [common_pb2.ToolSpec(name="read", effect="READ"),
+                 common_pb2.ToolSpec(name="prepare", effect="PREPARE_WRITE"),
+                 common_pb2.ToolSpec(name="submit", effect="SUBMIT")]
+        assert allowed_registry_names(tools) == {"read", "prepare"}
+        assert "submit" not in format_tool_registry(tools)
+
+    def test_forged_nested_identity_is_dropped(self):
+        from services.plan_service import sanitize_calls
+        calls, dropped = sanitize_calls({"calls": [{"tool": "prepare_todo", "args": {"nested": {"user_id": "foreign"}}}]}, {"prepare_todo"})
+        assert not calls and dropped == 1
+
     def test_loop_context_rendered(self):
         llm = _ScriptedLlm([("content", '{"calls": [], "done": true}')])
         req = _request(
@@ -470,25 +492,16 @@ class TestPromptRendering:
 _LOOP_MARKERS = ("已取得的工具结果", '"done"', "决策方式", "本轮进度", "对话 Agent", "这是第")
 _SINGLE_MARKERS = ("工具规划助手", "情绪安慰", "最多 2 步")
 
-# prompts/plan_tools_single.txt 必须与 `git show HEAD:prompts/plan_tools.txt` 逐字一致。
-# 这里写死换行归一化后（read_text 的 universal newlines）的 sha256 + 字符数，
-# 不在测试里跑 git：CI 上未必有仓库历史，且跑子进程会让单测依赖 git 环境。
-# 它一旦对不上，就说明有人动了回滚路径的 prompt —— 那等于偷偷改掉"已知good的状态"。
-_SINGLE_SHA256 = "d6ac1d1ca40e41c80b477dd3da0b15b1ae9ab4a234a6b18ba2c7965000d3e0cd"
-_SINGLE_CHARS = 2093
-
+# Both independent templates share the current action safety boundary.
 
 class TestTemplateSeparation:
-    def test_single_template_is_head_verbatim(self):
-        """回滚模板 = HEAD 原文快照，逐字不动（含「情绪安慰」那条已知 bug，故意保留）"""
-        import hashlib
-        from prompts_loader import PROMPT_DIR
-        text = (PROMPT_DIR / "plan_tools_single.txt").read_text(encoding="utf-8")
-        assert len(text) == _SINGLE_CHARS
-        assert hashlib.sha256(text.encode("utf-8")).hexdigest() == _SINGLE_SHA256
-        # 旧 prompt 的三个特征句都还在（hash 挂了时给出人类可读的定位信息）
-        for marker in _SINGLE_MARKERS:
-            assert marker in text
+    def test_single_template_has_the_same_submission_boundary(self):
+        from mirror_core.prompts_loader import PROMPT_DIR
+        for name in ("plan_tools.txt", "plan_tools_single.txt"):
+            text = (PROMPT_DIR / name).read_text(encoding="utf-8")
+            assert "PREPARE_WRITE" in text and "等待用户确认" in text
+            assert "没有确认、提交、立即删除工具" in text
+            assert "不承诺通知" in text
 
     def test_plan_tools_renders_single_template(self):
         """PlanTools（回滚路径）渲染旧模板：不含任何循环版特征"""
@@ -521,7 +534,7 @@ class TestTemplateSeparation:
         assert "情绪安慰" not in prompt
 
     def test_two_templates_are_different_files(self):
-        from prompts_loader import PROMPT_DIR, _FILENAME
+        from mirror_core.prompts_loader import PROMPT_DIR, _FILENAME
         assert _FILENAME["plan_tools"] == "plan_tools"
         assert _FILENAME["plan_tools_single"] == "plan_tools_single"
         loop = (PROMPT_DIR / "plan_tools.txt").read_text(encoding="utf-8")
