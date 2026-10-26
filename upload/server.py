@@ -18,6 +18,8 @@ from services.plan_service import MirrorChatServicer
 from services.profile_service import MirrorProfileServicer
 from services.agent_service import AgentRunnerServicer
 from generated import agent_pb2_grpc as agent_grpc
+from generated import tarot_pb2_grpc as tarot_grpc
+from services.tarot_service import TarotReadingServicer
 
 
 def build_legacy_server(*, port: int | None = None):
@@ -28,6 +30,7 @@ def build_legacy_server(*, port: int | None = None):
     rp_grpc.add_RecordProcessorServicer_to_server(RecordProcessorServicer(), server)
     emb_grpc.add_EmbeddingServiceServicer_to_server(EmbeddingServiceServicer(), server)
     chat_grpc.add_MirrorChatServicer_to_server(MirrorChatServicer(), server)
+    tarot_grpc.add_TarotReadingServicer_to_server(TarotReadingServicer(), server)
     profile_grpc.add_MirrorProfileServicer_to_server(MirrorProfileServicer(), server)
     bound_port = server.add_insecure_port(f"[::]:{legacy_port}")
     if bound_port == 0:
@@ -36,9 +39,14 @@ def build_legacy_server(*, port: int | None = None):
 
 
 def build_agent_server(*, port: int | None = None, servicer: AgentRunnerServicer | None = None):
-    """Create the isolated 10004 Agent server with a hard RPC concurrency ceiling."""
+    """Create the isolated Agent gRPC server with a hard RPC concurrency ceiling.
+
+    The port comes from config.yml, overridable through MIRROR_AI_AGENT_PORT: hosts
+    where 10004 is already taken (nginx sites, other services) keep config.yml untouched.
+    """
     agent_config = CONFIG["agent"]
-    agent_port = agent_config["port"] if port is None else port
+    configured_port = int(os.getenv("MIRROR_AI_AGENT_PORT", agent_config["port"]))
+    agent_port = configured_port if port is None else port
     workers = int(agent_config["workers"])
     maximum = int(agent_config["maximum_concurrent_rpcs"])
     server = grpc.server(
