@@ -191,3 +191,7 @@ Windows 一键部署见仓库外层的 `部署AI.bat`。**打包用排除法而�
 - `docs/2026-09-03-system-design-v2.md` — **系统唯一权威设计文档**（v2.3）
 - `HANDOVER.md` — 交接文档：架构铁律、近两轮大改动、已知问题
 - `docs/archive/` — 被取代的历史设计文档，仅作参考
+
+### 塔罗首版
+
+`TarotReading.Analyze` 在现有 legacy RPC 服务注册，使用调用方模型配置，无工具执行或数据库访问。日牌上下文只供最终回答；规划与画像不包含牌义。`scripts/tarot_stub_model.py` 仅作本地协议联调，目标模型措辞验收样例在 `tests/fixtures/tarot-evaluation.json`。运行时修改后运行 `scripts/sync_upload.py` 并检查 `--check`。
