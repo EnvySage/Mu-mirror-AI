@@ -242,6 +242,20 @@ def test_record_vector_repository_rejects_wrong_dimension_before_borrowing_conne
     assert pool.borrowed == 0
 
 
+@pytest.mark.parametrize("category", ["todo", "plan"])
+@pytest.mark.parametrize("mode", ["structured", "vector"])
+def test_record_category_filters_accept_both_legacy_plans_and_todos(category, mode):
+    pool = Pool()
+    repository = RecordRepository(pool)
+    if mode == "structured":
+        repository.search(SCOPE, {"content_type": category})
+    else:
+        repository.search_vector(SCOPE, [1.0] + [0.0] * 1023, {"content_type": category})
+    sql, params = pool.connection_obj.queries[-1]
+    assert "metadata->>'contentType' IN ('todo', 'plan')" in sql
+    assert SCOPE.user_id in params
+
+
 def test_record_vector_repository_filters_keyword_before_limit_and_orders_by_decay_score():
     pool = Pool()
     repository = RecordRepository(pool)

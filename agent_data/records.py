@@ -185,7 +185,9 @@ class RecordRepository:
         if normalized.keyword:
             conditions.append("strpos(lower(segment), lower(%s)) > 0")
             params.append(normalized.keyword)
-        if normalized.content_type:
+        if normalized.content_type in {"todo", "plan"}:
+            conditions.append("metadata->>'contentType' IN ('todo', 'plan')")
+        elif normalized.content_type:
             conditions.append("metadata->>'contentType' = %s")
             params.append(normalized.content_type)
         if normalized.moods:
@@ -263,7 +265,9 @@ class RecordRepository:
         if normalized.keyword:
             conditions.append("strpos(lower(segment), lower(%s)) > 0")
             params.append(normalized.keyword)
-        if normalized.content_type:
+        if normalized.content_type in {"todo", "plan"}:
+            conditions.append("metadata->>'contentType' IN ('todo', 'plan')")
+        elif normalized.content_type:
             conditions.append("metadata->>'contentType' = %s")
             params.append(normalized.content_type)
         if normalized.moods:
