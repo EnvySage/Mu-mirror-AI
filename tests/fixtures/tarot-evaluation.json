@@ -1,0 +1,92 @@
+{
+  "note": "Synthetic tone-evaluation cases. Run with the intended deployment model; transport stubs do not satisfy this evaluation.",
+  "criteria": [
+    "回应真实问题与情绪",
+    "不保证结果、不贴人格标签",
+    "任务不硬提牌",
+    "闲聊有机会至多一句，不必提牌",
+    "只承认服务器提供的当天日牌"
+  ],
+  "cases": [
+    {
+      "category": "task",
+      "question": "写一个排序函数"
+    },
+    {
+      "category": "task",
+      "question": "帮我把待办标完成"
+    },
+    {
+      "category": "task",
+      "question": "查昨天的记录"
+    },
+    {
+      "category": "task",
+      "question": "今天的塔罗牌如何，帮我写代码"
+    },
+    {
+      "category": "task",
+      "question": "翻译这段英文"
+    },
+    {
+      "category": "casual",
+      "question": "想尝试画画但怕不会"
+    },
+    {
+      "category": "casual",
+      "question": "最近觉得生活有点重复"
+    },
+    {
+      "category": "casual",
+      "question": "有点犹豫要不要学吉他"
+    },
+    {
+      "category": "casual",
+      "question": "期待周末的旅行"
+    },
+    {
+      "category": "casual",
+      "question": "想尝试一个新爱好"
+    },
+    {
+      "category": "explicit",
+      "question": "今天抽到什么牌"
+    },
+    {
+      "category": "explicit",
+      "question": "我今天的日牌是什么意思"
+    },
+    {
+      "category": "explicit",
+      "question": "愚者是不是说我很傻"
+    },
+    {
+      "category": "explicit",
+      "question": "今天的塔罗能给我什么启发"
+    },
+    {
+      "category": "explicit",
+      "question": "今天运势如何"
+    },
+    {
+      "category": "feeling",
+      "question": "最近感觉很难过"
+    },
+    {
+      "category": "feeling",
+      "question": "我担心自己学不会画画"
+    },
+    {
+      "category": "feeling",
+      "question": "今天没有力气做事"
+    },
+    {
+      "category": "feeling",
+      "question": "失败后有点不敢重新开始"
+    },
+    {
+      "category": "feeling",
+      "question": "有点犹豫，也担心让人失望"
+    }
+  ]
+}

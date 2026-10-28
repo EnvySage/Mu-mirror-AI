@@ -23,7 +23,7 @@ CONTENT_TYPE_MAP = {
     "TODO": common.ContentType.TODO,
     "THOUGHT": common.ContentType.THOUGHT,
     "LEARNING": common.ContentType.LEARNING,
-    "PLAN": common.ContentType.PLAN,
+    "PLAN": common.ContentType.TODO,  # 兼容旧模型输出，记录分类统一为待办。
     "NOTE": common.ContentType.NOTE,
     "WORK": common.ContentType.WORK,
     "SOCIAL": common.ContentType.SOCIAL,

@@ -25,8 +25,13 @@ class AssistantContextTest(unittest.TestCase):
         rendered = assistant_context_text(context)
         self.assertIn('喜欢晨跑', rendered)
         self.assertIn('2026-10-18', rendered)
+        self.assertNotIn('星星', rendered)
+        context.divination.mention_mode='casual'; context.divination.draw_date=context.current_date
+        rendered = assistant_context_text(context, include_divination=True)
         self.assertIn('仅供娱乐', rendered)
         self.assertIn('星星', rendered)
+        context.divination.draw_date='2026-10-18'
+        self.assertNotIn('星星', assistant_context_text(context, include_divination=True))
 
     def test_profile_uses_only_authorized_memory_context_not_raw_chats(self):
         request = mirror_profile_pb2.GenerateProfileRequest(recent_chats=[

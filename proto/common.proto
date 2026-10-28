@@ -107,6 +107,8 @@ message DivinationContext {
   string question = 3;
   repeated DivinationCard cards = 4;
   bool entertainment_only = 5;
+  string mention_mode = 6; // explicit | casual; blank means no unsolicited mention
+  string draw_date = 7; // authoritative Asia/Shanghai day
 }
 
 message EmbeddingConfig {

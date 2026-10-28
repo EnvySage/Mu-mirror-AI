@@ -435,7 +435,7 @@ def synthesize(state: AgentState, runtime: Runtime[RuntimeContext]) -> dict[str,
         state.observations,
         citation_index=index,
         glossary=(state.prepared_context.glossary_matched if state.prepared_context else ()),
-        assistant_context=answer_service.assistant_context_text(context.assistant_context),
+        assistant_context=answer_service.assistant_context_text(context.assistant_context, include_divination=True),
     )
     if material_note or partial:
         messages[0]["content"] += "\n材料限制（必须在分析中保留）：" + (material_note or "部分补充工具失败，仅根据已有证据分析。")

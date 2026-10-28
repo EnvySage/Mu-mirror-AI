@@ -1,0 +1,37 @@
+syntax = "proto3";
+package mirror;
+import "common.proto";
+option java_package = "org.xianshen.mumirrorb.grpc.gen";
+option java_outer_classname = "TarotProto";
+
+service TarotReading { rpc Analyze(TarotAnalyzeRequest) returns (TarotAnalyzeResponse); }
+message TarotCard {
+  string id = 1;
+  string name = 2;
+  string meaning = 3;
+  string action = 4;
+}
+message TarotMaterial {
+  string ref = 1;
+  string kind = 2;
+  string source_id = 3;
+  string title = 4;
+  string date = 5;
+  string excerpt = 6;
+  string version = 7;
+}
+message TarotAnalyzeRequest {
+  string reading_id = 1;
+  string analysis_id = 2;
+  string question = 3;
+  TarotCard card = 4;
+  repeated TarotMaterial materials = 5;
+  LlmConfig llm_config = 6;
+  string reference_date = 7;
+  string timezone = 8;
+}
+message TarotAnalyzeResponse {
+  string text = 1;
+  repeated string used_refs = 2;
+  repeated string notices = 3;
+}

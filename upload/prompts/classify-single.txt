@@ -23,10 +23,9 @@
 ## 分类标准
 
 可选类型（大写）：
-- TODO（待办）
+- TODO（待办，包含计划、打算和要做的事，统一归为待办）
 - THOUGHT（感想）
 - LEARNING（学习）
-- PLAN（计划）
 - NOTE（随记）
 - WORK（工作）
 - SOCIAL（社交）
@@ -44,12 +43,12 @@
 可选情绪（大写）：
 HAPPY、EXCITED、SATISFIED、GRATEFUL、EXPECTING、CALM、BORED、CONFUSED、ANXIOUS、SAD、ANGRY、EXHAUSTED、STRESSED
 
-## 状态（仅 TODO/PLAN 类需要）
+## 状态（仅 TODO 类需要）
 
 - NOT_STARTED（未开始）
 - IN_PROGRESS（进行中）
 - COMPLETED（已完成）
-- content_type 不是 TODO/PLAN 时用 STATUS_UNKNOWN；是 TODO/PLAN 时必须从上面三个里选，不许用 STATUS_UNKNOWN
+- content_type 不是 TODO 时用 STATUS_UNKNOWN；是 TODO 时必须从上面三个里选，不许用 STATUS_UNKNOWN
 
 {open_todos}{recent_context}{growth_context}
 ## 输出格式

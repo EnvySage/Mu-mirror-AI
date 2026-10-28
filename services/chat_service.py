@@ -98,7 +98,7 @@ class MirrorChatServicer(pb2_grpc.MirrorChatServicer):
                 request.chunks,
                 request.glossary,
                 request.tool_results,
-                assistant_context=assistant_context_text(request.assistant_context),
+                assistant_context=assistant_context_text(request.assistant_context, include_divination=True),
             )
             if request.glossary:
                 print(f"[Chat] glossary 注入 {len(request.glossary)} 条")
