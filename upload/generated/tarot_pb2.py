@@ -25,7 +25,7 @@ _sym_db = _symbol_database.Default()
 from generated import common_pb2 as common__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0btarot.proto\x12\x06mirror\x1a\x0c\x63ommon.proto\"F\n\tTarotCard\x12\n\n\x02id\x18\x01 \x01(\t\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x0f\n\x07meaning\x18\x03 \x01(\t\x12\x0e\n\x06\x61\x63tion\x18\x04 \x01(\t\"|\n\rTarotMaterial\x12\x0b\n\x03ref\x18\x01 \x01(\t\x12\x0c\n\x04kind\x18\x02 \x01(\t\x12\x11\n\tsource_id\x18\x03 \x01(\t\x12\r\n\x05title\x18\x04 \x01(\t\x12\x0c\n\x04\x64\x61te\x18\x05 \x01(\t\x12\x0f\n\x07\x65xcerpt\x18\x06 \x01(\t\x12\x0f\n\x07version\x18\x07 \x01(\t\"\xec\x01\n\x13TarotAnalyzeRequest\x12\x12\n\nreading_id\x18\x01 \x01(\t\x12\x13\n\x0b\x61nalysis_id\x18\x02 \x01(\t\x12\x10\n\x08question\x18\x03 \x01(\t\x12\x1f\n\x04\x63\x61rd\x18\x04 \x01(\x0b\x32\x11.mirror.TarotCard\x12(\n\tmaterials\x18\x05 \x03(\x0b\x32\x15.mirror.TarotMaterial\x12%\n\nllm_config\x18\x06 \x01(\x0b\x32\x11.mirror.LlmConfig\x12\x16\n\x0ereference_date\x18\x07 \x01(\t\x12\x10\n\x08timezone\x18\x08 \x01(\t\"H\n\x14TarotAnalyzeResponse\x12\x0c\n\x04text\x18\x01 \x01(\t\x12\x11\n\tused_refs\x18\x02 \x03(\t\x12\x0f\n\x07notices\x18\x03 \x03(\t2T\n\x0cTarotReading\x12\x44\n\x07\x41nalyze\x12\x1b.mirror.TarotAnalyzeRequest\x1a\x1c.mirror.TarotAnalyzeResponseB-\n\x1forg.xianshen.mumirrorb.grpc.genB\nTarotProtob\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0btarot.proto\x12\x06mirror\x1a\x0c\x63ommon.proto\"m\n\tTarotCard\x12\n\n\x02id\x18\x01 \x01(\t\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x0f\n\x07meaning\x18\x03 \x01(\t\x12\x0e\n\x06\x61\x63tion\x18\x04 \x01(\t\x12\x13\n\x0borientation\x18\x05 \x01(\t\x12\x10\n\x08\x63\x61tegory\x18\x06 \x01(\t\"|\n\rTarotMaterial\x12\x0b\n\x03ref\x18\x01 \x01(\t\x12\x0c\n\x04kind\x18\x02 \x01(\t\x12\x11\n\tsource_id\x18\x03 \x01(\t\x12\r\n\x05title\x18\x04 \x01(\t\x12\x0c\n\x04\x64\x61te\x18\x05 \x01(\t\x12\x0f\n\x07\x65xcerpt\x18\x06 \x01(\t\x12\x0f\n\x07version\x18\x07 \x01(\t\"\xec\x01\n\x13TarotAnalyzeRequest\x12\x12\n\nreading_id\x18\x01 \x01(\t\x12\x13\n\x0b\x61nalysis_id\x18\x02 \x01(\t\x12\x10\n\x08question\x18\x03 \x01(\t\x12\x1f\n\x04\x63\x61rd\x18\x04 \x01(\x0b\x32\x11.mirror.TarotCard\x12(\n\tmaterials\x18\x05 \x03(\x0b\x32\x15.mirror.TarotMaterial\x12%\n\nllm_config\x18\x06 \x01(\x0b\x32\x11.mirror.LlmConfig\x12\x16\n\x0ereference_date\x18\x07 \x01(\t\x12\x10\n\x08timezone\x18\x08 \x01(\t\"H\n\x14TarotAnalyzeResponse\x12\x0c\n\x04text\x18\x01 \x01(\t\x12\x11\n\tused_refs\x18\x02 \x03(\t\x12\x0f\n\x07notices\x18\x03 \x03(\t2T\n\x0cTarotReading\x12\x44\n\x07\x41nalyze\x12\x1b.mirror.TarotAnalyzeRequest\x1a\x1c.mirror.TarotAnalyzeResponseB-\n\x1forg.xianshen.mumirrorb.grpc.genB\nTarotProtob\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -34,13 +34,13 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['DESCRIPTOR']._loaded_options = None
   _globals['DESCRIPTOR']._serialized_options = b'\n\037org.xianshen.mumirrorb.grpc.genB\nTarotProto'
   _globals['_TAROTCARD']._serialized_start=37
-  _globals['_TAROTCARD']._serialized_end=107
-  _globals['_TAROTMATERIAL']._serialized_start=109
-  _globals['_TAROTMATERIAL']._serialized_end=233
-  _globals['_TAROTANALYZEREQUEST']._serialized_start=236
-  _globals['_TAROTANALYZEREQUEST']._serialized_end=472
-  _globals['_TAROTANALYZERESPONSE']._serialized_start=474
-  _globals['_TAROTANALYZERESPONSE']._serialized_end=546
-  _globals['_TAROTREADING']._serialized_start=548
-  _globals['_TAROTREADING']._serialized_end=632
+  _globals['_TAROTCARD']._serialized_end=146
+  _globals['_TAROTMATERIAL']._serialized_start=148
+  _globals['_TAROTMATERIAL']._serialized_end=272
+  _globals['_TAROTANALYZEREQUEST']._serialized_start=275
+  _globals['_TAROTANALYZEREQUEST']._serialized_end=511
+  _globals['_TAROTANALYZERESPONSE']._serialized_start=513
+  _globals['_TAROTANALYZERESPONSE']._serialized_end=585
+  _globals['_TAROTREADING']._serialized_start=587
+  _globals['_TAROTREADING']._serialized_end=671
 # @@protoc_insertion_point(module_scope)

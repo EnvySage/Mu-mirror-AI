@@ -41,3 +41,40 @@ def test_no_sources_still_allows_question_and_card_only():
     result=analyze_reading(request(),Model(),timeout=10)
     assert not result.used_refs
     assert "速写" in result.text
+
+
+def test_reversed_reading_passes_direction_and_specific_meaning_without_inverting_again():
+    from mirror_core.tarot_reading import build_tarot_messages
+    reading = request()
+    reading.card.orientation = "reversed"
+    reading.card.category = "major"
+    reading.card.meaning = "先检查准备是否充分，不急着迈出下一步。"
+    messages = build_tarot_messages(reading)
+    card = json.loads(messages[-1]["content"])["card"]
+    assert card["orientation"] == "reversed"
+    assert card["meaning"] == reading.card.meaning
+    assert "不自行换牌或把牌义再次反转" in messages[0]["content"]
+
+
+def test_old_request_defaults_to_upright_but_invalid_direction_is_rejected():
+    from mirror_core.tarot_reading import build_tarot_messages
+    reading = request()
+    assert json.loads(build_tarot_messages(reading)[-1]["content"])["card"]["orientation"] == "upright"
+    reading.card.orientation = "rare"
+    with pytest.raises(ValueError, match="方向"):
+        build_tarot_messages(reading)
+
+
+def test_chat_aside_keeps_reversed_direction_and_does_not_change_evidence_boundary():
+    from generated import common_pb2
+    from mirror_core.tarot_context import render_tarot_context
+    context = common_pb2.AssistantContext(current_date="2026-10-30")
+    context.divination.draw_id = "draw"
+    context.divination.draw_date = "2026-10-30"
+    context.divination.entertainment_only = True
+    context.divination.mention_mode = "explicit"
+    context.divination.cards.add(card_name="愚者", orientation="reversed", interpretation="先检查准备")
+    rendered = render_tarot_context(context)
+    assert "愚者（逆位）" in rendered
+    assert "先检查准备" in rendered
+    assert "牌不是事实" in rendered

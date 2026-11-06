@@ -11,13 +11,17 @@ _PROMPT = Path(__file__).resolve().parents[1] / "prompts" / "tarot.txt"
 def build_tarot_messages(request):
     if len(request.question) > 500 or not request.card.id or not request.card.name:
         raise ValueError("无效的问题或牌面")
+    orientation = request.card.orientation or "upright"
+    if orientation not in ("upright", "reversed"):
+        raise ValueError("无效的牌面方向")
     if len(request.materials) > 8 or sum(len(m.excerpt) for m in request.materials) > 3900:
         raise ValueError("参考资料过多")
     refs = [m.ref for m in request.materials]
     if len(set(refs)) != len(refs) or any(not re.fullmatch(r"[DTM][1-9]\d*", ref) for ref in refs):
         raise ValueError("参考引用编号不正确")
     data = {"question": request.question,
-            "card": {"name": request.card.name, "meaning": request.card.meaning, "action": request.card.action},
+            "card": {"name": request.card.name, "category": request.card.category,
+                     "orientation": orientation, "meaning": request.card.meaning, "action": request.card.action},
             "reference_date": request.reference_date, "timezone": request.timezone,
             "materials": [{"ref": m.ref, "kind": m.kind, "date": m.date, "title": m.title, "text": m.excerpt}
                           for m in request.materials]}

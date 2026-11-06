@@ -10,6 +10,8 @@ message TarotCard {
   string name = 2;
   string meaning = 3;
   string action = 4;
+  string orientation = 5;
+  string category = 6;
 }
 message TarotMaterial {
   string ref = 1;
