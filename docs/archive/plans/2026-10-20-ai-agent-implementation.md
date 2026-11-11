@@ -8,7 +8,7 @@
 
 **Tech Stack:** 现有Python协议客户端、LangGraph StateGraph/custom streaming、Psycopg3只读池、gRPC、现有Spring Boot/MyBatis/PostgreSQL+pgvector、Vue。
 
-**Spec:** [完整设计](../../2026-10-20-ai-agent-architecture-v2.md)。本清单用于未来实施，本次不执行代码改造或部署。
+**Spec:** [完整设计](../2026-10-20-ai-agent-architecture-v2.md)。本清单用于未来实施，本次不执行代码改造或部署。
 
 ## Global Constraints
 

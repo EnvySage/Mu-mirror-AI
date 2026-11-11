@@ -188,9 +188,11 @@ Windows 一键部署见仓库外层的 `部署AI.bat`。**打包用排除法而�
 
 ## 文档
 
-- [总体设计 v2.3（历史快照）](https://github.com/EnvySage/Mu-mirror/blob/ai/docs/2026-09-03-system-design-v2.md) — 早于 Agent v2、塔罗、成长与成就；当前状态见三端项目进度
-- `HANDOVER.md` — 交接文档：架构铁律、近两轮大改动、已知问题
-- `docs/archive/` — 被取代的历史设计文档，仅作参考
+- [文档索引](docs/README.md) — 当前文档、归档与维护规则
+- [历史摘要](docs/HISTORY.md) — 已归档设计与一次性记录的一页摘要
+- [LangGraph 实施记录](docs/2026-10-25-langgraph-chat-implementation.md) — graph_v2 当前实现边界
+- [Agent v2 rollout](docs/agent-v2-rollout.md) — 灰度、回滚与验收门槛
+- `docs/archive/` — 被取代的历史设计文档，仅作追溯
 
 ### 塔罗首版
 
