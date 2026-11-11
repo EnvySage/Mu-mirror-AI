@@ -73,16 +73,19 @@ upload/                  部署镜像副本（与根目录逐字节同步，见�
 # 依赖（最小集；服务器 2C2G 用这份，不含 torch / sentence-transformers）
 .venv/Scripts/python.exe -m pip install -r requirements-minimal.txt
 
+# 本机覆盖（首次）：复制示例并按机器改端口；该文件不入库
+cp config.local.example.yml config.local.yml
+
 # 启动服务（必须用 venv 的 python：裸 python 启动桩会退出码 49）
 .venv/Scripts/python.exe server.py
 ```
 
-服务默认监听 `config.yml` 中的 `server.port`。**注意根目录 `config.yml` 默认 10003，与 `upload/config.yml` 完全一致** —— Java 侧 dev 环境期望 10003，联调时需对齐（详见「常见坑」）。
+服务默认监听 `config.yml` 的 `server.port`（10003），Agent 监听 `agent.port`（10004）。机器差异只改 `config.local.yml`；端口可用 `MIRROR_AI_PORT` / `MIRROR_AI_AGENT_PORT` 环境变量临时覆盖。完整双机开发约定见 [LOCAL-ENV](../Mu-mirror-B/docs/LOCAL-ENV.md)。
 
 ### 冒烟与测试
 
 ```bash
-# 单测（563 项，无需外部依赖）
+# 全量单测（无需外部依赖）
 .venv/Scripts/python.exe -m pytest tests/ -q
 
 # 冒烟（18 项，需桩 LLM 在线）
@@ -99,7 +102,7 @@ upload/                  部署镜像副本（与根目录逐字节同步，见�
 联调用桩替代真实模型，OpenAI 兼容协议，默认端口 18080：
 
 ```bash
-.venv/Scripts/python.exe ../coordination/stub_llm.py
+.venv/Scripts/python.exe scripts/stub_llm.py
 ```
 
 桩按 prompt 关键词返回不同 JSON / SSE 流式。**改桩后必须重启进程才生效**（曾因旧桩残留导致 E2E 假失败）。

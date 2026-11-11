@@ -25,3 +25,5 @@ Thumbs.db
 .codemoss/
 =0.40.0
 lib/
+# 本机开发覆盖（每台机器一份，不入库）
+config.local.yml

@@ -1,0 +1,13 @@
+# 本机开发覆盖示例。复制为 config.local.yml 后按机器修改；该文件不入库。
+# 只放服务级参数；用户模型配置仍由 Java 的 user_settings 随请求下发。
+
+server:
+  # 本机 10003 被占用时改这里
+  port: 10003
+  workers: 4
+
+agent:
+  # 本机 10004 被占用时改这里；启用 Agent 还需要环境变量
+  # MIRROR_AGENT_INTERNAL_TOKEN、MIRROR_AI_READ_DSN、MIRROR_AGENT_COMMAND_BASE_URL
+  enabled: false
+  port: 10004

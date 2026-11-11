@@ -9,6 +9,7 @@ from pathlib import Path
 import yaml
 
 _CONFIG_PATH = Path(__file__).parent / "config.yml"
+_LOCAL_CONFIG_PATH = Path(__file__).parent / "config.local.yml"
 _defaults = {
     "server": {"port": 10003, "workers": 4},
     "agent": {
@@ -85,10 +86,12 @@ _defaults = {
 
 
 def load_config() -> dict:
-    """加载 config.yml，缺失时返回默认值"""
+    """加载 config.yml，再叠加可选的 config.local.yml（本机覆盖，不入库）"""
     cfg = _defaults.copy()
-    if _CONFIG_PATH.exists():
-        with open(_CONFIG_PATH, "r", encoding="utf-8") as f:
+    for path in (_CONFIG_PATH, _LOCAL_CONFIG_PATH):
+        if not path.exists():
+            continue
+        with open(path, "r", encoding="utf-8") as f:
             user_cfg = yaml.safe_load(f) or {}
         for key, value in user_cfg.items():
             if isinstance(value, dict) and isinstance(cfg.get(key), dict):

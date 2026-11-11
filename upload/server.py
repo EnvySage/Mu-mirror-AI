@@ -24,7 +24,7 @@ from services.tarot_service import TarotReadingServicer
 
 def build_legacy_server(*, port: int | None = None):
     """Create the existing 10003 server with every legacy RPC still registered."""
-    legacy_port = CONFIG["server"]["port"] if port is None else port
+    legacy_port = int(os.getenv("MIRROR_AI_PORT", CONFIG["server"]["port"])) if port is None else port
     workers = CONFIG["server"]["workers"]
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=workers))
     rp_grpc.add_RecordProcessorServicer_to_server(RecordProcessorServicer(), server)
