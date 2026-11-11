@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# 拒绝过大的文本文件：约 5000 token / 20 KB。
+set -euo pipefail
+
+limit=20000
+failed=0
+skip_re='(^|/)(package-lock\.json|.*\.lock|.*\.min\..*|generated|dist|build|target|node_modules|public/art|public/preview|docs/archive|docs/2026-10-20-ai-agent-architecture-v2.md|eval/agent_v2/reports)(/|$)|(^|/)deploy/demo_data\.sql$|(^|/)schema\.sql$|(^|/).*[Cc]atalog.*\.json$|(^|/).*manifest\.json$|\.(png|jpe?g|webp|gif|ico|ttf|woff2?|mp3|wav|m4a|mp4|pdf|docx)$'
+
+while IFS= read -r -d '' file; do
+  [[ "$file" =~ $skip_re ]] && continue
+  [ -f "$file" ] || continue
+  bytes=$(wc -c < "$file")
+  if [ "$bytes" -gt "$limit" ]; then
+    printf '提交被拦截：%s 为 %s bytes（上限 %s）。请按功能拆成几个文件后再提交。\n' "$file" "$bytes" "$limit" >&2
+    failed=1
+  fi
+done < <(git diff --cached --name-only -z --diff-filter=ACM)
+
+exit "$failed"

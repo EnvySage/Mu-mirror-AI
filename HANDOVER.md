@@ -1,7 +1,7 @@
 # Mu-mirror-AI（Python gRPC）交接文档
 
 > 2026-09-06 多 Agent 开发阶段收尾交接。接手人：项目所有者。
-> 配套阅读：`docs/2026-09-03-system-design-v2.md`（主设计 v2.3）。
+> 配套阅读：B 仓 `docs/2026-09-03-system-design-v2.md`（历史设计 v2.3）；当前状态见 `docs/PROGRESS.md`。
 
 ## 1. 技术栈与运行
 

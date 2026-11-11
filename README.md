@@ -188,7 +188,7 @@ Windows 一键部署见仓库外层的 `部署AI.bat`。**打包用排除法而�
 
 ## 文档
 
-- `docs/2026-09-03-system-design-v2.md` — **系统唯一权威设计文档**（v2.3）
+- [总体设计 v2.3（历史快照）](https://github.com/EnvySage/Mu-mirror/blob/ai/docs/2026-09-03-system-design-v2.md) — 早于 Agent v2、塔罗、成长与成就；当前状态见三端项目进度
 - `HANDOVER.md` — 交接文档：架构铁律、近两轮大改动、已知问题
 - `docs/archive/` — 被取代的历史设计文档，仅作参考
 
