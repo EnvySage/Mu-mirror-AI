@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# 拒绝过大的文本文件：约 5000 token / 20 KB。
+# 1. 拒绝过大的文本文件：约 5000 token / 20 KB。
+# 2. 高风险改动必须同时更新文档，防止文档过期和文档泛滥。
 set -euo pipefail
 
 limit=20000
@@ -16,4 +17,27 @@ while IFS= read -r -d '' file; do
   fi
 done < <(git diff --cached --name-only -z --diff-filter=ACM)
 
-exit "$failed"
+if [ "$failed" -ne 0 ]; then
+  exit "$failed"
+fi
+
+files=$(git diff --cached --name-only --diff-filter=ACM)
+risky=$(printf '%s\n' "$files" | grep -E '^(proto/|server\.py$|config\.py$|upload/(server|config)\.py$|services/|mirror_core/|prompts/)' || true)
+docs=$(printf '%s\n' "$files" | grep -E '^(README\.md|docs/.*\.md)$' | grep -v '^docs/archive/' || true)
+code=$(printf '%s\n' "$files" | grep -E '^(server\.py$|config\.py$|upload/|services/|mirror_core/|prompts/|proto/|scripts/)' || true)
+
+if [ -n "$risky" ] && [ -z "$docs" ] && [ "${SKIP_DOC_CHECK:-0}" != "1" ]; then
+  cat >&2 <<'EOF'
+提交被拦截：这次改动涉及 proto / 服务入口 / 配置 / 推理代码，但没有更新文档。
+请在同一提交里更新对应文档：
+  - 启动与协议：README.md
+  - Agent v2 灰度与边界：docs/agent-v2-rollout.md
+  - 跨端状态：../Mu-mirror-B/docs/PROGRESS.md
+确属无需更新文档的紧急情况，可用 SKIP_DOC_CHECK=1 提交，并在提交说明里写明原因。
+EOF
+  exit 1
+fi
+
+if [ -n "$code" ] && [ -z "$docs" ]; then
+  printf '提示：本次提交有代码改动但没有文档改动。请确认 README 或 docs/ 不需要更新。\n' >&2
+fi
