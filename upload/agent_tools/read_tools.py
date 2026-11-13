@@ -5,11 +5,13 @@ from __future__ import annotations
 import time
 from datetime import date, datetime, time as day_time, timedelta
 from typing import Any
+from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from agent_core.types import Evidence, IntentResult, RuntimeContext, ToolCall, ToolObservation
 from agent_data.glossary import GlossaryRepository
 from agent_data.history import HistoryRepository
+from agent_data.ledger import LedgerFilters, LedgerRepository
 from agent_data.profiles import ProfileRepository
 from agent_data.records import RecordFilters, RecordRepository, RecordWindow
 from agent_data.scope import ReadScope, bounded_limit, require_scope
@@ -76,6 +78,7 @@ def _repositories(runtime: RuntimeContext):
     return SimpleNamespace(
         records=RecordRepository(pool), todos=TodoRepository(pool), profiles=ProfileRepository(pool),
         glossary=GlossaryRepository(pool), history=HistoryRepository(pool), vault=VaultRepository(pool),
+        ledger=LedgerRepository(pool),
     )
 
 
@@ -253,6 +256,62 @@ def _get_stats(args, runtime, scope, repos):
     return True, "OK", f"统计窗口内记录 {stats.record_count} 条，待办 {todos.total} 项", data, (), True
 
 
+def _ledger_filters(args, runtime, *, summary=False):
+    start_at, end_at = _date_bounds(args, runtime)
+    start = start_at.date() if start_at is not None else None
+    end = end_at.date() - timedelta(days=1) if end_at is not None else None
+    record_id = UUID(args["record_id"]) if "record_id" in args else None
+    if summary and (record_id is None or start is not None or end is not None):
+        end = end or runtime.reference_date
+        start = start or end - timedelta(days=29)
+    if start is not None and end is not None and not 0 <= (end - start).days < 366:
+        raise ValueError("账目统计日期范围须在 366 天以内")
+    return LedgerFilters(
+        start=start, end=end, category=args.get("category", "").strip() or None,
+        query=args.get("query", "").strip() or None, record_id=record_id,
+        diary_id=args.get("diary_id"), kind=args.get("kind"),
+    )
+
+
+def _ledger_summary(args, runtime, scope, repos):
+    filters = _ledger_filters(args, runtime, summary=True)
+    result = repos.ledger.summary(scope, filters)
+    amounts = {key: f"{result[key]:.2f}" for key in ("expense", "income", "recovery", "net_expense")}
+    data = {
+        "date_from": _iso(filters.start), "date_to": _iso(filters.end),
+        **amounts, "flow_count": result["flow_count"],
+        "sources": [_ledger_source(row) for row in result["sources"]],
+        "categories": result["categories"],
+    }
+    if filters.record_id is not None:
+        data["record_id"] = str(filters.record_id)
+    return (
+        True, "OK" if result["matched_count"] else "EMPTY",
+        f"现金支出 {amounts['expense']} 元，收入 {amounts['income']} 元，"
+        f"收回款 {amounts['recovery']} 元，按消费归属日净花 {amounts['net_expense']} 元",
+        data, (), True,
+    )
+
+
+def _list_ledger_flows(args, runtime, scope, repos):
+    offset, limit = args.get("offset", 0), args.get("limit", 8)
+    filters = _ledger_filters(args, runtime)
+    rows, has_more = repos.ledger.list_flows(scope, filters, offset=offset, limit=limit)
+    flows = [{
+        **_ledger_source(row), "flow_id": str(row["flow_id"]),
+        "kind": row["kind"], "amount": f"{row['amount']:.2f}",
+        "date": _iso(row["occurred_on"]), "budget_day": _iso(row["budget_day"]),
+        "category": row["category_name"], "note": row["note"],
+    } for row in rows]
+    data = {"offset": offset, "next_offset": offset + len(flows) if has_more else None, "flows": flows}
+    return True, "OK" if flows else "EMPTY", f"查到 {len(flows)} 笔账目流水", data, (), bool(flows)
+
+
+def _ledger_source(row):
+    record_id = str(row["record_id"])
+    return {"record_id": record_id, "title": row["title"], "url": f"/ledger?record={record_id}"}
+
+
 def _get_profile(args, runtime, scope, repos):
     month = args.get("month")
     profiles = repos.profiles.recent(scope, limit=2, month=month)
@@ -389,6 +448,8 @@ _HANDLERS = {
     "read_record": _read_record,
     "list_todos": _list_todos,
     "get_stats": _get_stats,
+    "ledger_summary": _ledger_summary,
+    "list_ledger_flows": _list_ledger_flows,
     "get_profile": _get_profile,
     "get_coverage": _get_coverage,
     "get_glossary": _get_glossary,

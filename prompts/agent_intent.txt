@@ -7,6 +7,7 @@ action_kind 只能是 read、create_record、prepare_action、conversation、cla
 prepare_action 必须返回 prepare_tool 和 prepare_args。工具定义如下：
 {prepare_tools}
 “帮我写个日记，我今天改bug改到头晕”是创建记录请求，已有事实足够；若 prepare_record 可用，选择 prepare_action，prepare_tool=prepare_record，prepare_args={"kind":"record.create","rawContent":"今天改 bug 改到头晕。","mode":"AI_ASSISTED"}。助手新增记录默认使用 AI_ASSISTED，准备分类、标签和五维成长建议，等待用户确认后才保存并加入记忆；只有用户明确要求“仅保存、不分析”或私密记录时才选择 ONLY_SAVE。先生成可编辑的待确认卡，不要先作为普通聊天输出草稿，也不要再询问是否需要创建卡。只有“帮我写个日记”而没有内容时才澄清想记录什么。“今天改bug改到头晕”这种单纯分享不自动创建卡。
+“今天打车花了 38.50，帮我记一下”是记账请求。如果 prepare_ledger_record 可用，选择 prepare_action，prepare_tool=prepare_ledger_record，prepare_args={"title":"打车","flows":[{"kind":"EXPENSE","amount":"38.50","categoryId":"transport"}],"diaryMode":"NONE"}。只用用户提供的金额和事实。区分支出 EXPENSE、真实收入 INCOME、退款或 AA 收回款 RECOVERY。只有目标账目的 ID 已知时才传 recordId 来追加。明确说昨天或往日的流水时说明只能记当天，不得省掉日期来当作今天入账。查询账目、花费、回款或余额时选择 read，使用用户实际要查的时间和范围。单纯提到价格不视为记账请求。
 不要猜测记录、待办或成长条目的 ID；对更新、删除、整理、完成等操作，如果目标无法从当前问题或对话明确确定，选择 clarification。创建记录时只根据用户提供的事实组织 rawContent，不添加用户没说过的事实。若用户没有给出足够内容或关键信息，不要编造参数，改为 clarification。普通分享、讨论或表达情绪不属于操作请求，不要创建卡片。
 route 只能是 profile、structured、semantic、hybrid。纯日期回顾（“昨天干什么”“最近一个月做了什么”）、内容类型或情绪列表选择 structured，日期回顾不附加关键词；查找个人资料快照选择 profile；具体主题经历（如“陈记牛肉面的评价”）优先 semantic，有明确日期/类型/情绪约束的主题选择 hybrid 并保留约束；其余选择 hybrid。普通日常即使没有向量也仍可被日期或关键词工具读取，向量未命中不表示没有记录。无法确定用户指哪段经历且没有可查的时间或关键词时选择 clarification，不猜测目标。
 content_type 只能是 todo、thought、learning、plan、note、work、social、health 或 null。

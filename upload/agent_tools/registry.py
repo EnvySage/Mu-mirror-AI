@@ -48,6 +48,14 @@ _PAGE_PROPERTIES = {
     "limit": {"type": "integer", "minimum": 1, "maximum": 20},
 }
 
+_LEDGER_PROPERTIES = {
+    **_DATE_PROPERTIES,
+    "days": {"type": "integer", "minimum": 1, "maximum": 366},
+    "category": {"type": "string", "minLength": 1, "maxLength": 60, "description": "记账分类名称或分类 ID"},
+    "query": {"type": "string", "minLength": 1, "maxLength": 120, "description": "账目标题、描述或备注的字面关键词"},
+    "record_id": {"type": "string", "pattern": r"[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}"},
+}
+
 
 READ_TOOL_REGISTRY: dict[str, ReadToolSpec] = {
     "search_records": ReadToolSpec(
@@ -72,6 +80,22 @@ READ_TOOL_REGISTRY: dict[str, ReadToolSpec] = {
     "get_stats": ReadToolSpec(
         "get_stats", "统计时间窗内记录数与情绪分布，并列出当前授权待办状态。",
         _schema({key: value for key, value in _DATE_PROPERTIES.items()}),
+    ),
+    "ledger_summary": ReadToolSpec(
+        "ledger_summary", "汇总当前用户已确认账目。按日期、分类、关键词或账目 ID 筛选；金额由账本计算。"
+        "付出、收入和收回款按发生日，净消费按原消费归属。指定账目 ID 且不传日期时汇总整条记录。",
+        _schema(_LEDGER_PROPERTIES),
+    ),
+    "list_ledger_flows": ReadToolSpec(
+        "list_ledger_flows", "按发生日、分类、关键词、账目 ID 或来源日记 ID 查找已确认流水。"
+        "返回账目链接和分页位置；按账目 ID 查询可查看同一件事的跨日付款与回款。",
+        _schema({
+            **_LEDGER_PROPERTIES,
+            "diary_id": {"type": "integer", "minimum": 1, "description": "已有日记的 record_id"},
+            "kind": {"type": "string", "enum": ["EXPENSE", "INCOME", "RECOVERY"]},
+            **_PAGE_PROPERTIES,
+            "offset": {"type": "integer", "minimum": 0, "maximum": 10_000},
+        }),
     ),
     "get_profile": ReadToolSpec(
         "get_profile", "读取有效画像快照；可按月份回溯，manual 优先于 monthly。",

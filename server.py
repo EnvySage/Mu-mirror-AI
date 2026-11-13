@@ -19,6 +19,8 @@ from services.profile_service import MirrorProfileServicer
 from services.agent_service import AgentRunnerServicer
 from generated import agent_pb2_grpc as agent_grpc
 from generated import tarot_pb2_grpc as tarot_grpc
+from generated import ledger_pb2_grpc as ledger_grpc
+from services.ledger_vision_service import LedgerVisionServicer
 from services.tarot_service import TarotReadingServicer
 
 
@@ -31,6 +33,7 @@ def build_legacy_server(*, port: int | None = None):
     emb_grpc.add_EmbeddingServiceServicer_to_server(EmbeddingServiceServicer(), server)
     chat_grpc.add_MirrorChatServicer_to_server(MirrorChatServicer(), server)
     tarot_grpc.add_TarotReadingServicer_to_server(TarotReadingServicer(), server)
+    ledger_grpc.add_LedgerVisionServicer_to_server(LedgerVisionServicer(), server)
     profile_grpc.add_MirrorProfileServicer_to_server(MirrorProfileServicer(), server)
     bound_port = server.add_insecure_port(f"[::]:{legacy_port}")
     if bound_port == 0:
@@ -85,6 +88,7 @@ def serve():
     print("  - MirrorChat       (ExtractIntent, Chat 流式, PlanTools 工具规划)")
     print("                    (PlanNextStep 循环规划, SummarizeDay 每日总结/记忆候选)")
     print("  - MirrorProfile    (GenerateProfile)")
+    print("  - LedgerVision     (Recognize)")
     if agent_enabled:
         print(f"  - AgentRunner      (read-only RunAgent 流式, 端口 {agent_port}, 并发上限 2)")
     print("=" * 50)

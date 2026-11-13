@@ -1,0 +1,22 @@
+syntax = "proto3";
+package mirror;
+import "common.proto";
+option java_package = "org.xianshen.mumirrorb.grpc.gen";
+option java_outer_classname = "LedgerProto";
+
+service LedgerVision {
+  rpc Recognize(LedgerImageRequest) returns (LedgerImageResponse);
+}
+
+message LedgerImageRequest {
+  bytes image = 1;
+  string mime_type = 2;
+  LlmConfig llm_config = 3;
+  string today = 4;
+}
+
+message LedgerImageResponse {
+  string status = 1;
+  string draft_json = 2;
+  string message = 3;
+}

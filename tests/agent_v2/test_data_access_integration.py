@@ -52,13 +52,20 @@ class _WrongDimensionEmbedder:
 def test_reader_identity_and_exact_view_grants(read_dsn, agent_pool):
     with psycopg.connect(read_dsn, row_factory=dict_row) as connection:
         row = connection.execute(
-            "SELECT current_user AS user_name, count(*) AS view_count "
+            "SELECT current_user AS user_name, array_agg(table_name::text) AS views, "
+            "       to_regclass('mirror_ai.ledger_cashflows') IS NOT NULL AS has_ledger "
             "FROM information_schema.role_table_grants "
             "WHERE grantee = current_user AND table_schema = 'mirror_ai' AND privilege_type = 'SELECT' "
             "GROUP BY current_user"
         ).fetchone()
     assert row["user_name"] == READER_ROLE
-    assert row["view_count"] == 8
+    expected = {
+        "record_chunks", "glossary_terms", "chat_history", "profiles",
+        "vault_metadata", "vault_content", "vault_keys", "todos",
+    }
+    if row["has_ledger"]:
+        expected.add("ledger_cashflows")
+    assert set(row["views"]) == expected
 
 
 def test_record_search_scope_approval_filters_and_limit(agent_pool, read_scope):

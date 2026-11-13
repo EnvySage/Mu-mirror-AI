@@ -20,6 +20,7 @@ cmd = [
     "./proto/mirror_profile.proto",
     "./proto/agent.proto",
     "./proto/tarot.proto",
+    "./proto/ledger.proto",
 ]
 
 print("生成 gRPC 代码...")
@@ -31,6 +32,8 @@ if result.returncode != 0:
 
 # 修复相对导入
 fixes = {
+    "generated/ledger_pb2.py": [("import common_pb2 as common__pb2", "from generated import common_pb2 as common__pb2")],
+    "generated/ledger_pb2_grpc.py": [("import ledger_pb2 as ledger__pb2", "from generated import ledger_pb2 as ledger__pb2")],
     "generated/tarot_pb2.py": [("import common_pb2 as common__pb2", "from generated import common_pb2 as common__pb2")],
     "generated/tarot_pb2_grpc.py": [("import tarot_pb2 as tarot__pb2", "from generated import tarot_pb2 as tarot__pb2")],
     "generated/common_pb2.py": [

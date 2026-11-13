@@ -238,3 +238,7 @@ Windows 一键部署见仓库外层的 `部署AI.bat`。**打包用排除法而�
 ### 塔罗首版
 
 `TarotReading.Analyze` 在现有 legacy RPC 服务注册，使用调用方模型配置，无工具执行或数据库访问。日牌上下文只供最终回答；规划与画像不包含牌义。`scripts/tarot_stub_model.py` 仅作本地协议联调，目标模型措辞验收样例在 `tests/fixtures/tarot-evaluation.json`。运行时修改后运行 `scripts/sync_upload.py` 并检查 `--check`。
+
+## 记账推理与查询
+
+恢复 `mirror.LedgerVision/Recognize` 支付截图候选及 `ledger_summary`、`list_ledger_flows` 只读工具。金额来自已确认账目，AA 回款使用原消费归属日，现金流使用到账日。日记查询继续遵守选择性索引授权，记账链接使用 `/ledger?record=UUID`。配套后端须执行 v19/v20 并重跑 reader 角色授权。

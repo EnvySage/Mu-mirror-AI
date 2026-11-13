@@ -1,4 +1,5 @@
 from datetime import date, datetime, timezone
+from decimal import Decimal
 from types import SimpleNamespace
 from uuid import UUID
 
@@ -94,17 +95,80 @@ def call(tool, args=None):
     return ToolCall("c1", tool, args or {})
 
 
-def test_registry_has_exactly_eleven_read_only_tools_and_rejects_scope_fields():
+def test_registry_has_only_expected_read_tools_and_rejects_scope_fields():
     assert set(READ_TOOL_REGISTRY) == {
         "search_records", "get_stats", "get_profile", "get_coverage", "get_glossary",
         "compare_snapshots", "find_item", "recall_item", "save_item",
-        "read_record", "list_todos",
+        "read_record", "list_todos", "ledger_summary", "list_ledger_flows",
     }
     specs = get_read_tool_specs()
-    assert len(specs) == 11
+    assert len(specs) == len(READ_TOOL_REGISTRY)
     assert {spec["effect"] for spec in specs} == {"read"}
     rejected = execute_read_tool(call("search_records", {"user_id": str(UUID(int=9))}), runtime(repositories()))
     assert rejected.code == "INVALID_ARGS"
+
+
+def test_ledger_summary_returns_exact_money_and_clickable_sources():
+    record_id = UUID(int=47)
+    repos = repositories()
+
+    class Ledger:
+        def summary(self, scope, filters):
+            assert scope == SCOPE
+            assert (filters.start, filters.end, filters.category) == (
+                date(2026, 10, 14), date(2026, 10, 20), "餐饮",
+            )
+            return {
+                "expense": Decimal("0.30"), "income": Decimal("0"), "recovery": Decimal("0.10"),
+                "net_expense": Decimal("0.20"), "flow_count": 2, "matched_count": 2,
+                "sources": [{"record_id": record_id, "title": "聚餐"}], "categories": [],
+            }
+
+    repos.ledger = Ledger()
+    result = execute_read_tool(call("ledger_summary", {"days": 7, "category": "餐饮"}), runtime(repos))
+    assert result.success and result.has_material
+    assert result.data["net_expense"] == "0.20"
+    assert result.data["sources"][0]["url"] == f"/ledger?record={record_id}"
+    assert result.data["date_to"] == "2026-10-20"
+
+
+def test_ledger_flows_follow_diary_link_and_reject_owner_override():
+    repos = repositories()
+    record_id = UUID(int=47)
+
+    class Ledger:
+        def list_flows(self, scope, filters, *, limit, offset):
+            assert scope == SCOPE
+            assert filters.diary_id == 15 and filters.start is None
+            assert limit == 1 and offset == 0
+            return [{
+                "record_id": record_id, "flow_id": UUID(int=61), "title": "聚餐",
+                "kind": "RECOVERY", "amount": Decimal("100"), "occurred_on": date(2026, 10, 20),
+                "budget_day": date(2026, 10, 19), "category_name": "餐饮", "note": "",
+            }], True
+
+    repos.ledger = Ledger()
+    result = execute_read_tool(call("list_ledger_flows", {"diary_id": 15, "limit": 1}), runtime(repos))
+    assert result.success and result.data["next_offset"] == 1
+    assert result.data["flows"][0]["budget_day"] == "2026-10-19"
+    assert result.data["flows"][0]["url"] == f"/ledger?record={record_id}"
+    forged = execute_read_tool(call("list_ledger_flows", {"user_id": str(UUID(int=9))}), runtime(repos))
+    assert forged.code == "INVALID_ARGS"
+
+
+def test_missing_ledger_view_reports_unavailable_instead_of_empty():
+    from psycopg.errors import UndefinedTable
+
+    repos = repositories()
+
+    class Ledger:
+        def summary(self, scope, filters):
+            raise UndefinedTable("private database internals")
+
+    repos.ledger = Ledger()
+    result = execute_read_tool(call("ledger_summary"), runtime(repos))
+    assert not result.success and result.code == "UNAVAILABLE"
+    assert "private database internals" not in result.summary
 
 
 def test_search_records_applies_short_keyword_and_inclusive_dates_before_repository_limit():

@@ -22,3 +22,5 @@ Confirmed glossary: {glossary}
 Conversation history: {history}
 Read-only tool definitions: {tools}
 Previous observations and evidence: {observations}
+
+For spending, income, AA reimbursements or other ledger totals, call ledger_summary with the requested date range or category. Do not compute money totals from diary text or partial list pages. Use list_ledger_flows for individual transactions, and use its ledger record_id in ledger_summary without dates when asked for the final total of that whole record. To follow a diary's attachments, pass the diary record_id from diary search results as list_ledger_flows.diary_id. Ledger cashflow uses the actual transaction date, while net expense attributes repayments to the original expense. Read-only ledger tools never post transactions.
