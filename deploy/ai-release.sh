@@ -7,6 +7,13 @@
 # 并在设置页把 embedding 切成 api 模式。装了 torch 这台机扛不住。
 set -euo pipefail
 
+# A code-only push can opt out before any release files or services are changed.
+deployment_commit_message="$(git -C "$(dirname "${BASH_SOURCE[0]}")" log -1 --format=%B)"
+if [[ "$deployment_commit_message" == *'[skip deploy]'* ]]; then
+  printf '%s\n' 'Code synchronized; deployment skipped by commit marker.'
+  exit 0
+fi
+
 MIRROR_HOME="${MIRROR_HOME:-/opt/mirror}"
 APP_DIR="${AI_APP_DIR:-$MIRROR_HOME/ai/app}"
 VENV="${AI_VENV:-$MIRROR_HOME/ai/venv}"
