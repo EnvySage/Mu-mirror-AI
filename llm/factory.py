@@ -30,7 +30,7 @@ def create_llm(
     if protocol == common.AiProtocol.ANTHROPIC:
         # 不兜底默认模型：model 为空由 AnthropicLlm 报"配置缺失"
         return AnthropicLlm(
-            api_key=api_key, base_url=base_url, model=model, timeout=timeout, max_retries=max_retries,
+            api_key=api_key, base_url=base_url, model=model, timeout=timeout, max_retries=max_retries, provider=provider,
         )
 
     # 默认 OpenAI 兼容

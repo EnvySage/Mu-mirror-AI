@@ -22,13 +22,14 @@ from generated import tarot_pb2_grpc as tarot_grpc
 from generated import ledger_pb2_grpc as ledger_grpc
 from services.ledger_vision_service import LedgerVisionServicer
 from services.tarot_service import TarotReadingServicer
+from mirror_core.usage import UsageServerInterceptor
 
 
 def build_legacy_server(*, port: int | None = None):
     """Create the existing 10003 server with every legacy RPC still registered."""
     legacy_port = int(os.getenv("MIRROR_AI_PORT", CONFIG["server"]["port"])) if port is None else port
     workers = CONFIG["server"]["workers"]
-    server = grpc.server(futures.ThreadPoolExecutor(max_workers=workers))
+    server = grpc.server(futures.ThreadPoolExecutor(max_workers=workers), interceptors=[UsageServerInterceptor()])
     rp_grpc.add_RecordProcessorServicer_to_server(RecordProcessorServicer(), server)
     emb_grpc.add_EmbeddingServiceServicer_to_server(EmbeddingServiceServicer(), server)
     chat_grpc.add_MirrorChatServicer_to_server(MirrorChatServicer(), server)
@@ -55,6 +56,7 @@ def build_agent_server(*, port: int | None = None, servicer: AgentRunnerServicer
     server = grpc.server(
         futures.ThreadPoolExecutor(max_workers=workers),
         maximum_concurrent_rpcs=maximum,
+        interceptors=[UsageServerInterceptor()],
     )
     instance = servicer or AgentRunnerServicer()
     agent_grpc.add_AgentRunnerServicer_to_server(instance, server)

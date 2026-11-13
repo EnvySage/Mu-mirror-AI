@@ -12,6 +12,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from agent_core.types import AgentEvent, AgentState, RuntimeContext, ToolCall
 from agent_data.scope import ReadScope
+from mirror_core.usage import current_collector
 
 
 TOTAL_BUDGET_MS = 480_000
@@ -198,6 +199,7 @@ def make_runtime(request: Any, dependencies: AgentDependencies, cancellation: An
         shadow=bool(getattr(request, "shadow", False)),
         answer_budget_ms=answer_budget_ms,
         clock=dependencies.clock,
+        usage_collector=current_collector(),
     )
 
 

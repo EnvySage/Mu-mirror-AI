@@ -14,6 +14,7 @@ from mirror_core.errors import (
     translate_llm_sdk_exception,
 )
 from llm.base import BaseLlm
+from mirror_core.usage import OpenAIUsageClient, current_collector
 
 # 不再维护 PROVIDER_DEFAULTS：早期版本按 provider 兜底 model/base_url（qwen→qwen-plus 等），
 # 会把"用户没配模型"静默替换成另一个模型真实调用并计费——账单上出现用户没配过的模型。
@@ -64,6 +65,7 @@ class OpenAiLlm(BaseLlm):
             base_url=base_url,
             timeout=self._default_timeout,
             max_retries=self._default_max_retries,
+            http_client=OpenAIUsageClient(model=model, provider=provider),
         )
 
     def _client_for(self, timeout: float | None, max_retries: int | None):
@@ -109,7 +111,7 @@ class OpenAiLlm(BaseLlm):
         """
         try:
             request_timeout = _STREAM_TIMEOUT if timeout is None else timeout
-            stream = self._client_for(None, max_retries).chat.completions.create(
+            stream = self._create_stream(max_retries,
                 model=self.model,
                 messages=messages,
                 temperature=temperature,
@@ -198,6 +200,25 @@ class OpenAiLlm(BaseLlm):
             raise LlmUnavailableError("LLM 连接失败（openai APIConnectionError）") from e
         return response.choices[0].message.content
 
+    def _create_stream(self, max_retries, **kwargs):
+        """Request final usage only for opted-in RPCs; never replay a started stream."""
+        client = self._client_for(None, max_retries)
+        if current_collector() is None:
+            return client.chat.completions.create(**kwargs)
+        try:
+            return client.chat.completions.create(**kwargs, stream_options={"include_usage": True})
+        except APIStatusError as exc:
+            message = str(getattr(exc, "message", "") or exc).lower()
+            if exc.status_code not in (400, 422) or not any(
+                field in message for field in ("stream_options", "include_usage")
+            ) or not any(hint in message for hint in (
+                "unknown", "unsupported", "not support", "does not support", "unrecognized",
+                "unexpected", "not permitted", "not allowed", "extra inputs", "extra fields",
+            )):
+                raise
+            # Rejected headers, before returning a stream, cannot contain a generation.
+            return client.chat.completions.create(**kwargs)
+
     def plan(
         self, messages: list[dict], tools: list[dict], *, protocol: str = "auto",
         timeout: float | None = None, max_retries: int = 0,
@@ -245,7 +266,7 @@ class OpenAiLlm(BaseLlm):
         stream = None
         finish = None
         try:
-            stream = self._client_for(None, max_retries).chat.completions.create(
+            stream = self._create_stream(max_retries,
                 model=self.model, messages=messages, temperature=temperature, stream=True,
                 timeout=_STREAM_TIMEOUT if timeout is None else timeout,
                 **({"max_tokens": max_tokens} if max_tokens is not None else {}),

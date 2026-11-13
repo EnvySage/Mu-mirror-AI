@@ -15,6 +15,7 @@ from mirror_core.errors import (
     translate_llm_sdk_exception,
 )
 from llm.base import BaseLlm
+from mirror_core.usage import AnthropicUsageClient
 
 # 显式超时（第九轮 #3）：anthropic SDK 默认 600s，客户端早已放弃。
 # 同 openai：SDK 对 timeout 会按 max_retries 重试，折算到单 attempt 以逼近总预算。
@@ -50,7 +51,7 @@ class AnthropicLlm(BaseLlm):
 
     def __init__(
         self, api_key: str, base_url: str = "", model: str = "", *,
-        timeout: float | None = None, max_retries: int | None = None,
+        timeout: float | None = None, max_retries: int | None = None, provider: str = "",
     ):
         # 不兜底默认模型（原为写死的 claude-sonnet-4-20250514）：没配就报错，
         # 否则"未配置"会被静默替换成另一个模型真实计费
@@ -63,6 +64,7 @@ class AnthropicLlm(BaseLlm):
             base_url=base_url if base_url else None,
             timeout=self._default_timeout,
             max_retries=self._default_max_retries,
+            http_client=AnthropicUsageClient(model=model, provider=provider),
         )
         self.model = model
 

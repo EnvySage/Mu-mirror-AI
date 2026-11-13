@@ -5,15 +5,16 @@ from langgraph.graph import END, START, StateGraph
 from agent_core import nodes
 from agent_core.runner import RECURSION_LIMIT
 from agent_core.types import AgentState, RuntimeContext
+from agent_core.usage import usage_node
 
 
 def build_graph():
     """Build a fresh compiled graph; all per-run values arrive as invocation context."""
     graph = StateGraph(AgentState, context_schema=RuntimeContext)
     graph.add_node("prepare", nodes.prepare)
-    graph.add_node("understand", nodes.understand)
+    graph.add_node("understand", usage_node(nodes.understand))
     graph.add_node("retrieve", nodes.retrieve_evidence)
-    graph.add_node("plan", nodes.plan)
+    graph.add_node("plan", usage_node(nodes.plan))
     graph.add_node("act", nodes.act)
     graph.add_node("observe", nodes.observe)
     graph.add_node("set_done", nodes.set_done)
@@ -21,7 +22,7 @@ def build_graph():
     graph.add_node("set_loop_budget", nodes.set_loop_budget)
     graph.add_node("set_total_deadline", nodes.set_total_deadline)
     graph.add_node("backstop", nodes.backstop)
-    graph.add_node("synthesize", nodes.synthesize)
+    graph.add_node("synthesize", usage_node(nodes.synthesize))
     graph.add_node("fallback", nodes.fallback)
     graph.add_node("clarify", nodes.clarify)
     graph.add_node("create_record", nodes.create_record)

@@ -39,7 +39,14 @@ def test_classification_accepts_provider_that_needs_45_seconds_within_60_second_
     monkeypatch.setattr(openai_llm, "_LLM_ATTEMPT_TIMEOUT", 30)
     monkeypatch.setattr(openai_llm, "_LLM_MAX_RETRIES", 1)
     with httpx.Client(transport=httpx.MockTransport(provider)) as transport:
-        monkeypatch.setattr(openai_llm, "OpenAI", lambda **kwargs: OpenAI(http_client=transport, **kwargs))
+        def sdk_client(**kwargs):
+            # This deadline test replaces the network client only; usage has its
+            # own real-SDK tests. Close the default observer before substitution.
+            observer = kwargs.pop("http_client", None)
+            if observer is not None:
+                observer.close()
+            return OpenAI(http_client=transport, **kwargs)
+        monkeypatch.setattr(openai_llm, "OpenAI", sdk_client)
 
         class Context:
             def abort(self, code, details):

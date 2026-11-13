@@ -190,3 +190,4 @@ class RuntimeContext:
     assistant_context: Any = None
     prepare_tools: tuple[dict[str, str], ...] = ()
     planning_protocol: str = "auto"
+    usage_collector: Any = field(default=None, repr=False, compare=False)

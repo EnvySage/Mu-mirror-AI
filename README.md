@@ -67,6 +67,50 @@ upload/                  部署镜像副本（与根目录逐字节同步，见�
 | `MirrorChat` | `PlanNextStep` | 对话循环的单步规划（流式，含思考过程透传） |
 | `MirrorProfile` | `GenerateProfile` | 用户画像（"镜子"）生成 |
 
+### AI 用量回执（v1）
+
+10003/10004 两个服务均接受 Java 传入的 ASCII metadata：
+`mirror-usage-invocation-id`（规范 UUID）、`mirror-usage-task-id`（UUID）、
+`mirror-usage-scene`（场景 ID）。缺少或非法 invocation UUID 时保持旧调用行为；
+整个 `EmbeddingService`（含 GetModelInfo）始终排除，graph 内的 embedding 客户端也不采集。
+Python 不接收用量 owner，不写业务库；Java 绑定 owner/渠道快照并持久化。
+
+同步及 server-stream RPC 在 finally 中返回 `mirror-usage-bin` 二进制 trailer，
+载荷为 UTF-8 JSON：`{version:1,invocation_id,complete,attempts:[...]}`。
+每个 attempt 含 `id`（UUID）、`status`（success/error/cancelled）、`provider`、`model`、
+`input_tokens`、`output_tokens`、`total_tokens`、`credits`、`credit_unit`、
+`usage_state`（complete/partial/unknown）、`latency_ms`、`http_status`。
+缺失数值为 null，显式 0 才是已知零；完整空数组表示没有发起模型请求。
+报告最多 100 次尝试、48 KiB；溢出保留有界前缀并置 `complete=false`。
+Java channel 应允许 96 KiB inbound metadata，容纳二进制传输及其他 headers；取消/断线可能让 trailer 无法送达，
+Java 应标记 invocation 统计不完整，不能补造一次请求或 0 Token。
+
+`mirror_core/usage/` 在 SDK 默认 HTTP 客户端逐次发送边界观察，保留默认代理、
+连接池、超时及 SDK 重试；每次自动重试单独记账。仅投影 model 与 usage 白名单，
+不保留请求正文、回答、图片、密钥或响应 headers，不新增采集日志。
+LangGraph 的 understand/plan/synthesize 节点通过每轮 RuntimeContext 显式重绑采集器，
+线程和异步任务的 ContextVar 不互相串用。采集器只在请求生命周期内存在。
+
+OpenAI 兼容流仅在开启采集时请求 `stream_options.include_usage=true`，
+读取末尾 `choices=[]` 的 usage。只有 400/422 明确拒绝 stream_options/include_usage
+且流尚未开始时，才去掉该参数重试一次；两次尝试均保留。已开始的流绝不为用量重发。
+没有终止标志或中断时，已知计数保留为 partial。Anthropic 的累计输出取最后值；
+input_tokens 为非缓存输入 + cache_read_input_tokens + cache_creation_input_tokens，
+缓存/思考另存 `cache_read_tokens` / `cache_creation_tokens` / `reasoning_tokens`，不重复加总。
+Token/延迟数值限定 0..10^12，provider/model/unit 最长分别为 128/256/32 字符。
+
+积分适配只接受 `usage.credits_consumed` / `usage.consumed_credits` /
+`usage.points_consumed` / `usage.consumed_points` 的明确本次消耗，
+从 JSON 数字直接以 Decimal 解析，输出非负普通十进制字符串，最多 26 位整数、12 位小数；
+单位来自 `usage.credit_unit`，缺失时为「积分」。`credit`、quota、余额等语义不明字段
+保持未知，不能据此认定免费或换算人民币。实际返回模型优先识别厂商，无法识别时用请求配置；
+OpenAI/Anthropic 协议本身不代表模型厂商。固定跨端契约见 B 仓
+[用量桌宠设计](../Mu-mirror-B/docs/superpowers/specs/2026-11-14-ai-usage-desktop-pet-design.md)。
+
+合成 HTTP + 真实 SDK / gRPC 回归：`tests/test_ai_usage.py`、
+`tests/test_ai_usage_grpc.py`、`tests/test_ai_usage_graph.py`。这些测试不调用真实模型；
+真实模型和 Java 落库验收单独完成，缺失/积分分支不冒称真实平台验证。
+
 `Classify` 在原有一次模型调用内逐段返回索引建议，split 与 single 均支持：
 `ClassifyItem.optional bool embedding_enabled = 11`（支持 presence，明确 false 必须保留）和
 `string embedding_reason = 12`（最多 200 字符，仅解释建议，不参与 embedding）。模型 JSON

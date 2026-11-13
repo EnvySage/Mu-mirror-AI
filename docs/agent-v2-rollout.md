@@ -62,6 +62,13 @@ The offline paired replay and focused corrections are documented, but Task 10 ro
 
 ## 5. Health and observation
 
+- Usage receipts are opt-in per RPC through `mirror-usage-invocation-id` and the binary
+  `mirror-usage-bin` trailer on both servers. The graph runtime carries its collector
+  explicitly into inference nodes; embedding and read tools remain excluded. Java
+  retains ownership and persistence. See [README usage contract](../README.md#ai-用量回执v1)
+  for null/partial/overflow and metadata-size requirements. A cancelled transport can
+  lose its trailer; do not reconstruct physical calls or zero consumption from that gap.
+
 - 10003 is the legacy RPC server; 10004 is the independent Agent server. A successful TCP check alone is not an authorization or data-boundary check.
 - With Agent enabled, configure the release job to bind `MIRROR_AI_READ_DSN` as a secret and set `MIRROR_AGENT_COMMAND_HEALTH_URL` to the Java route ending in `/api/internal/agent/commands/create-record`. The probe sends an empty POST with no credentials and requires 401; it never calls an authenticated write.
 - Record engine, outcome, stop reason, phase latency, first thinking/body latency, planning/tool counts, degradation reasons, and actual or unknown token use. Do not export model secrets, SQL, full payloads, or complete traces to the frontend.
