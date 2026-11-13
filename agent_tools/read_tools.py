@@ -7,7 +7,7 @@ from datetime import date, datetime, time as day_time, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from agent_core.types import Evidence, RuntimeContext, ToolCall, ToolObservation
+from agent_core.types import Evidence, IntentResult, RuntimeContext, ToolCall, ToolObservation
 from agent_data.glossary import GlossaryRepository
 from agent_data.history import HistoryRepository
 from agent_data.profiles import ProfileRepository
@@ -27,7 +27,9 @@ _DIMENSIONS = (
 )
 
 
-def execute_read_tool(call: ToolCall, runtime: RuntimeContext) -> ToolObservation:
+def execute_read_tool(
+    call: ToolCall, runtime: RuntimeContext, *, hard_intent: IntentResult | None = None,
+) -> ToolObservation:
     started = time.perf_counter()
     call_id = getattr(call, "call_id", "") if call is not None else ""
     tool = getattr(call, "tool", "") if call is not None else ""
@@ -42,6 +44,14 @@ def execute_read_tool(call: ToolCall, runtime: RuntimeContext) -> ToolObservatio
         args = validate_read_tool_args(call.tool, call.args)
         repos = _repositories(runtime)
         scope = require_scope(runtime.read_scope)
+        if call.tool == "search_records" and hard_intent is not None:
+            conflict = _hard_search_filter_conflict(args, runtime, hard_intent)
+            if conflict:
+                return _observation(call_id, tool, False, "INVALID_ARGS", conflict,
+                                    {"requested_args": args}, latency=started)
+            return _observation(
+                call_id, tool, *_search_records(args, runtime, scope, repos, hard_intent), started,
+            )
         handler = _HANDLERS[call.tool]
         success, code, summary, data, evidence, has_material = handler(args, runtime, scope, repos)
         return _observation(call_id, tool, success, code, summary, data, evidence, has_material, started)
@@ -118,22 +128,52 @@ def _positive_int(value: Any, name: str, *, maximum: int = 2_147_483_647) -> int
     return min(value, maximum)
 
 
-def _search_records(args, runtime, scope, repos):
-    start_at, end_at = _date_bounds(args, runtime)
+def _hard_search_filter_conflict(args: dict[str, Any], runtime: RuntimeContext, intent: IntentResult) -> str | None:
+    """Reject a planner filter set that cannot satisfy trusted intent constraints."""
+    if intent.content_type and args.get("content_type") not in (None, intent.content_type):
+        return "search_records content_type conflicts with the user's requested filter"
+    intent_moods = tuple(dict.fromkeys(intent.moods))
+    planner_moods = tuple(dict.fromkeys(args.get("moods", ())))
+    if intent_moods and planner_moods and not set(intent_moods).intersection(planner_moods):
+        return "search_records moods conflict with the user's requested filter"
+    planner_start, planner_end = _date_bounds(args, runtime)
+    hard_window = intent.time_window
+    if hard_window is None:
+        return None
+    start = max((bound for bound in (planner_start, hard_window.start) if bound is not None), default=None)
+    end = min((bound for bound in (planner_end, hard_window.end) if bound is not None), default=None)
+    if start is not None and end is not None and start >= end:
+        return "search_records date range conflicts with the user's requested time window"
+    return None
+
+
+def _search_records(args, runtime, scope, repos, hard_intent: IntentResult | None = None):
+    planner_start, planner_end = _date_bounds(args, runtime)
     content_type = args.get("content_type")
     moods = tuple(dict.fromkeys(args.get("moods", ())))
+    if hard_intent is not None:
+        hard_type = hard_intent.content_type
+        if hard_type:
+            content_type = hard_type
+        hard_moods = tuple(dict.fromkeys(hard_intent.moods))
+        if hard_moods:
+            moods = tuple(mood for mood in (moods or hard_moods) if mood in hard_moods)
+        hard_window = hard_intent.time_window
+        if hard_window is not None:
+            planner_start = max((bound for bound in (planner_start, hard_window.start) if bound is not None), default=None)
+            planner_end = min((bound for bound in (planner_end, hard_window.end) if bound is not None), default=None)
     query = args.get("query")
     limit = bounded_limit(args.get("limit", 20), maximum=20, default=20)
     filters = RecordFilters(
         keyword=query.strip() if isinstance(query, str) and query.strip() else None,
         content_type=content_type,
         moods=moods,
-        start_at=start_at,
-        end_at=end_at,
+        start_at=planner_start,
+        end_at=planner_end,
     )
     paging = {key: args[key] for key in ("record_id", "offset") if key in args}
     chunks = repos.records.search(scope, filters, limit=limit, **paging)
-    evidence = tuple(_chunk_evidence(chunk, "search_records") for chunk in chunks)
+    evidence = tuple(_chunk_evidence(chunk, "search_records", excerpt=True) for chunk in chunks)
     records = [
         {
             "chunk_id": chunk.chunk_id,
@@ -142,15 +182,24 @@ def _search_records(args, runtime, scope, repos):
             "content_type": chunk.metadata.get("contentType", ""),
             "moods": chunk.metadata.get("mood", []),
             "title": chunk.metadata.get("title", ""),
-            "quote": chunk.segment,
+            "quote": chunk.segment[:120],
         }
         for chunk in chunks
     ]
     truncated = len(records) == limit
     summary = f"找到 {len(records)} 段已授权日记片段" + ("（结果可能截断）" if truncated else "")
+    requested_args = dict(args)
+    effective_filters = {
+        "start_at": planner_start.isoformat() if planner_start is not None else None,
+        "end_at": planner_end.isoformat() if planner_end is not None else None,
+        "content_type": content_type,
+        "moods": list(moods),
+    }
     return True, "OK" if records else "EMPTY", summary, {
         "records": records, "truncated": truncated, "offset": args.get("offset", 0),
         "next_offset": args.get("offset", 0) + len(records) if truncated else None,
+        "content_scope": "excerpt", "requested_args": requested_args,
+        "effective_filters": effective_filters,
     }, evidence, bool(records)
 
 
@@ -350,10 +399,10 @@ _HANDLERS = {
 }
 
 
-def _chunk_evidence(chunk, origin: str) -> Evidence:
+def _chunk_evidence(chunk, origin: str, *, excerpt: bool = False) -> Evidence:
     return Evidence(
         evidence_id=f"chunk:{chunk.chunk_id}", kind="diary", record_id=chunk.record_id,
-        chunk_id=chunk.chunk_id, text=chunk.segment,
+        chunk_id=chunk.chunk_id, text=chunk.segment[:120] if excerpt else chunk.segment,
         date=chunk.created_at.isoformat() if chunk.created_at else None,
         distance=getattr(chunk, "distance", None), origin=origin,
         ranking_score=getattr(chunk, "ranking_score", None),

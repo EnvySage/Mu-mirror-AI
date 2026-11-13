@@ -142,7 +142,10 @@ def retrieve(
         apply_decay=not exact_time,
     )
     evidence = tuple(_chunk_evidence(chunk, route) for chunk in chunks)
-    return RetrievalResult(route, evidence, summary=f"{route} 检索 {len(evidence)} 段")
+    summary = f"{route} 向量检索 {len(evidence)} 段"
+    if not evidence:
+        summary += "；向量未命中不表示没有记录，可按字面短关键词或日期查询已授权正文，再用 read_record 核对。"
+    return RetrievalResult(route, evidence, summary=summary)
 
 
 def _metadata_filters(intent: IntentResult, *, include_time: bool) -> dict[str, object]:

@@ -1,6 +1,7 @@
 """Run the compiled graph through failures that previously looked like success."""
 import json
 from dataclasses import replace
+import pytest
 
 from agent_core.runner import run_agent
 from tests.agent_v2.agent_fakes import (
@@ -229,3 +230,163 @@ def test_answer_transport_failure_preserves_visible_partial_status():
     assert terminal.metadata["has_partial_answer"] is True
     assert terminal.metadata["stop_reason"] == "output_error"
     assert terminal.metadata["code"] == "OUTPUT_UNAVAILABLE"
+
+
+def paged_diary(count=21, *, clock=None):
+    """A scoped repository double: no vector hits, independently readable diary fragments."""
+    class Records:
+        def __init__(self):
+            self.calls = []
+            self.rows = [make_chunk(i + 1, text=f"授权日常第{i + 1}段") for i in range(count)]
+        def search_vector(self, *args, **kwargs): return []
+        def search(self, scope, filters=None, *, limit=20, record_id=None, offset=0):
+            self.calls.append((filters, record_id, offset, limit))
+            if clock and record_id is not None and offset == 0 and limit > 1:
+                clock.advance(181)
+            return self.rows[offset:offset + limit]
+    repos = FakeRepositories()
+    repos.records = Records()
+    return repos
+
+
+def test_vector_empty_then_keyword_lookup_and_full_read_recovers_tail_fact():
+    repos = paged_diary(1)
+    repos.records.rows = [make_chunk(text="前文" * 100 + "陈记牛肉面太咸，以后不去了")]
+    class Inspect(FakeLlm):
+        def chat_stream(self, messages, **kwargs):
+            if "conversation engine" in messages[0]["content"]:
+                assert "陈记牛肉面太咸，以后不去了" in messages[0]["content"]
+            yield from super().chat_stream(messages, **kwargs)
+    llm = Inspect(plans=[plan("search_records", {"query": "陈记牛肉面"}, done=False),
+                         plan("read_record", {"record_id": 10})])
+    terminal, events = run(llm, repos, question="我对陈记牛肉面评价如何？")
+    assert terminal.kind == "completed"
+    assert [e.metadata["code"] for e in events if e.kind == "tool_finished"] == ["OK", "OK"]
+    assert terminal.metadata["metrics"]["diagnostics"]["material_status"] == "sufficient"
+
+
+def test_record_21_fragment_read_continues_after_planner_done():
+    repos = paged_diary()
+    class Inspect(FakeLlm):
+        def chat_stream(self, messages, **kwargs):
+            if "conversation engine" in messages[0]["content"]:
+                assert "授权日常第21段" in messages[0]["content"]
+            yield from super().chat_stream(messages, **kwargs)
+    terminal, _ = run(Inspect(plans=[plan("read_record", {"record_id": 10})]), repos)
+    assert terminal.kind == "completed"
+    assert terminal.metadata["tool_call_count"] == 2
+    assert terminal.metadata["metrics"]["diagnostics"]["material_status"] == "sufficient"
+
+
+def test_date_recap_without_planned_query_pages_all_21_fragments_with_zero_embedding():
+    from tests.agent_v2.agent_fakes import FakeEmbedder
+    from datetime import datetime, timezone
+    repos = paged_diary()
+    repos.records.rows = [replace(row, created_at=datetime(2026, 10, 19, 10, tzinfo=timezone.utc))
+                          for row in repos.records.rows]
+    llm = FakeLlm(intent={**body_intent(), "route": "structured", "file_query_mode": "none",
+                         "time_expression": {"kind": "day", "offset": -1}},
+                  answer="从本次记录摘录看，昨天有日常活动[1]。")
+    embedder = FakeEmbedder()
+    deps = replace(make_dependencies(llm, repos), embedding_factory=lambda **_: embedder)
+    events = list(run_agent(make_request(question="昨天做了什么？"), deps))
+    terminal, = [event for event in events if event.kind in {"completed", "failed"}]
+    calls = [(f, offset) for f, record_id, offset, limit in repos.records.calls if record_id is None]
+    assert embedder.calls == []
+    assert any(offset == 20 for _, offset in calls)
+    assert all(f.keyword is None and f.start_at.isoformat() == "2026-10-19T00:00:00+08:00"
+               and f.end_at.isoformat() == "2026-10-20T00:00:00+08:00" for f, _ in calls)
+    assert terminal.metadata["outcome"] == "partial_answer"
+    assert "摘录" in terminal.metadata["answer_text"]
+
+
+def test_search_list_pagination_does_not_accept_an_early_done_as_complete_coverage():
+    repos = paged_diary()
+    terminal, _ = run(FakeLlm(plans=[plan("search_records", {"days": 30})]), repos)
+    assert any(offset == 20 for _, _, offset, _ in repos.records.calls)
+    assert terminal.metadata["outcome"] == "partial_answer"
+    assert "摘录" in terminal.metadata["answer_text"]
+
+
+def test_record_read_stops_at_loop_budget_and_exposes_partial_coverage():
+    from tests.agent_v2.agent_fakes import FakeClock
+    clock = FakeClock()
+    repos = paged_diary(clock=clock)
+    llm = FakeLlm(plans=[plan("read_record", {"record_id": 10})])
+    events = list(run_agent(make_request(), make_dependencies(llm, repos, clock=clock)))
+    terminal, = [event for event in events if event.kind in {"completed", "failed"}]
+    assert terminal.kind == "completed" and terminal.metadata["outcome"] == "partial_answer"
+    assert terminal.metadata["tool_call_count"] == 1
+    assert "预算" in terminal.metadata["answer_text"]
+
+
+def test_search_pagination_stops_at_page_budget_and_reports_available_excerpts(monkeypatch):
+    monkeypatch.setattr("agent_core.material.MAX_BODY_PAGES", 1)
+    repos = paged_diary()
+    terminal, _ = run(FakeLlm(plans=[plan("search_records", {"days": 30})]), repos)
+    assert terminal.metadata["tool_call_count"] == 1
+    assert terminal.metadata["outcome"] == "partial_answer"
+    assert "部分" in terminal.metadata["answer_text"]
+
+
+def test_search_loop_budget_keeps_already_available_excerpts_as_partial_answer():
+    from tests.agent_v2.agent_fakes import FakeClock
+    clock = FakeClock()
+    repos = paged_diary()
+    original = repos.records.search
+    def search(*args, **kwargs):
+        result = original(*args, **kwargs)
+        clock.advance(181)
+        return result
+    repos.records.search = search
+    llm = FakeLlm(plans=[plan("search_records", {"days": 30})])
+    events = list(run_agent(make_request(), make_dependencies(llm, repos, clock=clock)))
+    terminal, = [event for event in events if event.kind in {"completed", "failed"}]
+    assert terminal.metadata["outcome"] == "partial_answer"
+    assert terminal.metadata["tool_call_count"] == 1
+    assert "预算" in terminal.metadata["answer_text"]
+
+
+@pytest.mark.parametrize("args,moods", [
+    ({"query": "陈记牛肉面"}, ("exhausted", "calm")),
+    ({"query": "陈记牛肉面", "days": 30, "moods": ["calm"]}, ("calm",)),
+    ({"query": "陈记牛肉面", "date": "2026-10-18"}, None),
+    ({"query": "陈记牛肉面", "content_type": "work"}, None),
+    ({"query": "陈记牛肉面", "moods": ["sad"]}, None),
+])
+def test_planner_cannot_drop_or_widen_hard_intent_filters_on_any_search_page(args, moods):
+    repos = paged_diary()
+    llm = FakeLlm(intent={**body_intent(), "route": "hybrid", "file_query_mode": "none",
+                         "content_type": "health", "moods": ["exhausted", "calm"],
+                         "time_expression": {"kind": "day", "offset": -1}},
+                  plans=[plan("search_records", args)])
+    terminal, events = run(llm, repos, question="昨天疲惫或平静的健康记录里，陈记牛肉面评价如何？")
+    assert terminal.kind == "completed"
+    if moods is None:
+        assert not repos.records.calls
+        assert any(e.metadata.get("code") == "INVALID_ARGS" for e in events if e.kind == "tool_finished")
+    else:
+        assert any(offset == 20 for _, _, offset, _ in repos.records.calls)
+        for filters, _, _, _ in repos.records.calls:
+            assert filters.start_at.isoformat() == "2026-10-19T00:00:00+08:00"
+            assert filters.end_at.isoformat() == "2026-10-20T00:00:00+08:00"
+            assert filters.content_type == "health" and filters.moods == moods
+
+
+def test_equal_initial_evidence_and_body_page_still_count_as_partial_body_at_budget():
+    from tests.agent_v2.agent_fakes import FakeClock
+    clock = FakeClock()
+    repos = paged_diary()
+    repos.records.search_vector = lambda *args, **kwargs: repos.records.rows[:1]
+    original = repos.records.search
+    def search(*args, **kwargs):
+        result = original(*args, **kwargs)
+        clock.advance(181)
+        return result
+    repos.records.search = search
+    llm = FakeLlm(plans=[plan("read_record", {"record_id": 10, "limit": 1})])
+    events = list(run_agent(make_request(), make_dependencies(llm, repos, clock=clock)))
+    terminal, = [event for event in events if event.kind in {"completed", "failed"}]
+    assert terminal.metadata["tool_call_count"] == 1
+    assert terminal.metadata["outcome"] == "partial_answer"
+    assert "预算" in terminal.metadata["answer_text"]

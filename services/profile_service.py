@@ -6,7 +6,8 @@
        ② records          本月原始记录（按回看深度档位由 B 侧闸门限流后传入）
        ③ correction_index 校正索引（仅回看深度=0 时传入，防低档误差累积）
        ④ stats_facts      待办/统计实况直查（唯一真源，LLM 只叙事不记账）
-     ②④ 由 B 侧复用既有字段塞入：learnings 通道→records、todos 通道→stats_facts。
+     ② 由 optional records 字段传入；旧客户端未设置该字段时兼容 learnings 通道。
+     ④ 优先使用 stats_facts，旧客户端回退 todos/total_records。
 输出：六维分析（todo/learning/mood/rhythm）+ user_tags + overall_summary（累计语义）
 无状态：配置随请求携带，用完即弃。
 """
@@ -53,7 +54,7 @@ def _fmt_todos(todos) -> str:
 
 
 def _fmt_learnings(learnings) -> str:
-    """learnings 通道在本轮承载 ② 本月原始记录（B 侧按回看深度档位带入的原文）。
+    """旧客户端 learnings 通道的兼容记录材料；新客户端使用 optional records。
 
     空块 → 空串（模板"本月记录原文"节不留孤儿内容，同 glossary 模式）。
     """
@@ -141,8 +142,10 @@ class MirrorProfileServicer(pb2_grpc.MirrorProfileServicer):
         llm_config = request.llm_config
 
         lookback = request.mirror_lookback if request.HasField("mirror_lookback") else None
+        records_present = request.HasField("records")
         print(f"[GenerateProfile] records: {request.total_records}, range: {request.time_range}, "
               f"todos={len(request.todos)}, learnings={len(request.learnings)}, "
+              f"records_present={records_present}, records_chars={len(request.records)}, "
               f"memories={len(request.assistant_context.memories)}, prev_mirror={'有' if request.prev_mirror else '无(genesis)'}, "
               f"correction_index={'有' if request.correction_index else '无'}, "
               f"lookback={lookback if lookback is not None else '未传'}")
@@ -163,7 +166,10 @@ class MirrorProfileServicer(pb2_grpc.MirrorProfileServicer):
                 prev_mirror=_fmt_prev_mirror(request.prev_mirror),
                 correction_index=_fmt_correction_index(request.correction_index),
                 stats_facts=request.stats_facts or _fmt_stats_facts(request.todos, request.total_records),
-                records=_fmt_learnings(request.learnings),
+                # B has already applied per-chunk/window/total budgets. Do not apply the
+                # legacy single-item 2,000-character cap to the combined record block.
+                # Explicit empty means no record material (e.g. lookback=0), not fallback.
+                records=request.records if records_present else _fmt_learnings(request.learnings),
                 mood_stats=_fmt_mood_stats(request.mood_stats),
                 keywords=_fmt_keywords(request.keywords),
                 active_time=_fmt_active_time(request.active_time),

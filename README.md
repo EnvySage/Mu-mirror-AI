@@ -67,6 +67,39 @@ upload/                  部署镜像副本（与根目录逐字节同步，见�
 | `MirrorChat` | `PlanNextStep` | 对话循环的单步规划（流式，含思考过程透传） |
 | `MirrorProfile` | `GenerateProfile` | 用户画像（"镜子"）生成 |
 
+`Classify` 在原有一次模型调用内逐段返回索引建议，split 与 single 均支持：
+`ClassifyItem.optional bool embedding_enabled = 11`（支持 presence，明确 false 必须保留）和
+`string embedding_reason = 12`（最多 200 字符，仅解释建议，不参与 embedding）。模型 JSON
+只接受真实布尔值；缺失、null、字符串或数字等非法建议按 true 兼容，非字符串原因按空串处理。
+低信息但有效的日常仍返回原文、分类与时间替换，不整体 skip；空白或无意义语料仍可 skip。
+建议不改变 `processing_authorized` 或用户记忆授权，Java 决定最终索引与存储。
+真实模型的语义质量和数据库权限链路需单独验收，桩模型测试仅验证协议与映射。
+
+`GenerateProfileRequest.optional string records = 16` 接收 Java 已按授权、回看窗口及预算
+筛选的片段正文，直接用于镜子 prompt 的记录材料。字段存在时始终优先（包括显式空字符串），
+不会与旧学习摘要拼接或按旧通道的单条 2,000 字上限截断整块材料；只有旧客户端未设置
+该字段时才兼容 `learnings` 的既有格式。窗口、逐段和总量预算仍由 Java 负责。
+
+graph_v2 的 `search_records`、`read_record` 继续只读 `mirror_ai.record_chunks` 视图。
+B 的 v18 迁移将新策略下已确认授权、未索引的片段纳入正文视图；普通日期/关键词查询不要求
+向量，语义查询另检查 `embedding_enabled=true`、`embedding_status=ready` 且向量非空。
+日期回顾使用无关键词的日期查询，不调用 embedding；具体主题优先语义检索，向量空结果或
+失败仍可通过字面短关键词/日期查询和正文读取核对，不能据此声称用户没有记录。
+列表只提供 120 字摘录；`read_record` 保留完整授权片段并按 `next_offset` 续页，`full`
+只表示授权范围已读完。图在原有 12 页、64,000 字符和运行时间预算内补齐缺页；摘录或未读完
+时展示查询范围与 partial 限制。`search_records` 没有 legacy `mode` 参数，默认引擎未改变。
+
+legacy PlanTools 本期保留原有 `search_records.mode` 路由，并在 `plan_tools.txt` 与单步回滚
+提示中说明同一分页契约：搜索 `quote` 是最多 120 字摘录，不代表全文；需要正文时，循环规划器
+先用搜索结果中的 `record_id` 调 `read_record`，按 `next_offset` 读取至授权范围完成。单步回滚
+规划看不到新搜索结果，只能直接读取已知的 `record_id`；否则答复必须说明依据仍是摘录。以上
+仅适配现有 legacy 路径，不更改引擎选择。
+
+隔离 reader 集成测试按 `tests/agent_v2/fixtures/agent_data.sql`（包括相邻 selective fixture）
+→ B `migration-v11-agent-v2.sql` → `migration-v18-record-selective-index.sql` →
+`deploy/agent-reader-role.sql` 初始化。fixture 仅允许精确库名 `mirror_ai_agent_v2_test`，不得
+用于应用数据库；Python 测试账号仅有现有八个视图的 SELECT，不增加业务表权限。
+
 ## 快速开始
 
 ```bash
@@ -118,6 +151,8 @@ cp config.local.example.yml config.local.yml
 | `extract_terms` / `todo_hint` / `recent_context` / `mirror` | 各类 prompt 注入的截断防线 |
 | `plan_tools` | 工具规划步数上限、注册表渲染上限、循环规划器思考预算 |
 | `prompts` | 模板文件路径 |
+
+`Classify` 的拆分和单段整理使用一次完整的 `llm.timeout_seconds` 请求预算（默认 60 秒），关闭 SDK 内部重试，避免把 60 秒分成两次 30 秒而反复中断较慢的完整 JSON 响应。请求超时仍按 `DEADLINE_EXCEEDED` 返回，由 Java 保留原文并生成待确认的仅保存候选。
 
 ## 相对时间消解
 
@@ -195,7 +230,10 @@ Windows 一键部署见仓库外层的 `部署AI.bat`。**打包用排除法而�
 - [历史摘要](docs/HISTORY.md) — 已归档设计与一次性记录的一页摘要
 - [LangGraph 实施记录](docs/2026-10-25-langgraph-chat-implementation.md) — graph_v2 当前实现边界
 - [Agent v2 rollout](docs/agent-v2-rollout.md) — 灰度、回滚与验收门槛
+- [选择性索引真实模型验收](docs/archive/integration/2026-11-13-record-selective-index-real-model.md) — 固定 12 例的历史验收；当前跨端结果见 B 仓 `docs/PROGRESS.md`
 - `docs/archive/` — 被取代的历史设计文档，仅作追溯
+
+本地测试日志和一次性任务报告不入库：使用 `.verify/`，原 `tests/agent_v2/reports/` 也已忽略。可重复执行的回归测试仍保留在 `tests/`；长期验收摘要归档到 `docs/archive/`。
 
 ### 塔罗首版
 

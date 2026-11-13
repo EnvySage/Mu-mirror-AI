@@ -97,4 +97,6 @@ message ClassifyItem {
   TodoRef refers_to_todo = 8;       // 待办引用（todo-registry 判别期；无引用不设值）
   repeated TimeSubstitution time_substitutions = 9;  // 本片段内的时间词替换（无参照日期 / 无相对时间词时为空）
   repeated string user_tags = 10;
+  optional bool embedding_enabled = 11;  // 逐段索引建议；缺失按 true 兼容，不影响记忆授权
+  string embedding_reason = 12;          // 建议原因，最多 200 字符；不参与 embedding
 }

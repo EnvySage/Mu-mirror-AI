@@ -76,7 +76,7 @@ class TestProtoContract:
             "todos": 1, "learnings": 2, "mood_stats": 3, "keywords": 4, "active_time": 5,
             "total_records": 6, "time_range": 7, "llm_config": 8, "recent_chats": 9,
             "glossary": 10, "prev_mirror": 11, "correction_index": 12, "mirror_lookback": 13,
-            "stats_facts": 14, "assistant_context": 15,
+            "stats_facts": 14, "assistant_context": 15, "records": 16,
         }
 
     def test_mirror_lookback_is_optional(self):

@@ -173,3 +173,33 @@ def test_tool_validation_is_controlled(args):
     observation = execute_read_tool(call("search_records", args), runtime(repositories()))
     assert observation.code == "INVALID_ARGS"
     assert observation.success is False
+
+
+def test_search_list_is_excerpt_but_read_record_preserves_fact_after_120_characters():
+    full = "日常片段" * 40 + "陈记牛肉面太咸，以后不去了"
+    item = RecordChunk(12, 3, SCOPE.user_id, full, {}, None, NOW)
+    class Records:
+        def search(self, scope, filters=None, *, limit=20, record_id=None, offset=0):
+            return [item][offset:offset + limit]
+    repos = SimpleNamespace(records=Records())
+    listed = execute_read_tool(call("search_records"), runtime(repos))
+    assert listed.data["content_scope"] == "excerpt"
+    assert len(listed.data["records"][0]["quote"]) == 120
+    assert listed.evidence[0].text == full[:120]
+    read = execute_read_tool(call("read_record", {"record_id": 3}), runtime(repos))
+    assert read.data["content_scope"] == "full" and read.data["complete"]
+    assert read.evidence[0].text == full
+    assert "陈记牛肉面太咸，以后不去了" in read.data["snippets"][0]["text"]
+
+
+def test_search_zero_results_and_tool_failure_remain_distinct():
+    class Records:
+        def __init__(self, fail=False): self.fail = fail
+        def search(self, *args, **kwargs):
+            if self.fail: raise RuntimeError("synthetic outage")
+            return []
+    empty = execute_read_tool(call("search_records"), runtime(SimpleNamespace(records=Records())))
+    failed = execute_read_tool(call("search_records"), runtime(SimpleNamespace(records=Records(True))))
+    assert empty.success and empty.code == "EMPTY" and empty.data["records"] == []
+    assert not failed.success and failed.code == "UNAVAILABLE"
+    assert execute_read_tool(call("search_records", {"mode": "semantic"}), runtime(repositories())).code == "INVALID_ARGS"

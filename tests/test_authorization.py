@@ -23,12 +23,13 @@ class FakeContext:
         raise AbortCalled(code, details)
 
 
-def test_classify_rejects_missing_authorization_before_creating_llm(monkeypatch):
+@pytest.mark.parametrize("single", [False, True])
+def test_classify_rejects_missing_authorization_before_creating_llm(monkeypatch, single):
     def unexpected_llm(**_kwargs):
         pytest.fail("unauthorized request must be rejected before creating an LLM")
 
     monkeypatch.setattr(record_processor, "create_llm", unexpected_llm)
-    request = pb2.ClassifyRequest(content="这段内容未经授权")
+    request = pb2.ClassifyRequest(content="这段内容未经授权", single=single)
 
     with pytest.raises(AbortCalled) as error:
         record_processor.RecordProcessorServicer().Classify(request, FakeContext())
@@ -37,12 +38,13 @@ def test_classify_rejects_missing_authorization_before_creating_llm(monkeypatch)
     assert "授权" in error.value.details
 
 
-def test_classify_rejects_explicit_false_authorization(monkeypatch):
+@pytest.mark.parametrize("single", [False, True])
+def test_classify_rejects_explicit_false_authorization(monkeypatch, single):
     def unexpected_llm(**_kwargs):
         pytest.fail("false authorization must be rejected before creating an LLM")
 
     monkeypatch.setattr(record_processor, "create_llm", unexpected_llm)
-    request = pb2.ClassifyRequest(content="这段内容未获准", processing_authorized=False)
+    request = pb2.ClassifyRequest(content="这段内容未获准", processing_authorized=False, single=single)
 
     with pytest.raises(AbortCalled) as error:
         record_processor.RecordProcessorServicer().Classify(request, FakeContext())

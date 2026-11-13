@@ -102,7 +102,11 @@ def merge_evidence(existing: Iterable[Evidence], incoming: Iterable[Evidence]) -
         elif evidence.text and (
             not merged[position].text
             or (len(evidence.text) > len(merged[position].text) and evidence.text.startswith(merged[position].text))
+            or (evidence.text == merged[position].text and evidence.origin == "read_record"
+                and merged[position].origin != "read_record")
         ):
+            # A full-body read can be byte-for-byte equal to an initial retrieval sample.
+            # Prefer its provenance on ties so budget exhaustion keeps valid partial-body evidence.
             merged[position] = evidence
     return merged
 

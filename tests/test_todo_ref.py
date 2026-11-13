@@ -54,6 +54,7 @@ class TestProtoContract:
         assert {n: f.number for n, f in fields.items()} == {
             "title": 1, "summary": 2, "content": 3, "content_type": 4, "moods": 5,
             "status": 6, "keywords": 7, "refers_to_todo": 8, "time_substitutions": 9, "user_tags": 10,
+            "embedding_enabled": 11, "embedding_reason": 12,
         }
 
     def test_todo_hint_fields(self):

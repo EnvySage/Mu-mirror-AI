@@ -51,7 +51,7 @@ _PAGE_PROPERTIES = {
 
 READ_TOOL_REGISTRY: dict[str, ReadToolSpec] = {
     "search_records": ReadToolSpec(
-        "search_records", "按日期、类型、情绪和字面短关键词查询已授权日记片段，可按 record_id 或 offset 查询。",
+        "search_records", "按日期、类型、情绪和字面短关键词查询全部已授权日记（含未索引日常），返回120字摘录。按next_offset续页，正文用read_record；无mode参数。",
         _schema({
             **_DATE_PROPERTIES,
             "moods": {"type": "array", "items": {"type": "string", "enum": sorted(MOODS)}, "maxItems": 13},
@@ -62,7 +62,7 @@ READ_TOOL_REGISTRY: dict[str, ReadToolSpec] = {
         }),
     ),
     "read_record": ReadToolSpec(
-        "read_record", "按原顺序分页读取一个记录的已授权完整片段，按 next_offset 继续；不会读取未授权原文。",
+        "read_record", "按原顺序分页读取记录的全部已授权完整片段，含未索引内容，按next_offset继续；full仅表示已授权范围读完，不含未授权原文。",
         _schema({"record_id": {"type": "integer", "minimum": 1}, **_PAGE_PROPERTIES}, ("record_id",)),
     ),
     "list_todos": ReadToolSpec(

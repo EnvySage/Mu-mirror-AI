@@ -27,3 +27,8 @@ Thumbs.db
 lib/
 # 本机开发覆盖（每台机器一份，不入库）
 config.local.yml
+
+# Local verification output; durable summaries belong in docs/archive/.
+.verify/
+*.log
+/tests/agent_v2/reports/

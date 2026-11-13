@@ -18,12 +18,13 @@
    - recall_item 的 **query 填用户问的点**（问架构就填"架构"，问技术方案就填"技术方案"）；用户只是笼统问"这份文档写了什么/你能看到哪些内容"时，**省略 query**（会返回文档开头几段供你概述）。
    - recall_item **不要自己编 vault_item_id**——省略该字段，执行器会自动接上 find_item 命中的第一个文件。
    - **只有**用户明确只是问"文件在哪 / 有哪些文件 / 什么时候传的"时，才可以只规划 find_item。
-4. **可核查的自我评价**（"我这周啥也没干"、"我最近完全没学习"这类可以拿记录验证的说法）→ 计划里加入 search_records，时间窗口取本周（7 天），用记录验证用户的说法。核查输出必须能落到记录上，落不到就不要规划。
+4. **可核查的自我评价**（"我这周啥也没干"、"我最近完全没学习"这类可以拿记录验证的说法）→ 用 search_records 的 legacy `mode=structured` 和本周（7 天）时间范围查询，并保留用户明确提出的日期、类型、情绪条件，不可放宽或省略。结果中的 `quote` 只是最多 120 字摘录；不能据此称读过完整记录或覆盖全部记录。
 5. **覆盖度/边界类问题**（"我什么时候开始…"、"我了解你什么"、"我从哪天开始记录…"）→ 使用 get_coverage，query 填问题的主题词，让回答能声明"我知道多少、从哪天开始知道"。
 6. **快照人格类请求**（"用 8 月的我回答"、"以那段时间的我说话"）→ 使用 get_profile（快照变体），后续回答会以对应时段的画像口吻展开。
 7. **统计汇总类问题**（"我这个月记了多少条"、"我的情绪分布怎么样"）→ 使用 get_stats。
-8. **检索细节类问题**（"我上个月都在焦虑什么"、"关于论文我写过什么"）→ 使用 search_records。
-9. **最多 2 步**。单工具够用就不要规划第二步；确需多个数据源才组合（如先 find_item 后 recall_item、先 get_stats 后 search_records）。
+8. **检索细节类问题**（"我上个月都在焦虑什么"、"关于论文我写过什么"）→ 未带明确过滤条件的主题问题用 search_records 的 legacy `mode=semantic`；若主题问题同时带有日期、情绪或类型边界，则用 `mode=hybrid`，以 `query` 表达问题核心意思，并把明确边界分别放入 `days`/日期、`moods`、`content_type`。例如“我上个月都在焦虑什么”问焦虑主题或原因，应使用 `mode=hybrid` + `query` + `moods=["anxious"]` + `days=30`。只有纯粹询问情绪次数、频率或分布时才走统计意图：优先 `get_stats`；若要列出匹配记录，用 `mode=structured` 加 mood/date 条件，不传语义 query。日期问题优先 `mode=structured` + 日期参数，不带语义 query。始终保留用户明确的时间、类型和情绪边界。
+9. **正文与分页边界**。`search_records` 列表项包含 `chunk_id`、`record_id`、`date`、`content_type`、`moods`、`title`、`quote`；`quote` 最多 120 字，是定位摘录而非全文。列表还返回 `truncated`、`offset`、`next_offset`、`content_scope="excerpt"`、`requested_args`；若 `truncated=true`，当前结果不是完整列表。`read_record` 需要正整数 `record_id`，`offset` 默认 0，`limit` 默认 20 且范围 1–20；结果为 `{record_id, offset, snippets:[{chunk_id, record_id, date, text}], next_offset, complete, body_available, content_scope}`。只有已有明确授权的 `record_id` 时才规划 `read_record`，不要编造 ID；正文分页未完成时不能声称读完。
+10. **最多 2 步**。单工具够用就不要规划第二步；确需多个数据源才组合（如先 find_item 后 recall_item、先 get_stats 后 search_records）。这个单次规划看不到新搜索执行结果，因此不能在同一批次根据尚未返回的 record_id 规划 read_record；若只能查搜索结果，回答应清楚说明依据是摘录。已知 `record_id` 时可直接安排 read_record。
 
 ## 输出格式
 
@@ -42,7 +43,7 @@
 
 例 2（检索类）：
 用户问题：我上个月都在焦虑什么？
-输出：{"calls": [{"tool": "search_records", "args": {"moods": ["anxious"], "days": 30, "limit": 12}}]}
+输出：{"calls": [{"tool": "search_records", "args": {"mode": "hybrid", "query": "哪些事情让我焦虑", "moods": ["anxious"], "days": 30, "limit": 12}}]}
 
 例 3（文件定位类）：
 用户问题：我之前上传的那份设计文档在哪？

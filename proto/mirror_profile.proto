@@ -25,6 +25,8 @@ message GenerateProfileRequest {
   optional int32 mirror_lookback = 13;   // ② 回看深度档位 0-3（默认 1）；optional 区分"未传"与"0 档纯继承"（wire 不变）
   string stats_facts = 14;
   AssistantContext assistant_context = 15;
+  // B 已按授权、回看窗口和预算筛选的片段正文。未传兼容 learnings；显式空不回退。
+  optional string records = 16;
 }
 
 message TodoItem {

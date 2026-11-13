@@ -297,7 +297,7 @@ def act(state: AgentState, runtime: Runtime[RuntimeContext]) -> dict[str, Any]:
             raise
         auto = index < len(state.pending_auto_backstop) and state.pending_auto_backstop[index]
         tool_runtime = _with_effective_deadline(context, context.loop_deadline)
-        observation = execute_read_tool(call, tool_runtime)
+        observation = execute_read_tool(call, tool_runtime, hard_intent=state.intent)
         if not observation.success:
             observation = replace(observation, data={"requested_args": call.args})
             degraded.append(f"{call.tool}:{observation.code}")
@@ -379,12 +379,13 @@ def backstop(state: AgentState, runtime: Runtime[RuntimeContext]) -> dict[str, A
               "material_status": decision.status, "material_note": decision.note}
     if decision.status != "read":
         return update
+    available = _has_body(state) or (decision.tool == "search_records" and has_material(state))
     try:
         check_control(context, deadline=context.loop_deadline)
     except AgentAbort as exc:
         if exc.stop_reason != "loop_budget":
             raise
-        update.update(material_status="partial" if _has_body(state) else "missing",
+        update.update(material_status="partial" if available else "missing",
                       material_note="本轮读取预算已用完，未能读完正文；只能依据已有片段分析。",
                       stop_reason="loop_budget")
         return update
@@ -393,7 +394,7 @@ def backstop(state: AgentState, runtime: Runtime[RuntimeContext]) -> dict[str, A
 
     fingerprint = call_fingerprint(call)
     if fingerprint in state.fingerprints:
-        update.update(material_status="partial" if _has_body(state) else "missing",
+        update.update(material_status="partial" if available else "missing",
                       material_note="正文读取没有返回完整内容，暂时不能将这些片段作为全文分析。")
         return update
     update.update(pending_calls=[call], pending_auto_backstop=[True],

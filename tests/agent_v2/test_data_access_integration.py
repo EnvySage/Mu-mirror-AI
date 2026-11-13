@@ -3,8 +3,9 @@
 Setup uses a PostgreSQL administrator only for the isolated database:
   1. psql -d mirror_ai_agent_v2_test -f tests/agent_v2/fixtures/agent_data.sql
   2. From Mu-mirror-B, apply migration-v11-agent-v2.sql (fixture includes its v8/v10 prerequisites).
-  3. From Mu-mirror-B, run deploy/agent-reader-role.sql -v reader_role=mirror_ai_reader
-  4. set MIRROR_TEST_READ_DSN to the mirror_ai_reader connection string.
+  3. From Mu-mirror-B, apply migration-v18-record-selective-index.sql atomically.
+  4. From Mu-mirror-B, run deploy/agent-reader-role.sql -v reader_role=mirror_ai_reader
+  5. set MIRROR_TEST_READ_DSN to the view-only reader connection string.
 
 The data fixture refuses to run unless the database has its exact test name.
 """
@@ -87,7 +88,7 @@ def test_record_search_scope_approval_filters_and_limit(agent_pool, read_scope):
 def test_record_stats_count_records_and_coverage_counts_local_dates(agent_pool, read_scope):
     repository = RecordRepository(agent_pool)
     stats = repository.stats(read_scope)
-    assert stats.record_count == 22
+    assert stats.record_count == 25
     assert stats.mood_counts["calm"] == 1  # duplicate chunks in record 101 count once
     assert stats.mood_counts["happy"] == 21
 
@@ -243,6 +244,9 @@ def test_body_and_todo_tools_run_against_real_authorized_repositories(agent_pool
 
 def test_read_role_cannot_write_or_read_private_base_tables(read_dsn):
     statements = (
+        "SELECT * FROM public.records",
+        "SELECT * FROM public.chunks",
+        "SELECT public.record_ai_is_readable(110)",
         "UPDATE public.records SET content = 'not allowed' WHERE id = 101",
         "INSERT INTO public.records (id, user_id, content, source, status, created_at) "
         "VALUES (9999, '00000000-0000-0000-0000-000000000001', 'not allowed', 'user', 'done', now())",
@@ -252,6 +256,8 @@ def test_read_role_cannot_write_or_read_private_base_tables(read_dsn):
     )
     for statement in statements:
         with psycopg.connect(read_dsn, autocommit=True) as connection:
+            # Even a caller-selected public search path cannot bypass view-only grants.
+            connection.execute("SET search_path TO pg_catalog, public, mirror_ai")
             with pytest.raises(InsufficientPrivilege) as error:
                 connection.execute(statement)
         assert error.value.sqlstate == "42501"
@@ -281,3 +287,50 @@ def test_pool_wait_is_bounded_and_transactions_return_connections(agent_pool, re
         assert row["read_only"] == "on"
         assert row["statement_timeout"] == "3s"
         assert row["lock_timeout"] == "1s"
+
+
+def test_selective_records_plaintext_read_and_vector_eligibility_use_only_views(agent_pool, read_scope):
+    repo = RecordRepository(agent_pool)
+    daily = repo.search(read_scope, record_id=110)
+    assert [row.chunk_id for row in daily] == [5001]
+    assert daily[0].embedding is None
+    assert "结尾事实：下午喝咖啡晚上睡不着" in daily[0].segment[120:]
+    assert [row.chunk_id for row in repo.search(read_scope, record_id=111)] == [5002, 5003, 5004, 5005]
+    for record_id in (113, 114, 115, 116, 117):
+        assert repo.search(read_scope, record_id=record_id) == []
+    for secret in ("RAW_V1_PRIVATE_SECRET", "UNAPPROVED_V1_SECRET", "CROSS_USER_V1_SECRET"):
+        assert repo.search(read_scope, {"keyword": secret}) == []
+    vector = [0.0, 0.0, 0.0, 1.0] + [0.0] * 1020
+    hits = repo.search_vector(read_scope, vector, {"start_at": datetime.fromisoformat("2026-11-01T00:00:00+08:00")})
+    assert [row.chunk_id for row in hits] == [5002]
+    assert repo.search_vector(read_scope, vector, {"end_at": datetime.fromisoformat("2026-11-12T00:00:00+08:00")}) == []
+
+
+def test_unindexed_record_21_fragment_pages_and_excerpt_body_boundary(agent_pool, read_scope):
+    from datetime import date
+    from agent_core.types import RuntimeContext, ToolCall
+    from agent_tools.read_tools import execute_read_tool
+    runtime = RuntimeContext(read_scope.user_id, read_scope.session_id, "selective-pages", read_scope.user_message_id,
+                             date(2026, 11, 14), "Asia/Shanghai", read_scope, read_pool=agent_pool)
+    first = execute_read_tool(ToolCall("r1", "read_record", {"record_id": 112}), runtime)
+    assert len(first.data["snippets"]) == 20 and first.data["next_offset"] == 20
+    assert first.data["content_scope"] == "partial" and not first.data["complete"]
+    last = execute_read_tool(ToolCall("r2", "read_record", {"record_id": 112, "offset": 20}), runtime)
+    assert last.data["content_scope"] == "full" and last.data["complete"]
+    assert last.data["snippets"][0]["text"].endswith("末尾事实：周末也没缓过来")
+    listed = execute_read_tool(ToolCall("s1", "search_records", {"date": "2026-11-11"}), runtime)
+    assert listed.data["content_scope"] == "excerpt" and len(listed.evidence[0].text) == 120
+    full = execute_read_tool(ToolCall("r3", "read_record", {"record_id": 110}), runtime)
+    assert "下午喝咖啡晚上睡不着" in full.evidence[0].text
+
+
+def test_selective_date_tool_keeps_user_and_hard_date_filters(agent_pool, read_scope):
+    from datetime import date
+    from agent_core.types import RuntimeContext, ToolCall
+    from agent_tools.read_tools import execute_read_tool
+    runtime = RuntimeContext(read_scope.user_id, read_scope.session_id, "selective-date", read_scope.user_message_id,
+                             date(2026, 11, 14), "Asia/Shanghai", read_scope, read_pool=agent_pool)
+    first = execute_read_tool(ToolCall("s1", "search_records", {"date": "2026-11-13"}), runtime)
+    last = execute_read_tool(ToolCall("s2", "search_records", {"date": "2026-11-13", "offset": 20}), runtime)
+    assert len(first.data["records"]) == 20 and len(last.data["records"]) == 1
+    assert {row["record_id"] for row in first.data["records"] + last.data["records"]} == {112}

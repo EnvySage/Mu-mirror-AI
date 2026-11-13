@@ -97,7 +97,9 @@ class AnthropicLlm(BaseLlm):
             raise LlmUnavailableError("LLM 连接失败（anthropic APIConnectionError）") from e
         except APIStatusError as e:
             raise self._from_status(e) from e
-        return response.content[0].text
+        # Compatible endpoints may prepend a ThinkingBlock before the final TextBlock.
+        # Classification and other non-streaming callers consume answer text only.
+        return self._text_from_response(response)
 
     def chat_stream(self, messages: list[dict],
                     temperature: float = 0.7,
@@ -146,14 +148,47 @@ class AnthropicLlm(BaseLlm):
                 # （已吐过内容再降级重来会重复输出）
                 if yielded or not self._thinking_unsupported(e):
                     raise self._from_status(e) from e
+            except AttributeError as e:
+                if yielded or not self._stream_snapshot_incompatibility(e):
+                    raise
+                text = self._non_stream_fallback(base, temperature, timeout, max_retries)
+                if text:
+                    yield ("content", text)
+                return
 
         try:
-            yield from self._iter_stream(
+            yielded = False
+            for item in self._iter_stream(
                 {**base, "temperature": temperature}, timeout=timeout, max_retries=max_retries,
-            )
+            ):
+                yielded = True
+                yield item
         except APIStatusError as e:
             # 普通路径也要按状态码翻译（401/429/5xx → AiServiceError），与旧行为一致
             raise self._from_status(e) from e
+        except AttributeError as e:
+            # Some Anthropic-compatible proxies return an incomplete message_start
+            # snapshot (content=null); the SDK fails before yielding any events.
+            # Retry once without streaming only before any user-visible delta exists.
+            if yielded or not self._stream_snapshot_incompatibility(e):
+                raise
+            text = self._non_stream_fallback(base, temperature, timeout, max_retries)
+            if text:
+                yield ("content", text)
+
+    def _non_stream_fallback(
+        self, base: dict, temperature: float, timeout: float | None, max_retries: int | None,
+    ) -> str:
+        try:
+            return self._create_text(
+                {**base, "temperature": temperature}, timeout=timeout, max_retries=max_retries,
+            )
+        except APIStatusError as e:
+            raise self._from_status(e) from e
+
+    @staticmethod
+    def _stream_snapshot_incompatibility(exc: AttributeError) -> bool:
+        return str(exc) == "'NoneType' object has no attribute 'append'"
 
     def _iter_stream(
         self, kwargs: dict, *, timeout: float | None = None, max_retries: int | None = None,
@@ -264,7 +299,18 @@ class AnthropicLlm(BaseLlm):
             raise LlmTimeoutError(f"LLM 请求超时（>{_LLM_TIMEOUT:.0f}s）") from e
         except APIConnectionError as e:
             raise LlmUnavailableError("LLM 连接失败（anthropic APIConnectionError）") from e
-        return response.content[0].text
+        return self._text_from_response(response)
+
+    @staticmethod
+    def _text_from_response(response) -> str:
+        """Return visible text while ignoring thinking and other non-text blocks."""
+        text = "\n".join(
+            block.text for block in (getattr(response, "content", None) or ())
+            if getattr(block, "type", None) == "text" and getattr(block, "text", None)
+        )
+        if not text:
+            raise LlmUnavailableError("LLM 响应中没有可用文本块")
+        return text
 
     def plan(
         self, messages: list[dict], tools: list[dict], *, protocol: str = "auto",

@@ -260,7 +260,8 @@ class RecordRepository:
 
         vector_literal = "[" + ",".join(values) + "]"
         vector_distance = "embedding OPERATOR(public.<=>) %s::public.vector"
-        conditions = ["user_id = %s", "embedding IS NOT NULL", f"({vector_distance}) <= %s"]
+        conditions = ["user_id = %s", "embedding_enabled = TRUE", "embedding_status = 'ready'",
+                      "embedding IS NOT NULL", f"({vector_distance}) <= %s"]
         params: list[object] = [scope.user_id, vector_literal, float(threshold)]
         if normalized.keyword:
             conditions.append("strpos(lower(segment), lower(%s)) > 0")

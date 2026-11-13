@@ -1,5 +1,6 @@
 """Task-specific material requirements; metadata never stands in for body text."""
 from dataclasses import dataclass, replace
+from datetime import timedelta
 
 from agent_core.types import AgentState, Evidence
 
@@ -28,6 +29,23 @@ def assess_material(state: AgentState) -> MaterialDecision:
         record_pages = [item for item in state.observations if item.tool == "read_record"]
         if record_pages:
             return _body_decision(state, "read_record", "record_id", record_pages)
+        searches = [item for item in state.observations if item.tool == "search_records"]
+        if searches:
+            return _search_decision(state, searches)
+        if state.intent and state.intent.route == "structured":
+            # Initial retrieval is a small evidence sample, not complete recap coverage.
+            # A date recap is deliberately unkeyworded; retain every hard metadata bound.
+            args = {}
+            window = state.intent.time_window
+            if window and window.start:
+                args["date_from"] = window.start.date().isoformat()
+            if window and window.end:
+                args["date_to"] = (window.end - timedelta(microseconds=1)).date().isoformat()
+            if state.intent.content_type:
+                args["content_type"] = state.intent.content_type
+            if state.intent.moods:
+                args["moods"] = list(state.intent.moods)
+            return MaterialDecision("read", tool="search_records", args=args)
         if has_material(state):
             return MaterialDecision("sufficient")
         failures = [item for item in state.observations if not item.success]
@@ -52,6 +70,70 @@ def assess_material(state: AgentState) -> MaterialDecision:
             return MaterialDecision("missing", "已经找到文件，但正文尚未确认，暂时不能分析正文。请先确认文件内容。")
         return MaterialDecision("read", tool="recall_item", args={"vault_item_id": item["vault_item_id"]})
     return MaterialDecision("missing", "还没有定位到可读取正文的文章。请提供文章名称，或明确要分析哪一篇。")
+
+
+def _search_decision(state, observations):
+    """Continue each selected literal/date query within existing page/context budgets."""
+    def base_args(observation):
+        data = observation.data if isinstance(observation.data, dict) else {}
+        return {key: value for key, value in data.get("requested_args", {}).items()
+                if key not in {"offset", "limit"}}
+
+    queries = []
+    for item in observations:
+        args = base_args(item)
+        if args not in queries:
+            queries.append(args)
+    any_records = False
+    scopes = []
+    for args in queries:
+        scope_parts = []
+        selected = [item for item in observations if base_args(item) == args]
+        first_page = next((item.data for item in selected
+                           if item.success and isinstance(item.data, dict)), {})
+        effective = first_page.get("effective_filters", {}) if isinstance(first_page, dict) else {}
+        if "date" in args:
+            scope_parts.append(f"日期 {args['date']}")
+        if "date_from" in args or "date_to" in args:
+            scope_parts.append(f"日期 {args.get('date_from', '最早记录')} 至 {args.get('date_to', '最新记录')}（含）")
+        if "days" in args:
+            scope_parts.append(f"最近 {args['days']} 天")
+        if not any(key in args for key in ("date", "date_from", "date_to", "days")):
+            start_at = effective.get("start_at") if isinstance(effective, dict) else None
+            end_at = effective.get("end_at") if isinstance(effective, dict) else None
+            if start_at or end_at:
+                scope_parts.append(f"有效时间范围 {start_at or '最早记录'} 至 {end_at or '最新记录'}")
+        if args.get("query"):
+            scope_parts.append(f"关键词“{args['query']}”")
+        if args.get("content_type") or args.get("moods") or (
+            isinstance(effective, dict) and (effective.get("content_type") or effective.get("moods"))
+        ):
+            scope_parts.append("已指定的类型和情绪筛选")
+        scope = "、".join(scope_parts) or "当前已授权记录"
+        scopes.append(scope)
+        pages = {item.data.get("offset", 0): item for item in selected
+                 if item.success and isinstance(item.data, dict)}
+        any_records = any_records or any(item.data.get("records") for item in pages.values())
+        offset, visited = 0, set()
+        while offset in pages and offset not in visited:
+            visited.add(offset)
+            page = pages[offset]
+            if not page.data.get("truncated"):
+                break
+            next_offset = page.data.get("next_offset")
+            if not isinstance(next_offset, int) or isinstance(next_offset, bool) or next_offset <= offset:
+                return MaterialDecision("partial", f"{scope}：查询分页不完整，本轮仅依据已返回的记录摘录分析。")
+            offset = next_offset
+        else:
+            if any(not item.success for item in selected):
+                return MaterialDecision("partial" if any_records else "missing",
+                                        f"{scope}：记录查询工具未能完成，只能核对已有摘录；这不表示没有记录。")
+            if len(observations) >= MAX_BODY_PAGES or sum(len(item.text) for item in state.evidence) >= BODY_CONTEXT_CHARS:
+                return MaterialDecision("partial", f"{scope}：查询达到本轮读取上限，只覆盖部分记录摘录，不能代表全部记录。")
+            return MaterialDecision("read", tool="search_records", args={**args, **({"offset": offset} if offset else {})})
+    if any_records:
+        return MaterialDecision("partial", f"范围：{'；'.join(scopes)}。以下分析依据已授权记录摘录，不能代表全部正文。")
+    return MaterialDecision("sufficient")
 
 
 def _target_id(observation, key):

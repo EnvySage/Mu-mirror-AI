@@ -5,11 +5,13 @@ Classify：拆分+分类一次调用；single=true 时进入单段模式（禁�
 
 import grpc
 
+from config import CONFIG
 from generated import common_pb2 as common
 from generated import record_processor_pb2 as pb2
 from generated import record_processor_pb2_grpc as pb2_grpc
 
 from mirror_core.errors import abort_with_mapped
+from mirror_core.embedding_decision import _parse_embedding_decision
 from mirror_core.glossary_render import format_glossary
 from llm.factory import create_llm
 from mirror_core.llm_json import parse_json
@@ -122,9 +124,9 @@ class RecordProcessorServicer(pb2_grpc.RecordProcessorServicer):
               f"api_key={'***' + llm_config.api_key[-4:] if llm_config.api_key else 'EMPTY'}, "
               f"base_url={llm_config.base_url}, protocol={llm_config.protocol}")
 
-        # 内容太短，直接跳过（单段模式同样适用——空片段没有分类价值）
-        if len(content.strip()) < 3:
-            print("[Classify] 内容太短，跳过")
+        # 非空的短日记（如“好累”）仍应分类；无意义语料交由同一次模型调用判断。
+        if not content.strip():
+            print("[Classify] 内容为空，跳过")
             return pb2.ClassifyResponse(skip=True, skip_reason="内容太短或无意义", items=[])
 
         try:
@@ -134,6 +136,11 @@ class RecordProcessorServicer(pb2_grpc.RecordProcessorServicer):
                 base_url=llm_config.base_url,
                 model=llm_config.model,
                 protocol=llm_config.protocol,
+                # Classification returns a complete JSON document. Give one
+                # attempt the full configured budget instead of restarting a
+                # slow valid response halfway through that budget.
+                timeout=float(CONFIG["llm"]["timeout_seconds"]),
+                max_retries=0,
             )
 
             glossary_text = format_glossary(request.glossary)
@@ -303,6 +310,7 @@ class RecordProcessorServicer(pb2_grpc.RecordProcessorServicer):
         raw_tags = item.get("user_tags", [])
         user_tags = ([tag.strip() for tag in raw_tags if isinstance(tag, str) and tag.strip()][:20]
                      if isinstance(raw_tags, list) else [])
+        embedding_enabled, embedding_reason = _parse_embedding_decision(item)
         return pb2.ClassifyItem(
             title=item.get("title", ""),
             summary=item.get("summary", ""),
@@ -312,6 +320,8 @@ class RecordProcessorServicer(pb2_grpc.RecordProcessorServicer):
             status=status,
             keywords=item.get("keywords", []),
             user_tags=user_tags,
+            embedding_enabled=embedding_enabled,
+            embedding_reason=embedding_reason,
             **({"refers_to_todo": ref} if (ref := _parse_todo_ref(item)) else {}),
             time_substitutions=[pb2.TimeSubstitution(original=o, resolved=r) for o, r in subs],
         )

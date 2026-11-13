@@ -49,7 +49,7 @@ def test_openai_chat_forwards_timeout_and_disables_sdk_retries_for_v2():
 
 
 def test_anthropic_chat_forwards_timeout_and_disables_sdk_retries():
-    response = SimpleNamespace(content=[SimpleNamespace(text="ok")])
+    response = SimpleNamespace(content=[SimpleNamespace(type="text", text="ok")])
     client = FakeClient(response)
     llm = AnthropicLlm.__new__(AnthropicLlm)
     llm.model = "m"

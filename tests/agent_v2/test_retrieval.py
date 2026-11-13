@@ -290,6 +290,39 @@ def test_record_vector_repository_keeps_distance_when_exact_window_disables_deca
     assert "GREATEST(0.0" not in sql
 
 
+def test_vector_eligibility_is_stricter_than_authorized_plaintext_search():
+    pool = Pool()
+    repository = RecordRepository(pool)
+    repository.search(SCOPE, {"keyword": "陈记牛肉面"})
+    plain_sql, _ = pool.connection_obj.queries[-1]
+    assert "embedding_enabled" not in plain_sql and "embedding_status" not in plain_sql
+    repository.search_vector(SCOPE, [1.0] + [0.0] * 1023)
+    vector_sql, _ = pool.connection_obj.queries[-1]
+    assert "embedding_enabled = TRUE" in vector_sql
+    assert "embedding_status = 'ready'" in vector_sql
+    assert "embedding IS NOT NULL" in vector_sql
+
+
+def test_yesterday_daily_route_uses_authorized_search_and_zero_embedding_calls():
+    records, embedder = Records([chunk(7, 17)]), Embedder()
+    window = TimeWindow(NOW - timedelta(days=1), NOW)
+    result = retrieve(intent("structured", time_window=window), SCOPE, SimpleNamespace(records=records), embedder)
+    assert result.route == "structured" and result.evidence[0].record_id == 17
+    assert embedder.calls == [] and records.vector_calls == []
+    assert records.structured_calls[0][1].keyword is None
+
+
+def test_empty_restaurant_vector_result_does_not_establish_absent_records():
+    query = intent("semantic")
+    from dataclasses import replace
+    query = replace(query, standalone_question="我对陈记牛肉面评价如何？")
+    records, embedder = Records(), Embedder()
+    result = retrieve(query, SCOPE, SimpleNamespace(records=records), embedder)
+    assert len(records.vector_calls) == 1 and records.structured_calls == []
+    assert embedder.calls[0][0] == "我对陈记牛肉面评价如何？"
+    assert "不表示" in result.summary and "记录" in result.summary
+
+
 def test_record_vector_repository_scopes_real_pgvector_rows_and_separates_distance_from_decay(agent_pool, read_scope):
     repository = RecordRepository(agent_pool)
     vector = [1.0] + [0.0] * 1023

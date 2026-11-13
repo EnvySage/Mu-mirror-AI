@@ -49,6 +49,8 @@ CREATE TABLE records (
     source VARCHAR(20) NOT NULL,
     status VARCHAR(20) NOT NULL,
     ai_processing_authorized BOOLEAN NOT NULL DEFAULT FALSE,
+    user_reviewed BOOLEAN NOT NULL DEFAULT FALSE,
+    index_policy_version SMALLINT NOT NULL DEFAULT 0,
     memory_state VARCHAR(16) NOT NULL DEFAULT 'NONE',
     deleted_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL
@@ -83,6 +85,7 @@ CREATE TABLE chunks (
     vault_item_id BIGINT,
     embedding vector(1024),
     embedding_status VARCHAR(24) NOT NULL DEFAULT 'ready',
+    embedding_enabled BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL
 );
 
@@ -264,3 +267,5 @@ INSERT INTO todo_registry (id, user_id, title, current_status, source_chunk_id, 
     (601, '00000000-0000-0000-0000-000000000001', 'independently approved todo', 'in_progress', 1007, NULL),
     (602, '00000000-0000-0000-0000-000000000001', 'not independently approved todo', 'completed', 1001, NULL),
     (603, '00000000-0000-0000-0000-000000000002', 'B private todo', 'not_started', 2001, NULL);
+
+\ir agent_data_selective.sql
