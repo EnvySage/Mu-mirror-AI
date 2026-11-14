@@ -68,6 +68,12 @@ The offline paired replay and focused corrections are documented, but Task 10 ro
   retains ownership and persistence. See [README usage contract](../README.md#ai-用量回执v1)
   for null/partial/overflow and metadata-size requirements. A cancelled transport can
   lose its trailer; do not reconstruct physical calls or zero consumption from that gap.
+  Printable model/provider aliases (including gateway brackets) survive the producer,
+  with string `unknown` fallbacks and Java-compatible UTF-16 limits. The producer fixture
+  `tests/fixtures/ai-usage-name-contract.json` preserves both known 50-token attempts.
+  Streaming counts remain partial when later text/thinking/tool output lacks fresh
+  output/total/consumption usage, including provisional zero counts. Anthropic SSE
+  `event: message_stop` also closes coverage when its data has no `type` field.
 
 - 10003 is the legacy RPC server; 10004 is the independent Agent server. A successful TCP check alone is not an authorization or data-boundary check.
 - With Agent enabled, configure the release job to bind `MIRROR_AI_READ_DSN` as a secret and set `MIRROR_AGENT_COMMAND_HEALTH_URL` to the Java route ending in `/api/internal/agent/commands/create-record`. The probe sends an empty POST with no credentials and requires 401; it never calls an authenticated write.

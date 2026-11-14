@@ -9,8 +9,9 @@ from decimal import Decimal
 
 
 class JsonProjection:
-    def __init__(self, emit):
+    def __init__(self, emit, output_value):
         self.emit = emit
+        self.output_value = output_value
         self.stack = []
         self.mode = None
         self.buffer = ""
@@ -18,6 +19,7 @@ class JsonProjection:
         self.keep = False
         self.path = ()
         self.failed = False
+        self.nonempty = False
 
     def value_path(self):
         if not self.stack:
@@ -35,6 +37,9 @@ class JsonProjection:
                     if len(self.buffer) > 512:
                         self.keep = False
                         self.buffer = ""
+                closing = char == '"' and not self.escape
+                if not closing:
+                    self.nonempty = True
                 if self.escape:
                     self.escape = False
                 elif char == "\\":
@@ -50,8 +55,11 @@ class JsonProjection:
                     self.buffer = ""
                     if self.stack and self.stack[-1][3] == "key":
                         self.stack[-1][2:] = [value, "colon"]
-                    elif self.keep:
-                        self.emit(self.path, value)
+                    else:
+                        if self.nonempty:
+                            self.output_value(self.path)
+                        if self.keep:
+                            self.emit(self.path, value)
                 continue
             if self.mode == "scalar":
                 if char not in ",]} \t\r\n":
@@ -75,6 +83,7 @@ class JsonProjection:
                 self.keep = bool(self.stack and self.stack[-1][3] == "key") or _selected(self.path)
                 self.buffer = '"' if self.keep else ""
                 self.mode = "string"
+                self.nonempty = False
             elif char in "{[":
                 if len(self.stack) >= 32:
                     self.failed = True
@@ -113,12 +122,15 @@ class ResponseProjection:
         self.observation = observation
         self.sse = sse
         self.decoder = codecs.getincrementaldecoder("utf-8")("replace")
-        self.parser = JsonProjection(observation.value)
+        self.parser = JsonProjection(observation.value, observation.output_value)
         self.prefix = ""
         self.data = False
         self.first = False
         self.done = ""
         self.last_cr = False
+        self.event_line = False
+        self.event_name = ""
+        self.event_has_data = False
 
     def feed(self, data):
         text = self.decoder.decode(data)
@@ -135,12 +147,19 @@ class ResponseProjection:
                     if self.done.strip() == "[DONE]":
                         self.observation.terminal = True
                     self.parser.feed("\n")
+                elif self.event_line:
+                    self.event_name = self.event_name.strip()
                 elif not self.prefix:
-                    self.parser = JsonProjection(self.observation.value)
+                    if self.event_has_data:
+                        self.observation.end_event(self.event_name)
+                    self.parser = JsonProjection(self.observation.value, self.observation.output_value)
+                    self.event_name = ""
+                    self.event_has_data = False
                 self.prefix = ""
                 self.data = False
                 self.first = False
                 self.done = ""
+                self.event_line = False
             elif self.data:
                 if not self.first:
                     self.first = True
@@ -149,10 +168,16 @@ class ResponseProjection:
                 if len(self.done) < 7:
                     self.done += char
                 self.parser.feed(char)
+            elif self.event_line:
+                if len(self.event_name) < 32:
+                    self.event_name += char
             elif len(self.prefix) < 6:
                 self.prefix += char
                 if self.prefix == "data:":
                     self.data = True
+                    self.event_has_data = True
+                elif self.prefix == "event:":
+                    self.event_line = True
 
     def eof(self):
         self.feed(b"\n" if self.sse else b" ")

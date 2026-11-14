@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "invocation_id": "0b59b70e-9bc2-4d21-97b2-ef062d8c5e8d",
+  "complete": true,
+  "attempts": [
+    {
+      "id": "9d2f278c-66ad-4771-b769-8b65469e0df3",
+      "status": "success",
+      "provider": "deepseek",
+      "model": "[体验]deepseek-v4.1-flash",
+      "input_tokens": 34,
+      "output_tokens": 16,
+      "total_tokens": 50,
+      "credits": null,
+      "credit_unit": null,
+      "usage_state": "complete",
+      "latency_ms": 120,
+      "http_status": 200
+    },
+    {
+      "id": "38a68a98-e72b-40cb-bb99-2db4a1a18f7c",
+      "status": "success",
+      "provider": "unknown",
+      "model": "[体验]custom/model?mode=fast",
+      "input_tokens": 34,
+      "output_tokens": 16,
+      "total_tokens": 50,
+      "credits": null,
+      "credit_unit": null,
+      "usage_state": "complete",
+      "latency_ms": 80,
+      "http_status": 200
+    }
+  ]
+}

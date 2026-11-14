@@ -94,16 +94,16 @@ LangGraph 的 understand/plan/synthesize 节点通过每轮 RuntimeContext 显�
 OpenAI 兼容流仅在开启采集时请求 `stream_options.include_usage=true`，
 读取末尾 `choices=[]` 的 usage。只有 400/422 明确拒绝 stream_options/include_usage
 且流尚未开始时，才去掉该参数重试一次；两次尝试均保留。已开始的流绝不为用量重发。
-没有终止标志或中断时，已知计数保留为 partial。Anthropic 的累计输出取最后值；
+没有终止标志或生成后缺少新统计时，已知计数保留为 partial（含 0）。Anthropic 的累计输出取最后值；
 input_tokens 为非缓存输入 + cache_read_input_tokens + cache_creation_input_tokens，
 缓存/思考另存 `cache_read_tokens` / `cache_creation_tokens` / `reasoning_tokens`，不重复加总。
-Token/延迟数值限定 0..10^12，provider/model/unit 最长分别为 128/256/32 字符。
+Token/延迟数值限定 0..10^12，provider/model/unit 最长分别为 128/256/32 个 UTF-16 单元。
 
 积分适配只接受 `usage.credits_consumed` / `usage.consumed_credits` /
 `usage.points_consumed` / `usage.consumed_points` 的明确本次消耗，
 从 JSON 数字直接以 Decimal 解析，输出非负普通十进制字符串，最多 26 位整数、12 位小数；
 单位来自 `usage.credit_unit`，缺失时为「积分」。`credit`、quota、余额等语义不明字段
-保持未知，不能据此认定免费或换算人民币。实际返回模型优先识别厂商，无法识别时用请求配置；
+保持未知，不能据此认定免费或换算人民币。名称保留可打印别名，缺失为 `unknown`；厂商优先识别实际模型，再用请求配置；
 OpenAI/Anthropic 协议本身不代表模型厂商。固定跨端契约见 B 仓
 [用量桌宠设计](../Mu-mirror-B/docs/superpowers/specs/2026-11-14-ai-usage-desktop-pet-design.md)。
 
