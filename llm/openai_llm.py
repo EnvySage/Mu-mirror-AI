@@ -87,7 +87,8 @@ class OpenAiLlm(BaseLlm):
                 temperature=temperature,
             )
         except APITimeoutError as e:
-            raise LlmTimeoutError(f"LLM 请求超时（>{_LLM_TIMEOUT:.0f}s）") from e
+            raise LlmTimeoutError(
+                f"LLM 请求超时（>{timeout if timeout is not None else _LLM_TIMEOUT:.0f}s）") from e
         except APIConnectionError as e:  # 连接失败/断开（超时已被上一行截获）
             raise LlmUnavailableError("LLM 连接失败（openai APIConnectionError）") from e
         except APIStatusError as e:
@@ -195,7 +196,8 @@ class OpenAiLlm(BaseLlm):
         try:
             response = self._client_for(timeout, max_retries).chat.completions.create(**kwargs)
         except APITimeoutError as e:
-            raise LlmTimeoutError(f"LLM 请求超时（>{_LLM_TIMEOUT:.0f}s）") from e
+            raise LlmTimeoutError(
+                f"LLM 请求超时（>{timeout if timeout is not None else _LLM_TIMEOUT:.0f}s）") from e
         except APIConnectionError as e:
             raise LlmUnavailableError("LLM 连接失败（openai APIConnectionError）") from e
         return response.choices[0].message.content

@@ -94,7 +94,8 @@ class AnthropicLlm(BaseLlm):
         try:
             response = self._client_for(timeout, max_retries).messages.create(**kwargs)
         except APITimeoutError as e:
-            raise LlmTimeoutError(f"LLM 请求超时（>{_LLM_TIMEOUT:.0f}s）") from e
+            raise LlmTimeoutError(
+                f"LLM 请求超时（>{timeout if timeout is not None else _LLM_TIMEOUT:.0f}s）") from e
         except APIConnectionError as e:
             raise LlmUnavailableError("LLM 连接失败（anthropic APIConnectionError）") from e
         except APIStatusError as e:
@@ -298,7 +299,8 @@ class AnthropicLlm(BaseLlm):
         try:
             response = self._client_for(timeout, max_retries).messages.create(**kwargs)
         except APITimeoutError as e:
-            raise LlmTimeoutError(f"LLM 请求超时（>{_LLM_TIMEOUT:.0f}s）") from e
+            raise LlmTimeoutError(
+                f"LLM 请求超时（>{timeout if timeout is not None else _LLM_TIMEOUT:.0f}s）") from e
         except APIConnectionError as e:
             raise LlmUnavailableError("LLM 连接失败（anthropic APIConnectionError）") from e
         return self._text_from_response(response)

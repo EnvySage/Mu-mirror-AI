@@ -138,8 +138,11 @@ class RecordProcessorServicer(pb2_grpc.RecordProcessorServicer):
                 protocol=llm_config.protocol,
                 # Classification returns a complete JSON document. Give one
                 # attempt the full configured budget instead of restarting a
-                # slow valid response halfway through that budget.
-                timeout=float(CONFIG["llm"]["timeout_seconds"]),
+                # slow valid response halfway through that budget. Use the
+                # Classify-specific budget: reasoning length on this prompt
+                # varies enough that the generic 60s cut off valid slow calls.
+                timeout=float(CONFIG["llm"].get(
+                    "classify_timeout_seconds", CONFIG["llm"]["timeout_seconds"])),
                 max_retries=0,
             )
 

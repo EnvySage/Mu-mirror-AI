@@ -26,6 +26,9 @@ _defaults = {
     },
     "llm": {
         "timeout_seconds": 60,  # 非流式调用总超时（按 max_retries 平摊，单次尝试 30s）
+        # Classify 要输出完整 JSON，推理模型在它上面的思考长度波动很大（正常 10~25s，
+        # 偶发超过 60s）。单独给更宽的预算，不压缩思考；Java 侧 Classify deadline 180s。
+        "classify_timeout_seconds": 120,
         # 流式调用"两块数据之间最多等多久"。原先沿用单次尝试超时（10s），2026-09-21 联调实测
         # mimo 思考中途停顿十几秒即断流，已算好的答案整段作废、用户看到"暂时无法回答"
         "stream_read_timeout_seconds": 60,

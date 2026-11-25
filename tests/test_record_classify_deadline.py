@@ -13,7 +13,7 @@ from services import record_processor
 
 
 @pytest.mark.parametrize("single", [False, True])
-def test_classification_accepts_provider_that_needs_45_seconds_within_60_second_budget(monkeypatch, single):
+def test_classification_uses_its_own_budget_without_retrying(monkeypatch, single):
     payload = {
         "skip": False,
         "split_content": "中午吃饭|||晚上去了青杉面馆",
@@ -35,8 +35,13 @@ def test_classification_accepts_provider_that_needs_45_seconds_within_60_second_
                 "finish_reason": "stop"}],
         })
 
-    monkeypatch.setitem(record_processor.CONFIG["llm"], "timeout_seconds", 60)
-    monkeypatch.setattr(openai_llm, "_LLM_ATTEMPT_TIMEOUT", 30)
+    # Classification must read the dedicated budget, not the generic
+    # non-streaming timeout: the generic value here (10s) is far below what
+    # this synthetic provider needs. max_retries=1 would also restart the
+    # request at 30s, so the provider checks the single read deadline it got.
+    monkeypatch.setitem(record_processor.CONFIG["llm"], "timeout_seconds", 10)
+    monkeypatch.setitem(record_processor.CONFIG["llm"], "classify_timeout_seconds", 60)
+    monkeypatch.setattr(openai_llm, "_LLM_ATTEMPT_TIMEOUT", 5)
     monkeypatch.setattr(openai_llm, "_LLM_MAX_RETRIES", 1)
     with httpx.Client(transport=httpx.MockTransport(provider)) as transport:
         def sdk_client(**kwargs):

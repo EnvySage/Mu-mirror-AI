@@ -196,7 +196,7 @@ cp config.local.example.yml config.local.yml
 | `plan_tools` | 工具规划步数上限、注册表渲染上限、循环规划器思考预算 |
 | `prompts` | 模板文件路径 |
 
-`Classify` 的拆分和单段整理使用一次完整的 `llm.timeout_seconds` 请求预算（默认 60 秒），关闭 SDK 内部重试，避免把 60 秒分成两次 30 秒而反复中断较慢的完整 JSON 响应。请求超时仍按 `DEADLINE_EXCEEDED` 返回，由 Java 保留原文并生成待确认的仅保存候选。
+`Classify` 的拆分和单段整理使用一次完整的 `llm.classify_timeout_seconds` 请求预算（默认 120 秒，未配置时回落 `llm.timeout_seconds`），关闭 SDK 内部重试，避免把预算分成两次尝试而反复中断较慢的完整 JSON 响应。该预算比通用非流式超时更宽，因为分类要输出完整 JSON，推理模型的思考长度波动大（正常 10~25 秒，偶发超过 60 秒）；Java 侧 Classify deadline 为 180 秒。请求超时仍按 `DEADLINE_EXCEEDED` 返回，由 Java 保留原文并生成待确认的仅保存候选。
 
 ## 相对时间消解
 
