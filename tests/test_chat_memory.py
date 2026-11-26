@@ -2,7 +2,7 @@ import unittest
 from generated import common_pb2
 from generated import mirror_chat_pb2 as pb2
 from services.chat_memory_service import ChatMemoryService
-from services.plan_service import MirrorChatServicer
+from services.chat_service import MirrorChatServicer
 
 
 class _LLM:

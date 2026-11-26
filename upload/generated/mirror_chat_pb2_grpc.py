@@ -26,7 +26,8 @@ if _version_not_supported:
 
 
 class MirrorChatStub:
-    """Missing associated documentation comment in .proto file."""
+    """Shared, task-specific inference. Interactive dialogue uses AgentRunner.
+    """
 
     def __init__(self, channel):
         """Constructor.
@@ -34,25 +35,10 @@ class MirrorChatStub:
         Args:
             channel: A grpc.Channel.
         """
-        self.ExtractIntent = channel.unary_unary(
-                '/mirror.MirrorChat/ExtractIntent',
-                request_serializer=mirror__chat__pb2.ExtractIntentRequest.SerializeToString,
-                response_deserializer=mirror__chat__pb2.ExtractIntentResponse.FromString,
-                _registered_method=True)
         self.Chat = channel.unary_stream(
                 '/mirror.MirrorChat/Chat',
                 request_serializer=mirror__chat__pb2.ChatRequest.SerializeToString,
                 response_deserializer=mirror__chat__pb2.ChatChunk.FromString,
-                _registered_method=True)
-        self.PlanTools = channel.unary_unary(
-                '/mirror.MirrorChat/PlanTools',
-                request_serializer=mirror__chat__pb2.PlanToolsRequest.SerializeToString,
-                response_deserializer=mirror__chat__pb2.PlanToolsReply.FromString,
-                _registered_method=True)
-        self.PlanNextStep = channel.unary_stream(
-                '/mirror.MirrorChat/PlanNextStep',
-                request_serializer=mirror__chat__pb2.PlanNextStepRequest.SerializeToString,
-                response_deserializer=mirror__chat__pb2.PlanStepChunk.FromString,
                 _registered_method=True)
         self.SummarizeDay = channel.unary_unary(
                 '/mirror.MirrorChat/SummarizeDay',
@@ -62,13 +48,8 @@ class MirrorChatStub:
 
 
 class MirrorChatServicer:
-    """Missing associated documentation comment in .proto file."""
-
-    def ExtractIntent(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
+    """Shared, task-specific inference. Interactive dialogue uses AgentRunner.
+    """
 
     def Chat(self, request, context):
         """Missing associated documentation comment in .proto file."""
@@ -76,25 +57,8 @@ class MirrorChatServicer:
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def PlanTools(self, request, context):
-        """工具规划（toolcalling-vault-design.md 第 1 节）：LLM 按 JSON 约定输出 ≤2 步工具计划，
-        B 执行后把 ToolResult 塞 ChatRequest.tool_results 再走正常 Chat
-        """
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def PlanNextStep(self, request, context):
-        """对话 Agent 循环（chat-loop-design.md §3）：Java 驱动，每步调一次，带上已执行结果；
-        服务端流式，先吐 thinking 增量（B 透传 SSE thinking，等待可感知），终帧给 calls/done
-        """
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
     def SummarizeDay(self, request, context):
-        """Summarize one ended chat day and propose (never activate) user memories.
-        """
+        """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
@@ -102,25 +66,10 @@ class MirrorChatServicer:
 
 def add_MirrorChatServicer_to_server(servicer, server):
     rpc_method_handlers = {
-            'ExtractIntent': grpc.unary_unary_rpc_method_handler(
-                    servicer.ExtractIntent,
-                    request_deserializer=mirror__chat__pb2.ExtractIntentRequest.FromString,
-                    response_serializer=mirror__chat__pb2.ExtractIntentResponse.SerializeToString,
-            ),
             'Chat': grpc.unary_stream_rpc_method_handler(
                     servicer.Chat,
                     request_deserializer=mirror__chat__pb2.ChatRequest.FromString,
                     response_serializer=mirror__chat__pb2.ChatChunk.SerializeToString,
-            ),
-            'PlanTools': grpc.unary_unary_rpc_method_handler(
-                    servicer.PlanTools,
-                    request_deserializer=mirror__chat__pb2.PlanToolsRequest.FromString,
-                    response_serializer=mirror__chat__pb2.PlanToolsReply.SerializeToString,
-            ),
-            'PlanNextStep': grpc.unary_stream_rpc_method_handler(
-                    servicer.PlanNextStep,
-                    request_deserializer=mirror__chat__pb2.PlanNextStepRequest.FromString,
-                    response_serializer=mirror__chat__pb2.PlanStepChunk.SerializeToString,
             ),
             'SummarizeDay': grpc.unary_unary_rpc_method_handler(
                     servicer.SummarizeDay,
@@ -136,34 +85,8 @@ def add_MirrorChatServicer_to_server(servicer, server):
 
  # This class is part of an EXPERIMENTAL API.
 class MirrorChat:
-    """Missing associated documentation comment in .proto file."""
-
-    @staticmethod
-    def ExtractIntent(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/mirror.MirrorChat/ExtractIntent',
-            mirror__chat__pb2.ExtractIntentRequest.SerializeToString,
-            mirror__chat__pb2.ExtractIntentResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
+    """Shared, task-specific inference. Interactive dialogue uses AgentRunner.
+    """
 
     @staticmethod
     def Chat(request,
@@ -182,60 +105,6 @@ class MirrorChat:
             '/mirror.MirrorChat/Chat',
             mirror__chat__pb2.ChatRequest.SerializeToString,
             mirror__chat__pb2.ChatChunk.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def PlanTools(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/mirror.MirrorChat/PlanTools',
-            mirror__chat__pb2.PlanToolsRequest.SerializeToString,
-            mirror__chat__pb2.PlanToolsReply.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def PlanNextStep(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_stream(
-            request,
-            target,
-            '/mirror.MirrorChat/PlanNextStep',
-            mirror__chat__pb2.PlanNextStepRequest.SerializeToString,
-            mirror__chat__pb2.PlanStepChunk.FromString,
             options,
             channel_credentials,
             insecure,

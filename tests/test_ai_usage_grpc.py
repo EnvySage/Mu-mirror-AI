@@ -113,10 +113,10 @@ def test_request_after_previous_rpc_does_not_inherit_collection():
 
 
 def test_legacy_builder_registers_interceptor_without_changing_embedding_health():
-    from server import build_legacy_server
+    from server import build_inference_server
     from generated import embedding_pb2 as embedding, embedding_pb2_grpc
     from generated import record_processor_pb2 as records, record_processor_pb2_grpc
-    instance, port = build_legacy_server(port=0)
+    instance, port = build_inference_server(port=0)
     instance.start()
     try:
         with grpc.insecure_channel(f"127.0.0.1:{port}") as channel:

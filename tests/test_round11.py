@@ -22,9 +22,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from generated import common_pb2 as common  # noqa: E402
 from generated import mirror_chat_pb2 as chat_pb2  # noqa: E402
 
-from services import plan_service  # noqa: E402
 from services.chat_service import _format_tool_results  # noqa: E402
-from services.plan_service import format_tool_registry, sanitize_calls  # noqa: E402
 
 
 def _spec(name="search_records", description="检索记录", args_schema='{"query?": "string"}', effect=""):
@@ -37,136 +35,11 @@ REGISTRY = {"search_records", "get_stats", "get_profile", "get_glossary", "get_c
 # ---------------------------------------------------------------------------
 # 1. PlannedCall 校验
 # ---------------------------------------------------------------------------
-class TestSanitizeCalls:
-    def test_normal_calls(self):
-        data = {"calls": [
-            {"tool": "search_records", "args": {"query": "论文", "days": 7}},
-            {"tool": "get_stats", "args": {"days": 30}},
-        ]}
-        calls, dropped = sanitize_calls(data, REGISTRY)
-        assert dropped == 0
-        assert [c.tool for c in calls] == ["search_records", "get_stats"]
-        args = json.loads(calls[0].args_json)
-        assert args == {"query": "论文", "days": 7}
-
-    def test_hallucinated_tool_dropped(self):
-        """注册表外工具名（幻觉）→ 静默剔除，合法项保留"""
-        data = {"calls": [
-            {"tool": "delete_all_records", "args": {}},
-            {"tool": "get_stats", "args": {"days": 30}},
-        ]}
-        calls, dropped = sanitize_calls(data, REGISTRY)
-        assert dropped == 1
-        assert [c.tool for c in calls] == ["get_stats"]
-
-    def test_empty_and_blank_tool_dropped(self):
-        calls, dropped = sanitize_calls(
-            {"calls": [{"tool": "", "args": {}}, {"tool": "  ", "args": {}},
-                       {"tool": "get_stats", "args": {}}]}, REGISTRY)
-        assert dropped == 2 and [c.tool for c in calls] == ["get_stats"]
-
-    def test_bad_args_string_dropped(self):
-        """args 字符串不可解析 → 剔除该项（不炸整个计划）"""
-        data = {"calls": [
-            {"tool": "get_stats", "args": "{not-json"},
-            {"tool": "get_profile", "args": {}},
-        ]}
-        calls, dropped = sanitize_calls(data, REGISTRY)
-        assert dropped == 1
-        assert [c.tool for c in calls] == ["get_profile"]
-
-    def test_args_missing_or_non_dict_defaults_empty(self):
-        """缺 args / args 解析后非对象（如列表）→ 归 {}（执行侧自兜底默认值），不算违规；
-        args 是解析不了的字符串 → 剔除（"args 可解析"校验）"""
-        data = {"calls": [{"tool": "get_profile"}, {"tool": "get_profile", "args": "x"},
-                          {"tool": "get_profile", "args": [1, 2]}]}
-        calls, dropped = sanitize_calls(data, REGISTRY)
-        assert dropped == 1  # "x" 不是合法 JSON
-        assert [c.tool for c in calls] == ["get_profile", "get_profile"]
-        assert all(json.loads(c.args_json) == {} for c in calls)
-
-    def test_args_valid_json_string_parsed(self):
-        """args 是合法 JSON 字符串 → 解析收编"""
-        data = {"calls": [{"tool": "get_stats", "args": '{"days": 7}'}]}
-        calls, _ = sanitize_calls(data, REGISTRY)
-        assert json.loads(calls[0].args_json) == {"days": 7}
-
-    def test_max_calls_cap(self):
-        """超过 max_calls（默认 2）截断保留前 N 步"""
-        data = {"calls": [{"tool": "get_stats", "args": {}} for _ in range(5)]}
-        calls, dropped = sanitize_calls(data, REGISTRY)
-        assert len(calls) == plan_service._MAX_CALLS == 2
-        assert dropped == 3
-
-    def test_non_list_and_malformed_structures(self):
-        """calls 非列表 / 顶层非 dict / 项非 dict → 空计划，不炸"""
-        assert sanitize_calls({}, REGISTRY) == ([], 0)
-        assert sanitize_calls({"calls": None}, REGISTRY) == ([], 0)
-        assert sanitize_calls({"calls": "oops"}, REGISTRY) == ([], 0)
-        assert sanitize_calls({"calls": ["字符串项", 42, {"tool": "get_stats"}]}, REGISTRY) == (
-            [], 1) or sanitize_calls({"calls": ["字符串项", 42, {"tool": "get_stats"}]}, REGISTRY)[0][0].tool == "get_stats"
-
-    def test_empty_registry_drops_everything(self):
-        """注册表为空 → 全部剔除（防线兜底；servicer 层已提前短路）"""
-        calls, dropped = sanitize_calls({"calls": [{"tool": "get_stats", "args": {}}]}, set())
-        assert calls == [] and dropped == 1
-
-    def test_args_json_ensure_ascii_false(self):
-        """中文参数不被转义（prompt 侧与 Java 侧日志可读）"""
-        data = {"calls": [{"tool": "search_records", "args": {"query": "焦虑"}}]}
-        calls, _ = sanitize_calls(data, REGISTRY)
-        assert "焦虑" in calls[0].args_json
 
 
 # ---------------------------------------------------------------------------
 # 2. 注册表渲染
 # ---------------------------------------------------------------------------
-class TestFormatToolRegistry:
-    def test_empty_registry_empty_string(self):
-        assert format_tool_registry([]) == ""
-        assert format_tool_registry(None) == ""
-
-    def test_full_render(self):
-        tools = [_spec("search_records", "四路检索记录", '{"query?": "string", "days?": "int"}'),
-                 _spec("get_stats", "统计汇总", '{"days?": "int"}')]
-        out = format_tool_registry(tools)
-        assert "1. search_records [READ]：四路检索记录" in out
-        assert "参数：{\"query?\": \"string\", \"days?\": \"int\"}" in out
-        assert "2. get_stats [READ]：统计汇总" in out
-
-    def test_effect_labels_and_unsupported_effects(self):
-        out = format_tool_registry([
-            _spec("search_records", effect="READ"),
-            _spec("prepare_todo", effect="PREPARE_WRITE"),
-            _spec("submit_todo", effect="WRITE"),
-        ])
-        assert out.splitlines() == [
-            "1. search_records [READ]：检索记录",
-            "   参数：{\"query?\": \"string\"}",
-            "2. prepare_todo [PREPARE_WRITE]：检索记录",
-            "   参数：{\"query?\": \"string\"}",
-        ]
-
-    def test_blank_name_skipped(self):
-        out = format_tool_registry([_spec(name="  "), _spec(name="get_stats")])
-        assert "get_stats" in out
-        assert out.count(".") == 1
-
-    def test_missing_fields_tolerated(self):
-        out = format_tool_registry([common.ToolSpec(name="get_profile")])
-        assert "get_profile" in out
-        assert "参数：" not in out
-
-    def test_schema_truncated(self):
-        out = format_tool_registry([_spec(args_schema="长" * 500)])
-        assert ("长" * 500) not in out
-        assert ("长" * plan_service._MAX_ARG_CHARS) in out
-
-    def test_cap_at_max_tools(self):
-        tools = [_spec(name=f"tool_{i}") for i in range(plan_service._MAX_TOOLS + 10)]
-        out = format_tool_registry(tools)
-        assert "tool_0" in out and f"tool_{plan_service._MAX_TOOLS - 1}" in out
-        assert f"tool_{plan_service._MAX_TOOLS}" not in out
 
 
 # ---------------------------------------------------------------------------
@@ -201,8 +74,7 @@ class TestFormatToolResults:
         assert "search_records" in out
 
     def test_truncation_to_max_tool_chars(self):
-        long_summary = "长" * (plan_service._MAX_TOOL_CHARS_CONST if hasattr(
-            plan_service, "_MAX_TOOL_CHARS_CONST") else 3000)
+        long_summary = "长" * 3000
         out = _format_tool_results([self._tr(summary=long_summary)])
         assert ("长" * 3000) not in out
         assert out.endswith("…")
@@ -378,60 +250,14 @@ class TestFakeCiteFilter:
 # ---------------------------------------------------------------------------
 # 4. 配置
 # ---------------------------------------------------------------------------
-class TestConfig:
-    def test_plan_tools_section(self):
-        from config import CONFIG
-        assert "plan_tools" in CONFIG
-        assert CONFIG["plan_tools"]["max_calls"] == 2
-        assert CONFIG["plan_tools"]["max_tools"] > 0
-        assert CONFIG["plan_tools"]["max_arg_chars"] > 0
-        assert CONFIG["plan_tools"]["max_tool_chars"] > 0
-        assert CONFIG["prompts"]["plan_tools"].endswith("plan_tools.txt")
 
 
 # ---------------------------------------------------------------------------
 # 5. prompt 渲染接线
 # ---------------------------------------------------------------------------
 class TestPromptWiring:
-    def test_plan_tools_template_renders(self):
-        """旧 PlanTools 路径的模板（chat-loop-design.md 裁决 0.4：回滚要退回已知旧行为，
-        所以 plan_tools.txt 循环化后，PlanTools 改渲染 plan_tools_single —— HEAD 原文快照，
-        本用例断言一字未改）"""
-        from mirror_core.prompts_loader import loader
-        p = loader.render("plan_tools_single", tools="1. search_records：检索",
-                          question="我论文咋样了", glossary="")
-        assert "工具规划助手" in p
-        assert "1. search_records：检索" in p
-        assert "我论文咋样了" in p
-        assert "{tools}" not in p and "{question}" not in p and "{glossary}" not in p
-        # 决策规则/输出约定在模板里（B1/B2/B4 场景判定约束写死）
-        assert "情绪安慰" in p
-        assert "最多 2 步" in p
-        assert "get_coverage" in p
-        assert "search_records" in p
-        assert "get_profile" in p
 
-    def test_plan_tools_loop_template_renders(self):
-        """循环版模板（chat-loop-design.md §5.1，只给 PlanNextStep 用）——与上一个用例
-        互为对照：同一批规则换了措辞，且多出循环语境渲染位"""
-        from mirror_core.prompts_loader import loader
-        p = loader.render("plan_tools", tools="1. search_records：检索", question="我论文咋样了",
-                          glossary="", history="h", previous_results="（空）",
-                          step=2, max_steps=4, max_calls=2)
-        assert "对话 Agent" in p
-        assert "这是第 2 步，最多 4 步" in p
-        assert "每步最多安排 2 个互不依赖的工具调用" in p
-        assert "同一步安排多项调用" in p
-        assert "get_profile" in p and "search_records" in p
-        for ph in ("{tools}", "{question}", "{glossary}", "{history}",
-                   "{previous_results}", "{step}", "{max_steps}", "{max_calls}"):
-            assert ph not in p
 
-    def test_plan_tools_glossary_placeholder(self):
-        from mirror_core.prompts_loader import loader
-        g = "以下用户个人词汇表仅供参考，解释可能过时；与近期记录矛盾时，以近期记录为准。\n- 论文：毕设"
-        assert "毕设" in loader.render("plan_tools_single", tools="t", question="q", glossary=g)
-        assert "毕设" in loader.render("plan_tools", tools="t", question="q", glossary=g)
 
     def test_chat_template_tool_results_placeholder(self):
         from mirror_core.prompts_loader import loader
@@ -465,14 +291,6 @@ class TestProtoContract:
         tr = {n: f.number for n, f in common.ToolResult.DESCRIPTOR.fields_by_name.items()}
         assert tr == {"tool": 1, "summary": 2, "payload_json": 3, "success": 4}
 
-    def test_plantools_messages(self):
-        req = {n: f.number for n, f in chat_pb2.PlanToolsRequest.DESCRIPTOR.fields_by_name.items()}
-        assert req == {"question": 1, "glossary": 2, "tools": 3, "llm_config": 4,
-                       "assistant_context": 5}
-        reply = {n: f.number for n, f in chat_pb2.PlanToolsReply.DESCRIPTOR.fields_by_name.items()}
-        assert reply == {"calls": 1}
-        call = {n: f.number for n, f in chat_pb2.PlannedCall.DESCRIPTOR.fields_by_name.items()}
-        assert call == {"tool": 1, "args_json": 2}
 
     def test_chat_request_tool_results_is_6(self):
         """ChatRequest.tool_results=6（核对现有注释防撞号：question1/history2/chunks3/llm4/glossary5）"""
@@ -480,27 +298,6 @@ class TestProtoContract:
         assert fields == {"question": 1, "history": 2, "chunks": 3, "llm_config": 4,
                           "glossary": 5, "tool_results": 6, "assistant_context": 7}
 
-    def test_plantools_rpc_in_service(self):
-        """PlanTools 仍在（回滚路径不删）；PlanNextStep 为 chat-loop-design.md §3 新增"""
+    def test_shared_inference_rpc_methods(self):
         methods = set(chat_pb2.DESCRIPTOR.services_by_name["MirrorChat"].methods_by_name)
-        assert methods == {"ExtractIntent", "Chat", "PlanTools", "PlanNextStep", "SummarizeDay"}
-
-    def test_wire_first_bytes(self):
-        """wire 冒烟：tool_results=6 → 首字节 0x32；tools=3 → 0x1a；calls=1 → 0x0a"""
-        r = chat_pb2.ChatRequest(tool_results=[common.ToolResult(tool="t")])
-        assert r.SerializeToString()[0] == 0x32
-        pr = chat_pb2.PlanToolsRequest(tools=[common.ToolSpec(name="a")])
-        assert pr.SerializeToString()[0] == 0x1A
-        rep = chat_pb2.PlanToolsReply(calls=[chat_pb2.PlannedCall(tool="a", args_json="{}")])
-        assert rep.SerializeToString()[0] == 0x0A
-        # 空请求零字节（无字段缺省 wire 兼容）
-        assert chat_pb2.ChatRequest().SerializeToString() == b""
-        assert chat_pb2.PlanToolsRequest().SerializeToString() == b""
-
-    def test_registry_names_from_request(self):
-        """servicer 用法自检：从 PlanToolsRequest 提取工具名集合（防幻觉校验依据）"""
-        req = chat_pb2.PlanToolsRequest(tools=[_spec("search_records"), _spec("get_stats"),
-                                               _spec("  ")])
-        names = {(t.name or "").strip() for t in req.tools}
-        names.discard("")
-        assert names == {"search_records", "get_stats"}
+        assert methods == {"Chat", "SummarizeDay"}

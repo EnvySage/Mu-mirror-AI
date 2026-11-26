@@ -130,7 +130,7 @@ class AnthropicLlm(BaseLlm):
         if system:
             base["system"] = system
 
-        # 调用方可覆盖预算（规划器用小预算，见 plan_service.PlanNextStep）；None = 全局配置
+        # 调用方可覆盖预算（Graph 使用当前节点的剩余预算）；None = 全局配置
         budget = _THINKING_BUDGET if thinking_budget is None else int(thinking_budget)
         if budget > 0:
             thinking_kwargs = {

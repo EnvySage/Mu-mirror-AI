@@ -5,40 +5,9 @@ from types import SimpleNamespace
 
 from generated import common_pb2
 from generated import mirror_chat_pb2 as pb2
-from services import answer_service, intent_service, plan_service
+from services import answer_service
 
 
-def test_extract_intent_keeps_legacy_whitelists_and_query_fallback(monkeypatch):
-    prompts = []
-
-    class FakeLlm:
-        def json_task(self, messages):
-            prompts.extend(messages)
-            return json.dumps({
-                "query_type": "not-a-route",
-                "content_type": "not-a-content-type",
-                "moods": ["happy", "not-a-mood"],
-                "time_range": "last week",
-                "rewritten_query": "",
-            })
-
-    config = SimpleNamespace(
-        provider="openai", api_key="key", base_url="https://api.test",
-        model="test-model", protocol="openai",
-    )
-    monkeypatch.setattr(intent_service.loader, "render", lambda name, **kwargs: f"{name}:{kwargs}")
-    monkeypatch.setattr(intent_service, "format_glossary", lambda glossary: "")
-
-    result = intent_service.extract_intent(
-        "原始问题", [], config, llm_factory=lambda **kwargs: FakeLlm()
-    )
-
-    assert result.query_type == "hybrid"
-    assert result.content_type is None
-    assert result.moods == ["happy"]
-    assert result.time_range == "last week"
-    assert result.rewritten_query == "原始问题"
-    assert prompts == [{"role": "user", "content": "intent:{'query': '原始问题', 'glossary': ''}"}]
 
 
 def test_build_answer_messages_preserves_legacy_history_and_empty_glossary(monkeypatch):
@@ -144,66 +113,3 @@ def test_legacy_chat_servicer_translates_shared_answer_events_without_wire_chang
     assert "".join(chunk.content for chunk in chunks_out if chunk.content) == "见 [1] 和 [3]"
     assert chunks_out[-1].done is True
     assert [source.n for source in chunks_out[-1].sources] == [1, 3]
-
-
-def test_plan_next_step_keeps_thinking_then_final_done_and_last_calls(monkeypatch):
-    rendered = {}
-
-    def render(name, **kwargs):
-        rendered["name"] = name
-        rendered.update(kwargs)
-        return "plan prompt"
-
-    monkeypatch.setattr(plan_service.loader, "render", render)
-
-    class FakeLlm:
-        def chat_stream(self, messages, **kwargs):
-            yield "thinking", "先判断"
-            yield "content", '{"calls":[{"tool":"search_records","args":{"query":"方案"}}],"done":true}'
-
-    request = SimpleNamespace(
-        question="找方案", tools=[SimpleNamespace(name="search_records", description="搜索", args_schema="{}")],
-        glossary=[], history=[], previous_results=[], step=2, max_steps=4, has_retrieval=True,
-    )
-    events = list(plan_service.plan_next_step(request, FakeLlm()))
-
-    assert [event.kind for event in events] == ["thinking", "final"]
-    assert events[0].content == "先判断"
-    assert events[-1].final is True
-    assert events[-1].done is True
-    assert [(call.tool, json.loads(call.args_json)) for call in events[-1].calls] == [
-        ("search_records", {"query": "方案"}),
-    ]
-    assert rendered["name"] == "plan_tools"
-    assert rendered["step"] == 2
-
-
-def test_plan_tools_uses_legacy_single_prompt_and_non_streaming_sdk_call(monkeypatch):
-    rendered = {}
-
-    def render(name, **kwargs):
-        rendered["name"] = name
-        rendered.update(kwargs)
-        return "legacy single-step prompt"
-
-    monkeypatch.setattr(plan_service.loader, "render", render)
-
-    class FakeLlm:
-        def json_task(self, messages):
-            assert messages == [{"role": "user", "content": "legacy single-step prompt"}]
-            return '{"calls":[{"tool":"search_records","args":{}}]}'
-
-        def chat_stream(self, *args, **kwargs):
-            raise AssertionError("legacy PlanTools must not switch to streaming")
-
-    request = SimpleNamespace(
-        question="找记录", tools=[SimpleNamespace(name="search_records", description="搜索", args_schema="{}")],
-        glossary=[],
-    )
-    events = list(plan_service.plan_next_step(request, FakeLlm(), prompt_name="plan_tools_single"))
-
-    assert len(events) == 1
-    assert events[0].final is True
-    assert events[0].done is True
-    assert [call.tool for call in events[0].calls] == ["search_records"]
-    assert rendered["name"] == "plan_tools_single"

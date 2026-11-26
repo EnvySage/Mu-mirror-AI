@@ -1,6 +1,6 @@
 """测试客户端 — 验证 gRPC 链路（T-AI-6 冒烟测试）
 
-覆盖：Classify（拆分 + single 两模式）、Embed、ExtractIntent、Chat 流式、GenerateProfile、
+覆盖：Classify（拆分 + single 两模式）、Embed、Chat 流式、GenerateProfile、
 GetModelInfo（健康检查 + 携带 EmbeddingConfig 的维度校验，api/local 两路）。
 无真实 LLM Key 时用 --stub 模式：本地起一个假 LLM HTTP 服务，验证 gRPC 全链路。
 
@@ -185,20 +185,6 @@ def test_get_model_info(stub):
         check("config 模式错误映射", False, f"{e.code()}: {e.details()}")
 
 
-def test_extract_intent(stub):
-    print("\n[ExtractIntent]")
-    try:
-        resp = stub.ExtractIntent(chat_pb2.ExtractIntentRequest(
-            query="我最近有哪些没做完的事？", llm_config=llm_config()))
-        check("intent query_type 合法", resp.query_type in ("profile", "structured", "semantic", "hybrid"),
-              resp.query_type)
-        check("intent content_type 小写", resp.content_type in ("", "todo", "thought", "learning",
-              "plan", "note", "work", "social", "health"), resp.content_type or "(unset)")
-        check("intent rewritten_query 非空", resp.rewritten_query != "")
-        print(f"      query_type={resp.query_type} content_type={resp.content_type} "
-              f"moods={list(resp.moods)} range={resp.time_range}")
-    except grpc.RpcError as e:
-        check("ExtractIntent", False, f"{e.code()}: {e.details()}")
 
 
 def test_chat(stub):
@@ -283,7 +269,6 @@ def main():
         test_classify(rp_stub, single=True)
         if not skip_embed:
             test_embed(emb_stub)
-        test_extract_intent(chat_stub)
         test_chat(chat_stub)
         test_generate_profile(profile_stub)
 

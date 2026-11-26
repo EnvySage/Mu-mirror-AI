@@ -17,7 +17,7 @@ from agent_data.records import RecordRepository
 from agent_data.todos import TodoRepository
 from agent_data.vault import VaultRepository
 from generated import agent_pb2, agent_pb2_grpc, common_pb2
-from server import build_agent_server, build_legacy_server
+from server import build_agent_server, build_inference_server
 from services.agent_service import AgentRunnerServicer
 from agent_tools.command_client import CommandResult
 from tests.agent_v2.agent_fakes import FakeLlm, FakeRepositories, make_dependencies, make_request
@@ -145,8 +145,8 @@ def test_agent_server_keeps_a_hard_two_rpc_limit():
     assert errors == []
 
 
-def test_legacy_server_still_registers_the_existing_10003_services():
-    server, _ = build_legacy_server(port=0)
+def test_inference_server_registers_shared_business_services():
+    server, _ = build_inference_server(port=0)
     try:
         names = {handler.service_name() for handler in server._state.generic_handlers}
         assert {"mirror.MirrorChat", "mirror.RecordProcessor", "mirror.EmbeddingService", "mirror.MirrorProfile"} <= names
@@ -341,7 +341,7 @@ def test_make_runtime_rejects_shadow_write_grant():
     request.allowed_write_tools.append("create_record")
     request.shadow = True
 
-    with pytest.raises(ValueError, match="shadow runs cannot carry a write grant"):
+    with pytest.raises(ValueError, match="shadow runs are retired"):
         make_runtime(request, make_dependencies(FakeLlm(), FakeRepositories(), embedding=False))
 
 def test_agent_request_context_field_and_runtime_propagation():

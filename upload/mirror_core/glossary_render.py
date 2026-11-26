@@ -1,6 +1,6 @@
 """glossary prompt 注入渲染（lexicon-design.md 第 4 节）
 
-四个注入点：ClassifyRequest / ExtractIntentRequest / ChatRequest / GenerateProfileRequest
+推理注入点：ClassifyRequest / ChatRequest / GenerateProfileRequest
 的 repeated GlossaryTerm glossary 字段。本模块把词条列表渲染成 prompt 段落。
 
 设计稿第 4 节固定软约束话术（原样使用，不改写）：

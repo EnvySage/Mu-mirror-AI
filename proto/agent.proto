@@ -22,7 +22,8 @@ message AgentRunRequest {
   int64 total_budget_ms = 11;
   int64 loop_budget_ms = 12;
   double half_life_days = 13;
-  bool shadow = 14;
+  // Reject requests sent by retired shadow clients during a rolling deployment.
+  bool shadow = 14 [deprecated = true];
   string command_grant = 15;
   string authorized_record_content = 16;
   repeated string allowed_write_tools = 17;

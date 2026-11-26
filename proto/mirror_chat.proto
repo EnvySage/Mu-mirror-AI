@@ -3,17 +3,9 @@ package mirror;
 
 import "common.proto";
 
+// Shared, task-specific inference. Interactive dialogue uses AgentRunner.
 service MirrorChat {
-  rpc ExtractIntent(ExtractIntentRequest) returns (ExtractIntentResponse);
   rpc Chat(ChatRequest) returns (stream ChatChunk);
-
-  // 工具规划（toolcalling-vault-design.md 第 1 节）：LLM 按 JSON 约定输出 ≤2 步工具计划，
-  // B 执行后把 ToolResult 塞 ChatRequest.tool_results 再走正常 Chat
-  rpc PlanTools(PlanToolsRequest) returns (PlanToolsReply);
-  // 对话 Agent 循环（chat-loop-design.md §3）：Java 驱动，每步调一次，带上已执行结果；
-  // 服务端流式，先吐 thinking 增量（B 透传 SSE thinking，等待可感知），终帧给 calls/done
-  rpc PlanNextStep(PlanNextStepRequest) returns (stream PlanStepChunk);
-  // Summarize one ended chat day and propose (never activate) user memories.
   rpc SummarizeDay(SummarizeDayRequest) returns (SummarizeDayResponse);
 }
 
@@ -43,22 +35,6 @@ message SummarizeDayResponse {
   string summary = 1;
   repeated MemoryCandidate memory_candidates = 2;
   string source_hash = 3;
-}
-
-message ExtractIntentRequest {
-  string query = 1;
-  LlmConfig llm_config = 2;
-  repeated GlossaryTerm glossary = 3; // 命中 query 的词条（B 侧 query 匹配，未命中传 top 高频词 grounding）
-}
-
-message ExtractIntentResponse {
-  // query_type 四选一（英文小写）：profile / structured / semantic / hybrid
-  // PROFILE→查画像快照；STRUCTURED→元数据过滤；SEMANTIC→纯向量；HYBRID→过滤+向量+时间衰减
-  string query_type = 1;
-  optional string content_type = 2;  // 8 类英文小写（todo/thought/learning/plan/note/work/social/health），无法确定则不填
-  repeated string moods = 3;         // 13 情绪英文小写
-  string time_range = 4;             // 如 "最近7天"，空表示未提及
-  string rewritten_query = 5;        // 改写后的检索 query
 }
 
 message ChatRequest {
@@ -101,48 +77,4 @@ message Source {
   // 本端只回"回答里被引用到的"子集，编号会跳号——B 侧/前端必须按 n 定位来源，
   // 不能用数组下标。
   int32 n = 4;
-}
-
-// ── PlanTools 消息（toolcalling-vault-design.md 第 6 节）──
-
-message PlanToolsRequest {
-  string question = 1;               // 用户提问原文
-  repeated GlossaryTerm glossary = 2; // 个人词汇表（工具参数里的"论文"等指代依赖它）
-  repeated ToolSpec tools = 3;        // Java 侧注册表快照（Python 不硬编码工具清单）
-  LlmConfig llm_config = 4;
-  AssistantContext assistant_context = 5;
-}
-
-message PlanToolsReply {
-  repeated PlannedCall calls = 1;
-}
-
-message PlannedCall {
-  string tool = 1;      // 工具名（经校验：必须在传入注册表内，防幻觉）
-  string args_json = 2; // 参数 JSON 文本（经校验：可解析）
-}
-
-// ── 对话 Agent 循环消息（chat-loop-design.md §3）──
-// 循环由 Java 驱动，本端每次只做"看着已有结果决定下一步"的单次决策，不存任何状态
-
-message PlanNextStepRequest {
-  string question = 1;                       // 用户提问原文
-  repeated GlossaryTerm glossary = 2;        // 个人词汇表（工具参数里的"论文"等指代依赖它）
-  repeated ToolSpec tools = 3;               // Java 侧注册表快照（Python 不硬编码工具清单）
-  LlmConfig llm_config = 4;
-  repeated ChatMessage history = 5;          // 对话历史（正序），用于多轮指代消解
-  repeated ToolResult previous_results = 6;  // 已执行步骤的结果（首步为空）→ prompt 渲染成"已知材料"
-  int32 step = 7;                            // 第几步（1-based）
-  int32 max_steps = 8;                       // 步数预算 → prompt 里告知"还剩几步"
-  bool has_retrieval = 9;                    // Deprecated：保留 wire 兼容，当前 planner 忽略；根据工具结果判断检索状态
-  AssistantContext assistant_context = 10;
-}
-
-message PlanStepChunk {
-  // 思考增量（chat_stream 的 ("thinking", text) 通道；模型不支持时永不为真）。
-  // 与 B 仓 mirror_chat.proto 字段号 1 对齐，B 逐块转发 SSE thinking
-  optional string thinking = 1;
-  repeated PlannedCall calls = 2;  // 仅终帧有效；空 + done=true = 材料够了，收尾去答
-  bool done = 3;                   // 仅终帧有效
-  bool final = 4;                  // 本块为终帧（calls/done 才可读）
 }

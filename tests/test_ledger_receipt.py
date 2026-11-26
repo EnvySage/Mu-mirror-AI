@@ -7,7 +7,7 @@ import pytest
 
 from generated import common_pb2, ledger_pb2, ledger_pb2_grpc
 from mirror_core.ledger_receipt import recognize_receipt, validate_image
-from server import build_legacy_server
+from server import build_inference_server
 
 
 def request(protocol=common_pb2.AiProtocol.OPENAI):
@@ -46,7 +46,7 @@ def test_receipt_rpc_sends_image_in_configured_provider_shape(monkeypatch, proto
             return json.dumps(result_for(), ensure_ascii=False)
 
     monkeypatch.setattr("services.ledger_vision_service.create_llm", lambda **config: Model())
-    server, port = build_legacy_server(port=0)
+    server, port = build_inference_server(port=0)
     server.start()
     try:
         with grpc.insecure_channel(f"127.0.0.1:{port}") as channel:

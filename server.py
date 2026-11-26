@@ -14,7 +14,7 @@ from generated import mirror_profile_pb2_grpc as profile_grpc
 
 from services.lexicon_service import RecordProcessorServicer
 from services.embedding_service import EmbeddingServiceServicer
-from services.plan_service import MirrorChatServicer
+from services.chat_service import MirrorChatServicer
 from services.profile_service import MirrorProfileServicer
 from services.agent_service import AgentRunnerServicer
 from generated import agent_pb2_grpc as agent_grpc
@@ -25,9 +25,9 @@ from services.tarot_service import TarotReadingServicer
 from mirror_core.usage import UsageServerInterceptor
 
 
-def build_legacy_server(*, port: int | None = None):
-    """Create the existing 10003 server with every legacy RPC still registered."""
-    legacy_port = int(os.getenv("MIRROR_AI_PORT", CONFIG["server"]["port"])) if port is None else port
+def build_inference_server(*, port: int | None = None):
+    """Create the shared inference server for Java business services."""
+    inference_port = int(os.getenv("MIRROR_AI_PORT", CONFIG["server"]["port"])) if port is None else port
     workers = CONFIG["server"]["workers"]
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=workers), interceptors=[UsageServerInterceptor()])
     rp_grpc.add_RecordProcessorServicer_to_server(RecordProcessorServicer(), server)
@@ -36,9 +36,9 @@ def build_legacy_server(*, port: int | None = None):
     tarot_grpc.add_TarotReadingServicer_to_server(TarotReadingServicer(), server)
     ledger_grpc.add_LedgerVisionServicer_to_server(LedgerVisionServicer(), server)
     profile_grpc.add_MirrorProfileServicer_to_server(MirrorProfileServicer(), server)
-    bound_port = server.add_insecure_port(f"[::]:{legacy_port}")
+    bound_port = server.add_insecure_port(f"[::]:{inference_port}")
     if bound_port == 0:
-        raise RuntimeError(f"could not bind legacy gRPC port {legacy_port}")
+        raise RuntimeError(f"could not bind inference gRPC port {inference_port}")
     return server, bound_port
 
 
@@ -67,7 +67,7 @@ def build_agent_server(*, port: int | None = None, servicer: AgentRunnerServicer
 
 
 def serve():
-    server, port = build_legacy_server()
+    server, port = build_inference_server()
     agent_server = None
     agent_servicer = None
     agent_port = None
@@ -87,8 +87,7 @@ def serve():
     print("服务列表:")
     print("  - RecordProcessor  (Classify 含 single 单段模式, ExtractTerms 词条抽取)")
     print("  - EmbeddingService (Embed, EmbedBatch, GetModelInfo[健康检查])")
-    print("  - MirrorChat       (ExtractIntent, Chat 流式, PlanTools 工具规划)")
-    print("                    (PlanNextStep 循环规划, SummarizeDay 每日总结/记忆候选)")
+    print("  - MirrorChat       (通用流式推理, 每日总结/记忆候选)")
     print("  - MirrorProfile    (GenerateProfile)")
     print("  - LedgerVision     (Recognize)")
     if agent_enabled:

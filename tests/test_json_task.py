@@ -263,39 +263,3 @@ class _RecordingLlm:
 class _Ctx:
     def abort(self, code, details):
         raise RuntimeError("abort")
-
-
-class TestWiring:
-    def test_extract_intent_uses_json_task(self):
-        """ExtractIntent 走 json_task（不再让路由任务做内心独白）"""
-        from generated import common_pb2 as common
-        from generated import mirror_chat_pb2 as pb2
-        from services.chat_service import MirrorChatServicer
-
-        llm = _RecordingLlm()
-        svc = MirrorChatServicer()
-        with patch.dict(svc.ExtractIntent.__globals__, {"create_llm": lambda **kw: llm}):
-            svc.ExtractIntent(pb2.ExtractIntentRequest(
-                query="我最喜欢的歌是什么",
-                llm_config=common.LlmConfig(provider="stub")), _Ctx())
-        assert llm.used == ["json_task"]
-
-    def test_plan_tools_uses_json_task(self):
-        """PlanTools 走 json_task（注册表非空才会真调 LLM——空表是短路空计划）"""
-        from google.protobuf.message_factory import GetMessageClass
-        from generated import common_pb2 as common
-        from generated import mirror_chat_pb2 as pb2
-        from services.plan_service import MirrorChatServicer as PlanServicer
-
-        # ToolSpec 在描述符池中存在但未暴露为模块属性（生成文件早于 proto 的该字段）
-        tool_cls = GetMessageClass(
-            pb2.PlanToolsRequest.DESCRIPTOR.fields_by_name["tools"].message_type)
-        tool = tool_cls(name="search_records", description="检索记录", args_schema="{}")
-
-        llm = _RecordingLlm('{"calls": []}')
-        svc = PlanServicer()
-        with patch.dict(svc.PlanTools.__globals__, {"create_llm": lambda **kw: llm}):
-            svc.PlanTools(pb2.PlanToolsRequest(
-                question="我最近怎么样", tools=[tool],
-                llm_config=common.LlmConfig(provider="stub")), _Ctx())
-        assert llm.used == ["json_task"]

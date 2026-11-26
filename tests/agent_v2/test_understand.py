@@ -179,15 +179,15 @@ def test_understand_does_not_resolve_alias_shared_by_confirmed_terms(monkeypatch
     assert result.standalone_question == "镜子最近有什么进展？"
 
 
-def test_agent_intent_prompt_is_separate_from_legacy_prompt():
+def test_agent_intent_prompt_renders_question_with_history():
     from mirror_core.prompts_loader import loader
 
     agent_prompt = loader.render("agent_intent", question="当前问题", history="历史", glossary="词典")
-    legacy_prompt = loader.load("intent")
 
     assert "graph_v2" in agent_prompt
     assert "当前问题" in agent_prompt
-    assert "当前问题" not in legacy_prompt
+    assert "历史" in agent_prompt
+    assert "词典" in agent_prompt
 
 
 def test_understand_builds_existing_llm_client_from_runtime_config(monkeypatch):
@@ -292,11 +292,10 @@ def test_understand_rejects_time_fields_that_conflict_with_kind(monkeypatch):
     assert "invalid_time_expression" in result.validation_issues
 
 
-def test_authorized_record_content_and_grant_take_deterministic_path(monkeypatch):
+def test_authorized_record_content_and_grant_take_deterministic_path():
     def forbidden_factory(**kwargs):
         raise AssertionError("authorized explicit create must not call the LLM")
 
-    monkeypatch.setattr(intent_service, "create_llm", forbidden_factory)
     runtime = _runtime(
         llm=None,
         llm_config=None,
@@ -305,7 +304,7 @@ def test_authorized_record_content_and_grant_take_deterministic_path(monkeypatch
         allowed_write_tools=("create_record",),
     )
 
-    result = intent_service.understand("帮我保存", _prepared(), runtime)
+    result = intent_service.understand("帮我保存", _prepared(), runtime, llm_factory=forbidden_factory)
 
     assert result.action_kind == "create_record"
     assert result.standalone_question == "帮我保存"

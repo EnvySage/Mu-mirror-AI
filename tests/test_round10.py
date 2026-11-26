@@ -327,10 +327,9 @@ class TestPromptWiring:
         p_empty = loader.render("classify", content="正文", glossary="")
         assert "仅供参考" not in p_empty  # 空词条不留孤儿话术
 
-    def test_intent_chat_profile_glossary_placeholder(self):
+    def test_chat_profile_glossary_placeholder(self):
         from mirror_core.prompts_loader import loader
         g = format_glossary([_term("论文", description="毕设")])
-        assert "毕设" in loader.render("intent", query="q", glossary=g)
         assert "毕设" in loader.render("chat", question="q", history="h", context="c", glossary=g)
         assert "毕设" in loader.render("profile", todos="", learnings="", mood_stats="",
                                        keywords="", active_time="", total_records=0,
@@ -354,7 +353,7 @@ class TestPromptWiring:
         assert reply["source_chunk_id"].number == 6
 
         assert common_pb2_glossary_number() == {
-            "ClassifyRequest": 4, "ExtractIntentRequest": 3, "ChatRequest": 5, "GenerateProfileRequest": 10,
+            "ClassifyRequest": 4, "ChatRequest": 5, "GenerateProfileRequest": 10,
         }
 
 
@@ -364,7 +363,6 @@ def common_pb2_glossary_number():
     from generated import record_processor_pb2 as rp
     return {
         "ClassifyRequest": rp.ClassifyRequest.DESCRIPTOR.fields_by_name["glossary"].number,
-        "ExtractIntentRequest": chat.ExtractIntentRequest.DESCRIPTOR.fields_by_name["glossary"].number,
         "ChatRequest": chat.ChatRequest.DESCRIPTOR.fields_by_name["glossary"].number,
         "GenerateProfileRequest": profile.GenerateProfileRequest.DESCRIPTOR.fields_by_name["glossary"].number,
     }

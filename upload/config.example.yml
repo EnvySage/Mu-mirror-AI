@@ -24,7 +24,6 @@ agent:
 prompts:
   classify: "prompts/classify.txt"
   chat: "prompts/chat.txt"
-  intent: "prompts/intent.txt"
   agent_intent: "prompts/agent_intent.txt"
   profile: "prompts/profile.txt"
 

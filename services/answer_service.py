@@ -1,10 +1,9 @@
 """MirrorChat 服务实现 — 意图提取 + 对话生成（协作清单 #5）
 
-ExtractIntent（兼容回滚路径）：结构化/语义/组合检索路由 + 过滤条件
 Chat：服务端流式 stream ChatChunk{content, done, sources, thinking}
 （thinking=4 为 LLM 思考过程增量块，proto3 optional，模型不支持时永不为真）
 无状态：配置随请求携带，用完即弃。
-PlanTools 的工具执行结果（ChatRequest.tool_results，field 6）由 Chat 渲染成上下文块
+调用方提供的工具结果（ChatRequest.tool_results，field 6）由 Chat 渲染成上下文块
 （_format_tool_results，截断到 config plan_tools.max_tool_chars）；空列表零影响
 （prompt 不留孤儿块，同 glossary 模式）。
 """

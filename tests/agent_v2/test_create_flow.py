@@ -145,5 +145,5 @@ def test_shadow_run_rejects_even_a_well_formed_write_grant():
     request = _authorized_request()
     request.shadow = True
 
-    with pytest.raises(ValueError, match="shadow runs cannot carry a write grant"):
+    with pytest.raises(ValueError, match="shadow runs are retired"):
         make_runtime(request, make_dependencies(FakeLlm(), FakeRepositories()))

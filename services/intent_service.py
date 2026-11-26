@@ -1,6 +1,6 @@
-"""Intent extraction shared by the legacy servicer and future agent flows."""
+"""Intent understanding for the Graph dialogue engine."""
 
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from datetime import datetime
 import re
 from types import SimpleNamespace
@@ -12,7 +12,6 @@ from agent_core.types import Clarification
 from agent_core.types import IntentResult as AgentIntentResult
 from agent_core.types import PreparedContext, RuntimeContext, TimeExpression
 from mirror_core.glossary_render import format_glossary
-from llm.factory import create_llm
 from mirror_core.llm_json import parse_json
 from mirror_core.prompts_loader import loader
 
@@ -23,45 +22,8 @@ MOODS = {"happy", "excited", "satisfied", "grateful", "expecting", "calm", "bore
          "confused", "anxious", "sad", "angry", "exhausted", "stressed"}
 
 
-@dataclass(frozen=True)
-class IntentResult:
-    query_type: str
-    content_type: Any
-    moods: list[str]
-    time_range: Any
-    rewritten_query: Any
 
 
-def extract_intent(query, glossary, llm_config, *, llm_factory: Callable = create_llm) -> IntentResult:
-    """Run the existing intent prompt and apply the legacy field validation."""
-    print(f"[ExtractIntent] query: {query}")
-    print(f"[ExtractIntent] LLM: provider={llm_config.provider}, model={llm_config.model}")
-
-    llm = llm_factory(
-        provider=llm_config.provider,
-        api_key=llm_config.api_key,
-        base_url=llm_config.base_url,
-        model=llm_config.model,
-        protocol=llm_config.protocol,
-    )
-    prompt = loader.render(
-        "intent",
-        query=query,
-        glossary=format_glossary(glossary),
-    )
-    response_text = llm.json_task([{"role": "user", "content": prompt}])
-    print(f"[ExtractIntent] LLM 响应: {response_text[:200]}")
-
-    result = parse_json(response_text, ctx="意图")
-    content_type = result.get("content_type")
-    return IntentResult(
-        query_type=(result.get("query_type")
-                    if result.get("query_type") in QUERY_TYPES else DEFAULT_QUERY_TYPE),
-        content_type=content_type if content_type in CONTENT_TYPES else None,
-        moods=[m for m in result.get("moods", []) if m in MOODS],
-        time_range=result.get("time_range", ""),
-        rewritten_query=result.get("rewritten_query") or query,
-    )
 
 
 AGENT_ACTION_KINDS = {"read", "create_record", "prepare_action", "conversation", "clarification"}

@@ -25,7 +25,7 @@ class BaseLlm(ABC):
         """流式对话，逐块返回 (kind, text)：kind ∈ {"thinking", "content"}
 
         thinking_budget：本次调用的思考预算（token）；None = 用全局 llm.thinking_budget_tokens。
-        规划器要单独传一个小预算——见 plan_service.PlanNextStep 的说明。
+        规划器要单独传一个小预算——Graph 的每轮规划受运行预算限制。
         max_tokens 可为含记录正文的工具计划单独设置输出上限；None 保留厂商默认。
         """
         ...

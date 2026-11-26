@@ -1,10 +1,10 @@
 """第九轮修复单测（不依赖网络 / 不依赖 SDK 行为）
 
 覆盖任务书验证标准中的新增测试：
-1. content_type 脏值过滤（chat_service.ExtractIntent 白名单）
+1. content_type 脏值过滤（Graph 意图白名单）
 2. llm_json.parse_json 统一异常类型（三份收编后全部 ContentInvalidError）
 3. SDK 异常翻译映射（openai/anthropic 异常按类型+status_code → errors 子类）
-4. marker 排除 markdown 链接（chat_service._find_markers）
+4. marker 排除 markdown 链接（answer_service._find_markers）
 5. errors.map_exception 优先级（isinstance 先于关键字）+ safe_details 不泄露原文
 
 运行：.venv/Scripts/python.exe -m pytest tests/test_round9.py -v
@@ -27,7 +27,7 @@ from mirror_core.errors import (  # noqa: E402
     translate_llm_sdk_exception,
 )
 from mirror_core.llm_json import parse_json  # noqa: E402
-from services import chat_service  # noqa: E402
+from services import answer_service, intent_service  # noqa: E402
 
 import grpc  # noqa: E402
 
@@ -38,14 +38,14 @@ import grpc  # noqa: E402
 class TestContentTypeWhitelist:
     def test_dirty_value_filtered(self):
         """脏值（如 'SQL 注入'、大写 TODO、未知类型）→ None"""
-        assert chat_service.CONTENT_TYPES == {"todo", "thought", "learning", "plan",
+        assert intent_service.CONTENT_TYPES == {"todo", "thought", "learning", "plan",
                                               "note", "work", "social", "health"}
         for dirty in ("TODO", "Todo", "blog", "sql_injection", "心理健康", ""):
-            assert dirty not in chat_service.CONTENT_TYPES, dirty
+            assert dirty not in intent_service.CONTENT_TYPES, dirty
 
     def test_valid_values_pass(self):
-        for ok in chat_service.CONTENT_TYPES:
-            assert ok in chat_service.CONTENT_TYPES
+        for ok in intent_service.CONTENT_TYPES:
+            assert ok in intent_service.CONTENT_TYPES
 
 
 # ---------------------------------------------------------------------------
@@ -82,9 +82,9 @@ class TestParseJson:
         from services import record_processor
         assert record_processor.parse_json is parse_json
 
-    def test_chat_profile_use_common_impl(self):
-        from services import chat_service, profile_service
-        assert chat_service.parse_json is parse_json
+    def test_intent_profile_use_common_impl(self):
+        from services import intent_service, profile_service
+        assert intent_service.parse_json is parse_json
         assert profile_service.parse_json is parse_json
 
 
@@ -201,34 +201,34 @@ class TestSdkExceptionTranslation:
 # ---------------------------------------------------------------------------
 class TestFindMarkers:
     def test_plain_markers(self):
-        assert chat_service._find_markers("见[1]，再看[2]") == [1, 2]
+        assert answer_service._find_markers("见[1]，再看[2]") == [1, 2]
 
     def test_markdown_link_excluded(self):
         """[1](url) / [text](url) 不是引用标记"""
-        assert chat_service._find_markers("详情[1](http://example.com/a) 结束") == []
-        assert chat_service._find_markers("[2](https://x.y) 和 [1]") == [1]
+        assert answer_service._find_markers("详情[1](http://example.com/a) 结束") == []
+        assert answer_service._find_markers("[2](https://x.y) 和 [1]") == [1]
 
     def test_list_numbers_excluded(self):
         """'1. xxx' / '1、xxx' 无方括号，天然不匹配；方括号+链接也不匹配"""
-        assert chat_service._find_markers("1. 第一条\n2、第二条") == []
+        assert answer_service._find_markers("1. 第一条\n2、第二条") == []
 
     def test_mixed(self):
         answer = "参考[1]与[3](http://x.y)，列表：1. a 2. b，另见[2]"
-        assert chat_service._find_markers(answer) == [1, 2]
+        assert answer_service._find_markers(answer) == [1, 2]
 
     def test_non_digit_bracket_excluded(self):
-        assert chat_service._find_markers("[注] 和 [abc] 但 [4]") == [4]
+        assert answer_service._find_markers("[注] 和 [abc] 但 [4]") == [4]
 
     def test_sources_quote_prefers_title(self):
         """quote 对齐 Java 兜底路径：title 优先，空 title 才用 content[:100]"""
         chunk = type("C", (), {"record_id": 7, "title": "三个待办", "content": "x" * 200,
                                "created_at": "2026-09-01"})()
-        src = chat_service._extract_sources("[1]", [chunk])[0]
+        src = answer_service._extract_sources("[1]", [chunk])[0]
         assert src.quote == "三个待办"
 
         chunk_no_title = type("C", (), {"record_id": 8, "title": "", "content": "y" * 200,
                                         "created_at": "2026-09-02"})()
-        src2 = chat_service._extract_sources("[1]", [chunk_no_title])[0]
+        src2 = answer_service._extract_sources("[1]", [chunk_no_title])[0]
         assert src2.quote == "y" * 100
 
     def test_context_carries_relevance_note(self):
@@ -240,7 +240,7 @@ class TestFindMarkers:
             c.score = score
             return c
 
-        out = chat_service._format_context([chunk(0.2), chunk(0.5), chunk(-1.0)])
+        out = answer_service._format_context([chunk(0.2), chunk(0.5), chunk(-1.0)])
         lines = out.split("\n")
         assert "〔相关度 80%〕" in lines[0]      # 距离 0.2 → 相似度 80%
         assert "〔相关度 50%〕" in lines[1]      # 距离 0.5 → 相似度 50%
@@ -254,7 +254,7 @@ class TestFindMarkers:
         """
         chunks = [type("C", (), {"record_id": i, "title": f"t{i}", "content": "x",
                                  "created_at": "2026-09-01"})() for i in range(1, 6)]
-        srcs = chat_service._extract_sources("见 [1] 和 [5]", chunks)
+        srcs = answer_service._extract_sources("见 [1] 和 [5]", chunks)
         assert [s.n for s in srcs] == [1, 5]
         assert [s.record_id for s in srcs] == [1, 5]
         # 越界编号不产生 source（保持原防御）

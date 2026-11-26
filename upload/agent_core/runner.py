@@ -86,8 +86,8 @@ def make_runtime(request: Any, dependencies: AgentDependencies, cancellation: An
     command_grant = getattr(request, "command_grant", "")
     authorized_record_content = getattr(request, "authorized_record_content", "")
     has_write_input = bool(allowed_write_tools or command_grant or authorized_record_content)
-    if getattr(request, "shadow", False) and has_write_input:
-        raise ValueError("shadow runs cannot carry a write grant")
+    if request.shadow:
+        raise ValueError("shadow runs are retired")
     if has_write_input:
         if (allowed_write_tools != ("create_record",) or not isinstance(command_grant, str)
                 or not command_grant.strip() or not isinstance(authorized_record_content, str)
@@ -115,8 +115,6 @@ def make_runtime(request: Any, dependencies: AgentDependencies, cancellation: An
             raise ValueError("prepare_tools must contain unique Java PREPARE_WRITE definitions")
         seen_prepare_tools.add(name)
         prepare_tools.append({"name": name, "description": description, "args_schema": args_schema})
-    if getattr(request, "shadow", False) and prepare_tools:
-        raise ValueError("shadow runs cannot carry prepare tools")
 
     total_ms = _bounded_budget(
         getattr(request, "total_budget_ms", 0), dependencies.max_total_budget_ms, TOTAL_BUDGET_MS,
@@ -196,7 +194,6 @@ def make_runtime(request: Any, dependencies: AgentDependencies, cancellation: An
         loop_deadline=loop_deadline,
         max_plan_rounds=max_rounds,
         half_life_days=float(half_life_days),
-        shadow=bool(getattr(request, "shadow", False)),
         answer_budget_ms=answer_budget_ms,
         clock=dependencies.clock,
         usage_collector=current_collector(),

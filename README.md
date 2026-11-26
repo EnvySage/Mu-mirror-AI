@@ -2,17 +2,17 @@
 
 Mirror 应用的 Python AI 服务。基于 gRPC，为「AI 日记镜子」系统提供记录处理、意图抽取、向量化、用户画像，以及 graph_v2 完整对话流程。
 
-**无会话状态**：本服务不保存会话状态，也不使用 checkpoint。旧 gRPC 接口只做原有 AI 处理；graph_v2 每轮直接连接 PostgreSQL 的 `mirror_ai` 受控只读视图，Python 按可信 user/session/message 范围加载词典、历史、检索资料并执行只读工具。模型配置随每次 gRPC 请求到达，用完即弃。
+**无会话状态**：本服务不保存会话状态，也不使用 checkpoint。业务推理 RPC 处理日记、向量和总结；graph_v2 每轮直接连接 PostgreSQL 的 `mirror_ai` 受控只读视图，Python 按可信 user/session/message 范围加载词典、历史、检索资料并执行只读工具。模型配置随每次 gRPC 请求到达，用完即弃。
 
 ## 在系统中的位置
 
 ```
 Vue 3 前端 ──HTTP(/api, JWT)──> Spring Boot 后端 ──SQL/业务写入──> PostgreSQL + pgvector
-                                      ├──gRPC :10003──> 旧版 AI RPC
+                                      ├──gRPC :10003──> 业务推理 RPC
                                       └──gRPC :10004──> graph_v2 对话 Agent ──只读视图──> PostgreSQL
 ```
 
-**分工原则：Java 管鉴权、模型配置解密、聊天入口、会话与消息持久化、SSE 转发和业务写入；Python 管完整对话流程与受控只读数据访问。** 真正的写操作只通过 Java 具名业务接口执行；普通记录创建默认只保存用户原文，不自动授权 AI 整理或长期记忆。旧引擎和 graph_v2 并存，每轮开始时固定引擎，失败不会自动换引擎重跑。
+**分工原则：Java 管鉴权、模型配置解密、聊天入口、会话与消息持久化、SSE 转发和业务写入；Python 管完整对话流程与受控只读数据访问。** 真正的写操作只通过 Java 具名业务接口执行；普通记录创建默认只保存用户原文，不自动授权 AI 整理或长期记忆。交互对话统一由 graph_v2 执行；传输失败时保存本轮已完成的结果和终态。
 
 ## 技术栈
 
@@ -27,11 +27,11 @@ Vue 3 前端 ──HTTP(/api, JWT)──> Spring Boot 后端 ──SQL/业务写
 ## 目录结构
 
 ```
-server.py                gRPC server 装配（注册 4 个 service）
+server.py                业务推理和 Graph Agent gRPC 装配
 services/                服务实现
   record_processor.py      Classify（拆分 / single 单段）/ ExtractTerms（词典候选抽取）
-  chat_service.py          Chat（流式）/ ExtractIntent（意图路由）
-  plan_service.py          PlanTools / PlanNextStep（工具规划，流式循环决策）
+  chat_service.py          通用流式推理与每日对话总结
+agent_core/              Graph 对话、工具规划和输出
   profile_service.py       GenerateProfile（递归累计镜子）
   embedding_service.py     Embed / EmbedBatch / GetModelInfo
 llm/                     LLM 客户端封装：openai_llm / anthropic_llm + factory（用户配置驱动）
@@ -61,10 +61,8 @@ upload/                  部署镜像副本（与根目录逐字节同步，见�
 | `RecordProcessor` | `ExtractTerms` | 个人词典候选抽取 |
 | `EmbeddingService` | `Embed` / `EmbedBatch` | 文本转向量（1024 维硬约束） |
 | `EmbeddingService` | `GetModelInfo` | 模型信息，双语义：无配置=健康检查；带配置=按用户配置实测维度 |
-| `MirrorChat` | `ExtractIntent` | 意图抽取（`query_type` 路由：PROFILE / STRUCTURED / SEMANTIC / HYBRID） |
-| `MirrorChat` | `Chat` | 对话生成（流式 `ChatChunk`） |
-| `MirrorChat` | `PlanTools` | 工具规划：LLM 输出工具调用计划 JSON（≤2 步） |
-| `MirrorChat` | `PlanNextStep` | 对话循环的单步规划（流式，含思考过程透传） |
+| `MirrorChat` | `Chat` / `SummarizeDay` | 日记总结、灵感推荐、对话每日总结 |
+| `AgentRunner` | `RunAgent` | Graph 交互对话，独立监听 10004 |
 | `MirrorProfile` | `GenerateProfile` | 用户画像（"镜子"）生成 |
 
 ### AI 用量回执（v1）
@@ -131,13 +129,7 @@ B 的 v18 迁移将新策略下已确认授权、未索引的片段纳入正文�
 失败仍可通过字面短关键词/日期查询和正文读取核对，不能据此声称用户没有记录。
 列表只提供 120 字摘录；`read_record` 保留完整授权片段并按 `next_offset` 续页，`full`
 只表示授权范围已读完。图在原有 12 页、64,000 字符和运行时间预算内补齐缺页；摘录或未读完
-时展示查询范围与 partial 限制。`search_records` 没有 legacy `mode` 参数，默认引擎未改变。
-
-legacy PlanTools 本期保留原有 `search_records.mode` 路由，并在 `plan_tools.txt` 与单步回滚
-提示中说明同一分页契约：搜索 `quote` 是最多 120 字摘录，不代表全文；需要正文时，循环规划器
-先用搜索结果中的 `record_id` 调 `read_record`，按 `next_offset` 读取至授权范围完成。单步回滚
-规划看不到新搜索结果，只能直接读取已知的 `record_id`；否则答复必须说明依据仍是摘录。以上
-仅适配现有 legacy 路径，不更改引擎选择。
+时展示查询范围与 partial 限制。`search_records` 按 Graph 的授权和日期约束查询。
 
 隔离 reader 集成测试按 `tests/agent_v2/fixtures/agent_data.sql`（包括相邻 selective fixture）
 → B `migration-v11-agent-v2.sql` → `migration-v18-record-selective-index.sql` →
@@ -281,7 +273,7 @@ Windows 一键部署见仓库外层的 `部署AI.bat`。**打包用排除法而�
 
 ### 塔罗首版
 
-`TarotReading.Analyze` 在现有 legacy RPC 服务注册，使用调用方模型配置，无工具执行或数据库访问。日牌上下文只供最终回答；规划与画像不包含牌义。`scripts/tarot_stub_model.py` 仅作本地协议联调，目标模型措辞验收样例在 `tests/fixtures/tarot-evaluation.json`。运行时修改后运行 `scripts/sync_upload.py` 并检查 `--check`。
+`TarotReading.Analyze` 在业务推理服务注册，使用调用方模型配置，无工具执行或数据库访问。日牌上下文只供最终回答；规划与画像不包含牌义。`scripts/tarot_stub_model.py` 仅作本地协议联调，目标模型措辞验收样例在 `tests/fixtures/tarot-evaluation.json`。运行时修改后运行 `scripts/sync_upload.py` 并检查 `--check`。
 
 ## 记账推理与查询
 

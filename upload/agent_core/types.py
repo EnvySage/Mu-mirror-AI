@@ -183,7 +183,6 @@ class RuntimeContext:
     answer_deadline: float | None = None
     max_plan_rounds: int = 4
     half_life_days: float = 30.0
-    shadow: bool = False
     answer_budget_ms: int = 180_000
     clock: Callable[[], float] | None = None
     total_deadline: float | None = None
