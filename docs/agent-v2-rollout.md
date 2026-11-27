@@ -1,19 +1,19 @@
 # Graph-only chat rollout and rollback
 
-The Java chat endpoint sends new runs to Graph. This runbook covers prerequisites, validation and coordinated release. Historical evaluation results below describe the earlier dual-engine releases.
+The Java chat endpoint sends new runs to `graph_v2/live`. Port 10004 serves Graph chat, and port 10003 serves business inference. This runbook covers prerequisites, validation and coordinated release. The historical sections describe the earlier dual-engine releases.
 
 ## 1. Preconditions and data boundary
 
 1. Use a disposable or approved test database and verify the PostgreSQL major version matches the intended deployment. The migration uses pgvector operators/types and `security_barrier` views. The available local Task9 business E2E used PostgreSQL 16.15, but it did not validate these read views; a separate read-only migration/integration check is still required before rollout.
-2. In an approved disposable database, start from the intended baseline and apply the Java repository migrations in their documented order through `migration-v10-daily-memory.sql`, then apply `migration-v11-agent-v2.sql`. Provision a dedicated login role through the deployment secret manager; then run `deploy/agent-reader-role.sql` with only `reader_role` as a psql variable. Never run the destructive synthetic fixture SQL against an application database.
+2. In an approved disposable database, start from the intended baseline and apply the Java repository migrations in order. V11 establishes the agent views, V18 adds the selective-indexing read contract, and V19 adds the ledger view. Provision a dedicated login role through the deployment secret manager; then run `deploy/agent-reader-role.sql` with only `reader_role` as a psql variable. Never run the destructive synthetic fixture SQL against an application database.
 3. Connect with the dedicated reader DSN and verify `SELECT 1 FROM mirror_ai.glossary_terms LIMIT 0` succeeds in a read-only transaction. Verify the account cannot select public business tables, access `vault_blobs`, or perform DML. Do not grant it membership in another role.
 4. The shared inference service on 10003 starts without `MIRROR_AI_READ_DSN` when Agent is disabled. Enabling Agent requires both `MIRROR_AGENT_INTERNAL_TOKEN` and `MIRROR_AI_READ_DSN`; inject them through the service manager/Jenkins credentials, never `config.yml`.
 
 ## 2. Historical capability baseline (2026-10-21)
 
-The merged code keeps Java `legacy` as the default and graph_v2 opt-in. The current canary allowlist is empty and shadow sampling defaults to zero. The following boundary is intentional while the full local flow and graph_v2 release gates remain incomplete:
+In October 2026, Java defaulted to `legacy`, with Graph opt-in, an empty canary allowlist and zero shadow sampling. The following table records the evidence available at that time.
 
-| Capability | Current support | Boundary |
+| Capability | October baseline | Boundary at the time |
 |---|---|---|
 | User-scoped history, retrieved records, glossary, profile, todo and vault reads | graph_v2 reads through the eight `mirror_ai` views and trusted `AssistantContext` | Views enforce the current record authorization and forgotten-chat-source exclusions; keep the Java-created user/session/message scope intact. |
 | Record, todo, memory-candidate and growth-adjustment requests | graph_v2 receives Java's registered `PREPARE_WRITE` tool definitions and can emit one `prepare_action`; Java invokes the matching existing tool, persists a pending card and sends `action_proposal`/`action_status` SSE | The event can only prepare a card. The user must confirm through the existing Java action API before any business change. The regular chat request no longer carries the direct `create_record` grant. |
@@ -21,7 +21,7 @@ The merged code keeps Java `legacy` as the default and graph_v2 opt-in. The curr
 | Custom growth axes, growth ledger, daily summaries and memory forget/edit actions | Preserved in the current Java/Vue product flow; growth adjustment cards and memory-candidate cards are now callable from graph_v2 | Actual local Java→Python→Vue card confirmation and history restoration still require manual acceptance. Keep legacy selected by default until the broader graph_v2 release gates pass. |
 | SSE run receipt and restored chat history | Vue protocol/store support and unit coverage are present | A real local Java→Python→Vue SSE plus history-reload scenario remains an acceptance gate. |
 
-This capability table describes code and tests available on the merged local baseline; it does not authorize a database migration or traffic rollout. The legacy engine remains selected by default.
+For the current code, use the release order and verification steps below.
 
 ## 3. Historical paired offline evaluation
 
@@ -48,7 +48,7 @@ The real-model run is recorded in [`eval/agent_v2/reports/task10-real-model-pair
 - The 6 accepted focused follow-up runs used 22 model calls. An earlier 2-run glossary attempt against the incomplete fixture consumed another 5 calls and was excluded from scoring. The follow-up meter moved from 377 to 404, matching those 27 calls; the original 18-call discrepancy from the 52-pair baseline remains unexplained. Token usage and cost are unknown.
 - The proxy cap was 500. Its counter increased from 33 (discarded earlier attempts) to 377; the aggregate delta was 344, while per-run deltas sum to 326. The 18-request mismatch is unresolved, so per-case call counts must not be used as exact provider usage. The cap was not exhausted.
 
-The offline paired replay and focused corrections are documented, but Task 10 rollout gates are not. The original latency result failed the historical gate, and there is no post-fix full latency sample, fault-injected evaluation, or write validation through the named Java interface. Reconcile the original metering gap and complete those checks in an approved test environment before considering staged traffic.
+The original comparison failed its historical latency gate. These October results do not establish current production latency, fault-injected behavior or write validation. Measure and verify those in the target environment.
 
 ## 4. Release order
 
